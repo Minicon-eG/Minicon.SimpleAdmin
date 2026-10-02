@@ -1,0 +1,94 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.HealthCheckViewModel
+
+<div class="health-check-item border rounded p-2 mb-2 bg-light" data-service-index="@Model.ServiceIndex" data-check-index="@Model.CheckIndex">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <small class="text-muted">Health Check #@(Model.CheckIndex + 1)</small>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeCheck(this)">
+            <i class="bi bi-x"></i>
+        </button>
+    </div>
+    <div class="row g-2">
+        <div class="col-md-4">
+            <label class="form-label small">Name</label>
+            <input type="text" name="ServiceTypes[@Model.ServiceIndex].NetScaler.HealthChecks[@Model.CheckIndex].Name"
+                   value="@Model.Name"
+                   class="form-control form-control-sm"
+                   placeholder="z.B. API Health" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">HTTP-Methode</label>
+            @{
+                var methodName = $"ServiceTypes[{Model.ServiceIndex}].NetScaler.HealthChecks[{Model.CheckIndex}].Method";
+            }
+            <select name="@methodName" class="form-select form-select-sm">
+                @if (Model.Method == "GET") { <option value="GET" selected>GET</option> } else { <option value="GET">GET</option> }
+                @if (Model.Method == "POST") { <option value="POST" selected>POST</option> } else { <option value="POST">POST</option> }
+                @if (Model.Method == "PUT") { <option value="PUT" selected>PUT</option> } else { <option value="PUT">PUT</option> }
+                @if (Model.Method == "DELETE") { <option value="DELETE" selected>DELETE</option> } else { <option value="DELETE">DELETE</option> }
+                @if (Model.Method == "HEAD") { <option value="HEAD" selected>HEAD</option> } else { <option value="HEAD">HEAD</option> }
+            </select>
+        </div>
+        <div class="col-md-5">
+            <label class="form-label small">Pfad</label>
+            <input type="text" name="ServiceTypes[@Model.ServiceIndex].NetScaler.HealthChecks[@Model.CheckIndex].Path"
+                   value="@Model.Path"
+                   class="form-control form-control-sm"
+                   placeholder="/health" />
+        </div>
+    </div>
+    <div class="row g-2 mt-1">
+        <div class="col-md-4">
+            <label class="form-label small">Erwartete Status-Codes</label>
+            <input type="text" name="ServiceTypes[@Model.ServiceIndex].NetScaler.HealthChecks[@Model.CheckIndex].ExpectedStatusCodes"
+                   value="@Model.ExpectedStatusCodes"
+                   class="form-control form-control-sm"
+                   placeholder="200, 201" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">Intervall (Sek.)</label>
+            <input type="number" name="ServiceTypes[@Model.ServiceIndex].NetScaler.HealthChecks[@Model.CheckIndex].IntervalSeconds"
+                   value="@Model.IntervalSeconds"
+                   class="form-control form-control-sm"
+                   min="5" max="3600" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">Timeout (ms)</label>
+            <input type="number" name="ServiceTypes[@Model.ServiceIndex].NetScaler.HealthChecks[@Model.CheckIndex].TimeoutMs"
+                   value="@Model.TimeoutMs"
+                   class="form-control form-control-sm"
+                   min="1000" max="60000" />
+        </div>
+    </div>
+    <div class="row g-2 mt-1">
+        <div class="col-md-6">
+            <label class="form-label small">Payload (optional)</label>
+            <textarea name="ServiceTypes[@Model.ServiceIndex].NetScaler.HealthChecks[@Model.CheckIndex].Payload"
+                      class="form-control form-control-sm"
+                      rows="2"
+                      placeholder='{"key": "value"}'>@Model.Payload</textarea>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label small">Body enthält (pro Zeile ein Ausdruck)</label>
+            <textarea name="ServiceTypes[@Model.ServiceIndex].NetScaler.HealthChecks[@Model.CheckIndex].BodyContains"
+                      class="form-control form-control-sm"
+                      rows="2"
+                      placeholder="success&#10;status: ok">@Model.BodyContains</textarea>
+        </div>
+    </div>
+    <div class="row g-2 mt-1">
+        <div class="col-md-6">
+            <label class="form-label small">Erwartete Header (Key: Value pro Zeile)</label>
+            <textarea name="ServiceTypes[@Model.ServiceIndex].NetScaler.HealthChecks[@Model.CheckIndex].ExpectedHeaders"
+                      class="form-control form-control-sm"
+                      rows="2"
+                      placeholder="Content-Type: application/json&#10;X-Custom-Header: value">@Model.ExpectedHeaders</textarea>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label small">JsonPath-Assertions ($.path operator value)</label>
+            <textarea name="ServiceTypes[@Model.ServiceIndex].NetScaler.HealthChecks[@Model.CheckIndex].JsonPathAssertions"
+                      class="form-control form-control-sm"
+                      rows="2"
+                      placeholder="$.status == healthy&#10;$.count > 0">@Model.JsonPathAssertions</textarea>
+        </div>
+    </div>
+</div>

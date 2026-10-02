@@ -1,0 +1,249 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ServerChecksViewModel
+@{
+    var sqlChecks = Model?.SqlQueryChecks ?? new Minicon.SimpleAdmin.WebUI.ViewModels.SqlQueryChecksViewModel();
+}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-database me-2"></i>SQL Query Checks</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
+                data-bs-target="#sqlQueryHelp" aria-expanded="false">
+            <i class="bi bi-question-circle me-1"></i>Hilfe
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="collapse mb-3" id="sqlQueryHelp">
+            <div class="card card-body bg-light">
+                <h6><i class="bi bi-info-circle me-1"></i>SQL Query Checks</h6>
+                <p class="mb-2">
+                    Führt SQL-Abfragen gegen konfigurierte Datenbanken aus und überprüft die Ergebnisse.
+                    Jede Prüfgruppe hat eine eigene Verbindungszeichenfolge und beliebig viele Abfragen.
+                </p>
+                <h6 class="mt-2">Assertion-Typen</h6>
+                <ul class="mb-2">
+                    <li><strong>Row Count:</strong> Vergleicht die Anzahl der zurückgegebenen Zeilen mit einem Erwartungswert.</li>
+                    <li><strong>Column Value:</strong> Vergleicht den Wert einer bestimmten Zelle mit einem Erwartungswert.</li>
+                </ul>
+                <h6 class="mt-2">Relative DateTime-Werte</h6>
+                <p class="mb-0 small">Für DateTime-Vergleiche: <code>now</code>, <code>today</code>, <code>now-30m</code>, <code>now-1h</code>, <code>now-1d</code>, <code>now+1h</code></p>
+            </div>
+        </div>
+
+        <div class="form-check form-switch mb-3">
+            <input type="checkbox" name="Checks.SqlQueryChecks.Enabled" value="true"
+                   class="form-check-input" id="sqlQueriesEnabled"
+                   @(sqlChecks.Enabled ? "checked" : "") />
+            <label class="form-check-label" for="sqlQueriesEnabled">
+                <strong>SQL Query Checks aktivieren</strong>
+            </label>
+            <div class="form-text">Der globale Feature-Toggle <strong>SQL Queries</strong> muss unter Einstellungen → Features aktiviert sein.</div>
+        </div>
+
+        <div id="sqlQueriesConfig" style="@(sqlChecks.Enabled ? "" : "display:none;")">
+            <div id="sqlQueryChecksList">
+                @for (var ci = 0; ci < sqlChecks.Checks.Count; ci++)
+                {
+                    var check = sqlChecks.Checks[ci];
+                    @await Html.PartialAsync("_SqlQueryCheckPartial", check)
+                }
+            </div>
+
+            <div id="noSqlQueryChecks" class="text-muted small @(sqlChecks.Checks.Count > 0 ? "d-none" : "")">
+                <i class="bi bi-info-circle me-1"></i>Keine SQL Query Checks konfiguriert.
+            </div>
+
+            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addSqlQueryCheck()">
+                <i class="bi bi-plus-circle me-1"></i>Check-Gruppe hinzufügen
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('sqlQueriesEnabled')?.addEventListener('change', function () {
+        document.getElementById('sqlQueriesConfig').style.display = this.checked ? '' : 'none';
+    });
+
+    var _sqlCheckIndex = @sqlChecks.Checks.Count;
+
+    function addSqlQueryCheck() {
+        fetch('/Servers/AddSqlQueryCheck', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value },
+            body: 'checkIndex=' + _sqlCheckIndex
+        })
+        .then(r => r.text())
+        .then(html => {
+            document.getElementById('sqlQueryChecksList').insertAdjacentHTML('beforeend', html);
+            document.getElementById('noSqlQueryChecks').classList.add('d-none');
+            _sqlCheckIndex++;
+        });
+    }
+
+    function removeSqlQueryCheck(btn) {
+        btn.closest('.sql-check-group').remove();
+        reindexSqlChecks();
+        if (document.querySelectorAll('.sql-check-group').length === 0)
+            document.getElementById('noSqlQueryChecks').classList.remove('d-none');
+    }
+
+    function reindexSqlChecks() {
+        document.querySelectorAll('.sql-check-group').forEach(function (group, ci) {
+            group.querySelectorAll('[name]').forEach(function (el) {
+                el.name = el.name.replace(/SqlQueryChecks\.Checks\[\d+\]/, 'SqlQueryChecks.Checks[' + ci + ']');
+            });
+            group.querySelectorAll('[id]').forEach(function (el) {
+                el.id = el.id.replace(/sqlCheck_\d+/, 'sqlCheck_' + ci);
+            });
+            group.setAttribute('data-check-index', ci);
+        });
+        _sqlCheckIndex = document.querySelectorAll('.sql-check-group').length;
+    }
+
+    function toggleConnStr(btn) {
+        var input = btn.previousElementSibling;
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.innerHTML = '<i class="bi bi-eye-slash"></i>';
+        } else {
+            input.type = 'password';
+            btn.innerHTML = '<i class="bi bi-eye"></i>';
+        }
+    }
+
+    function testSqlConnection(btn) {
+        var group = btn.closest('.sql-check-group');
+        var connStr = group.querySelector('.sql-conn-string').value;
+        var resultDiv = group.querySelector('.sql-conn-result');
+        if (!connStr) { resultDiv.innerHTML = '<span class="text-warning">Bitte Connection String eingeben.</span>'; return; }
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Teste...';
+        resultDiv.innerHTML = '';
+        fetch('@Url.Content("~/api/sqlquerytest/connection")', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connectionString: connStr })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                resultDiv.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Verbunden \u2014 ' + (data.serverVersion || '') + '</span>';
+            } else {
+                resultDiv.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>' + (data.error || 'Verbindung fehlgeschlagen') + '</span>';
+            }
+        })
+        .catch(e => { resultDiv.innerHTML = '<span class="text-danger">Netzwerkfehler: ' + e.message + '</span>'; })
+        .finally(() => { btn.disabled = false; btn.innerHTML = '<i class="bi bi-plug me-1"></i>Testen'; });
+    }
+
+    function executeSqlQuery(btn) {
+        var queryItem = btn.closest('.sql-query-item');
+        var group = queryItem.closest('.sql-check-group');
+        var connStr = group.querySelector('.sql-conn-string').value;
+        var sql = queryItem.querySelector('.sql-query-text').value;
+        var resultDiv = queryItem.querySelector('.sql-query-result');
+        if (!connStr || !sql) { resultDiv.innerHTML = '<span class="text-warning">Connection String und SQL erforderlich.</span>'; return; }
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
+        resultDiv.innerHTML = '';
+        fetch('@Url.Content("~/api/sqlquerytest/query")', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connectionString: connStr, sql: sql })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                var html = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>' + data.rowCount + ' Zeile(n)</span>';
+                if (data.rows && data.rows.length > 0) {
+                    html += '<div class="mt-1 overflow-auto" style="max-height:200px;"><table class="table table-sm table-bordered mb-0" style="font-size:.75rem;"><thead class="table-light"><tr>';
+                    data.columns.forEach(c => { html += '<th>' + c + '</th>'; });
+                    html += '</tr></thead><tbody>';
+                    data.rows.forEach(row => {
+                        html += '<tr>';
+                        row.forEach(cell => { html += '<td>' + (cell ?? '(null)') + '</td>'; });
+                        html += '</tr>';
+                    });
+                    html += '</tbody></table></div>';
+                }
+                resultDiv.innerHTML = html;
+            } else {
+                resultDiv.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>' + (data.error || 'Fehler') + '</span>';
+            }
+        })
+        .catch(e => { resultDiv.innerHTML = '<span class="text-danger">Netzwerkfehler: ' + e.message + '</span>'; })
+        .finally(() => { btn.disabled = false; btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Ausführen'; });
+    }
+
+    function addSqlQuery(btn) {
+        var group = btn.closest('.sql-check-group');
+        var queriesList = group.querySelector('.sql-queries-list');
+        var ci = group.getAttribute('data-check-index');
+        var qi = queriesList.querySelectorAll('.sql-query-item').length;
+        fetch('/Servers/AddSqlQuery', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value },
+            body: 'checkIndex=' + ci + '&queryIndex=' + qi
+        })
+        .then(r => r.text())
+        .then(html => {
+            queriesList.insertAdjacentHTML('beforeend', html);
+        });
+    }
+
+    function removeSqlQuery(btn) {
+        btn.closest('.sql-query-item').remove();
+    }
+
+    function addSqlColumnAssertion(btn) {
+        var queryItem = btn.closest('.sql-query-item');
+        var assertionsList = queryItem.querySelector('.sql-assertions-list');
+        var ci = queryItem.closest('.sql-check-group').getAttribute('data-check-index');
+        var qi = queryItem.getAttribute('data-query-index') || 0;
+        var ai = assertionsList.querySelectorAll('.sql-assertion-item').length;
+        var html = `<div class="card mb-1 sql-assertion-item"><div class="card-body py-1"><div class="row g-2 align-items-center">` +
+            `<div class="col-md-2"><input type="text" name="Checks.SqlQueryChecks.Checks[${ci}].Queries[${qi}].ColumnAssertions[${ai}].Name" class="form-control form-control-sm" placeholder="Name" /></div>` +
+            `<div class="col-md-3"><input type="text" name="Checks.SqlQueryChecks.Checks[${ci}].Queries[${qi}].ColumnAssertions[${ai}].Column" class="form-control form-control-sm font-monospace" placeholder="Spaltenname *" required /></div>` +
+            `<div class="col-md-2"><select name="Checks.SqlQueryChecks.Checks[${ci}].Queries[${qi}].ColumnAssertions[${ai}].ValueType" class="form-select form-select-sm sql-value-type" onchange="updateOperatorOptions(this)"><option value="String" selected>String</option><option value="Integer">Integer</option><option value="DateTime">DateTime</option></select></div>` +
+            `<div class="col-md-1"><select name="Checks.SqlQueryChecks.Checks[${ci}].Queries[${qi}].ColumnAssertions[${ai}].Operator" class="form-select form-select-sm sql-op-select"><option value="==" selected>==</option><option value="!=">!=</option><option value=">" disabled>></option><option value=">=" disabled>>=</option><option value="<" disabled>&lt;</option><option value="<=" disabled>&lt;=</option></select></div>` +
+            `<div class="col-md-2"><input type="text" name="Checks.SqlQueryChecks.Checks[${ci}].Queries[${qi}].ColumnAssertions[${ai}].ExpectedValue" class="form-control form-control-sm" placeholder="Erwarteter Wert" /></div>` +
+            `<div class="col-md-1 text-end"><button type="button" class="btn btn-sm btn-outline-danger py-0" onclick="this.closest('.sql-assertion-item').remove()"><i class="bi bi-trash"></i></button></div>` +
+            `</div></div></div>`;
+        assertionsList.insertAdjacentHTML('beforeend', html);
+    }
+
+    document.querySelector('form')?.addEventListener('submit', function(e) {
+        document.querySelectorAll('.sql-query-required-error').forEach(function(el) { el.remove(); });
+        if (!document.getElementById('sqlQueriesEnabled')?.checked) return;
+
+        var hasError = false;
+        document.querySelectorAll('.sql-check-group').forEach(function(group) {
+            var name = (group.querySelector('input[name$=".Name"]')?.value ?? '').trim();
+            var connStr = (group.querySelector('.sql-conn-string')?.value ?? '').trim();
+            if (!name || !connStr) return; // incomplete group — filtered server-side too
+            var hasQuery = [...group.querySelectorAll('.sql-query-text')].some(function(t) { return t.value.trim().length > 0; });
+            if (!hasQuery) {
+                var err = document.createElement('div');
+                err.className = 'text-danger small mt-1 sql-query-required-error';
+                err.textContent = 'Mindestens eine Abfrage mit SQL muss konfiguriert sein.';
+                group.querySelector('.sql-queries-list').before(err);
+                hasError = true;
+            }
+        });
+        if (hasError) {
+            e.preventDefault();
+            document.querySelector('.sql-query-required-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+
+    function updateOperatorOptions(select) {
+        var isString = select.value === 'String';
+        var opSelect = select.closest('.row').querySelector('.sql-op-select');
+        if (!opSelect) return;
+        opSelect.querySelectorAll('option').forEach(function (opt) {
+            var isOrdering = ['>', '>=', '<', '<='].includes(opt.value);
+            opt.disabled = isString && isOrdering;
+            if (opt.disabled && opt.selected) opSelect.value = '==';
+        });
+    }
+</script>

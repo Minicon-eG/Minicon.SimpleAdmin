@@ -1,0 +1,188 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.SqlQueryCheckViewModel
+@{
+    var ci = Model?.Index ?? 0;
+    var queries = Model?.Queries ?? new List<Minicon.SimpleAdmin.WebUI.ViewModels.SqlQueryViewModel>();
+}
+
+<div class="card mb-3 sql-check-group" data-check-index="@ci">
+    <div class="card-header d-flex justify-content-between align-items-center bg-light">
+        <span><i class="bi bi-database-check me-1"></i>Check-Gruppe <span class="sql-check-name fw-semibold">@(Model?.Name ?? "Neu")</span></span>
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeSqlQueryCheck(this)">
+            <i class="bi bi-trash"></i> Entfernen
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="row g-2 mb-3">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Name <span class="text-danger">*</span></label>
+                <input type="text" name="Checks.SqlQueryChecks.Checks[@ci].Name" value="@Model?.Name"
+                       class="form-control form-control-sm font-monospace" placeholder="z.B. biztalk-db"
+                       oninput="this.closest('.sql-check-group').querySelector('.sql-check-name').textContent = this.value || 'Neu'" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-1">Beschreibung</label>
+                <input type="text" name="Checks.SqlQueryChecks.Checks[@ci].Description" value="@Model?.Description"
+                       class="form-control form-control-sm" placeholder="z.B. BizTalk Datenbank" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Timeout (s)</label>
+                <input type="number" name="Checks.SqlQueryChecks.Checks[@ci].TimeoutSeconds" value="@Model?.TimeoutSeconds"
+                       class="form-control form-control-sm" placeholder="30" min="1" max="300" />
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small mb-1">Connection String <span class="text-danger">*</span></label>
+            <div class="input-group input-group-sm">
+                <input type="password" name="Checks.SqlQueryChecks.Checks[@ci].ConnectionString" value="@Model?.ConnectionString"
+                       class="form-control form-control-sm font-monospace sql-conn-string"
+                       placeholder="Server=.;Database=BizTalkMgmtDb;Integrated Security=true;"
+                       autocomplete="new-password" />
+                <button type="button" class="btn btn-outline-secondary" onclick="toggleConnStr(this)" title="Anzeigen/Verbergen">
+                    <i class="bi bi-eye"></i>
+                </button>
+                <button type="button" class="btn btn-outline-primary sql-test-conn-btn"
+                        onclick="testSqlConnection(this)"
+                        title="Verbindung testen">
+                    <i class="bi bi-plug me-1"></i>Testen
+                </button>
+            </div>
+            <div class="sql-conn-result mt-1 small"></div>
+        </div>
+
+        <hr />
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-semibold small"><i class="bi bi-list-task me-1"></i>Abfragen</span>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addSqlQuery(this)">
+                <i class="bi bi-plus-circle me-1"></i>Abfrage hinzufügen
+            </button>
+        </div>
+
+        <div class="sql-queries-list" data-check-index="@ci">
+            @for (var qi = 0; qi < queries.Count; qi++)
+            {
+                var query = queries[qi];
+                <div class="card mb-2 sql-query-item" data-query-index="@qi">
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="fw-semibold small">Abfrage @(qi + 1)</span>
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0" onclick="removeSqlQuery(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">Name</label>
+                                <input type="text" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].Name" value="@query.Name"
+                                       class="form-control form-control-sm" placeholder="z.B. Offene Jobs" />
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">SQL <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <textarea name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].Sql"
+                                          class="form-control form-control-sm font-monospace sql-query-text" rows="3"
+                                          placeholder="SELECT COUNT(*) FROM ...">@query.Sql</textarea>
+                                <button type="button" class="btn btn-outline-info align-self-stretch"
+                                        onclick="executeSqlQuery(this)"
+                                        title="Abfrage ausführen">
+                                    <i class="bi bi-play-fill me-1"></i>Ausführen
+                                </button>
+                            </div>
+                            <div class="sql-query-result mt-1 small"></div>
+                        </div>
+                        <div class="row g-2 mb-2 align-items-center">
+                            <div class="col-auto">
+                                <div class="form-check form-switch">
+                                    <input type="checkbox" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].HasRowCount" value="true"
+                                           class="form-check-input" id="hasRowCount_@(ci)_@(qi)"
+                                           @(query.HasRowCount ? "checked" : "")
+                                           onchange="this.closest('.sql-query-item').querySelector('.row-count-config').style.display = this.checked ? '' : 'none'" />
+                                    <input type="hidden" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].HasRowCount" value="false" />
+                                    <label class="form-check-label small" for="hasRowCount_@(ci)_@(qi)">Zeilenanzahl prüfen</label>
+                                </div>
+                            </div>
+                            <div class="row-count-config col" style="@(query.HasRowCount ? "" : "display:none;")">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">Zeilen</span>
+                                    <select name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].RowCountOperator"
+                                            class="form-select form-select-sm" style="max-width:80px;">
+                                        @foreach (var op in new[] { "==", "!=", ">", ">=", "<", "<=" })
+                                        {
+                                            var rcSel = query.RowCountOperator == op ? "selected" : null;
+                                            <option value="@op" selected="@rcSel">@op</option>
+                                        }
+                                    </select>
+                                    <input type="number" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].RowCountExpected"
+                                           value="@query.RowCountExpected"
+                                           class="form-control form-control-sm" style="max-width:80px;" min="0" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="sql-column-assertions">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small text-muted">Spalten-Assertions</span>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0"
+                                        onclick="addSqlColumnAssertion(this)">
+                                    <i class="bi bi-plus me-1"></i>Spalte
+                                </button>
+                            </div>
+                            <div class="sql-assertions-list">
+                                @for (var ai = 0; ai < query.ColumnAssertions.Count; ai++)
+                                {
+                                    var assertion = query.ColumnAssertions[ai];
+                                    <div class="card mb-1 sql-assertion-item">
+                                        <div class="card-body py-1">
+                                            <div class="row g-2 align-items-center">
+                                                <div class="col-md-2">
+                                                    <input type="text" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].ColumnAssertions[@ai].Name"
+                                                           value="@assertion.Name" class="form-control form-control-sm" placeholder="Name" />
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <input type="text" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].ColumnAssertions[@ai].Column"
+                                                           value="@assertion.Column" class="form-control form-control-sm font-monospace" placeholder="Spaltenname" required />
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <select name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].ColumnAssertions[@ai].ValueType"
+                                                            class="form-select form-select-sm sql-value-type" onchange="updateOperatorOptions(this)">
+                                                        <option value="String" selected="@(assertion.ValueType == "String" ? "selected" : null)">String</option>
+                                                        <option value="Integer" selected="@(assertion.ValueType == "Integer" ? "selected" : null)">Integer</option>
+                                                        <option value="DateTime" selected="@(assertion.ValueType == "DateTime" ? "selected" : null)">DateTime</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-1">
+                                                    <select name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].ColumnAssertions[@ai].Operator"
+                                                            class="form-select form-select-sm sql-op-select">
+                                                        @foreach (var op in new[] { "==", "!=", ">", ">=", "<", "<=" })
+                                                        {
+                                                            var selAttr = assertion.Operator == op ? "selected" : null;
+                                                            var disAttr = assertion.ValueType == "String" && (op == ">" || op == ">=" || op == "<" || op == "<=") ? "disabled" : null;
+                                                            <option value="@op" selected="@selAttr" disabled="@disAttr">@op</option>
+                                                        }
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <input type="text" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].ColumnAssertions[@ai].ExpectedValue"
+                                                           value="@assertion.ExpectedValue" class="form-control form-control-sm" placeholder="Erwarteter Wert" />
+                                                </div>
+                                                <div class="col-md-1 text-end">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger py-0"
+                                                            onclick="this.closest('.sql-assertion-item').remove()">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+

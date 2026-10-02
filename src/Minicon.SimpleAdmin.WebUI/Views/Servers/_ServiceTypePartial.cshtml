@@ -1,0 +1,111 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ServiceTypeViewModel
+
+<div class="service-type-item border rounded p-3 mb-3" data-index="@Model.Index">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <h6 class="mb-0">
+            <i class="bi bi-gear-fill me-1"></i>Service-Typ #@(Model.Index + 1)
+        </h6>
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeServiceType(this)">
+            <i class="bi bi-trash"></i>
+        </button>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Service-Typ</label>
+        @{
+            var typeName = $"ServiceTypes[{Model.Index}].Type";
+        }
+        <select name="@typeName" class="form-select service-type-select" data-index="@Model.Index" onchange="updateAdminPaths(this)">
+            <option value="">-- Auswählen --</option>
+            @if (Model.Type == "transfer") { <option value="transfer" selected>Transfer</option> } else { <option value="transfer">Transfer</option> }
+            @if (Model.Type == "services") { <option value="services" selected>Services</option> } else { <option value="services">Services</option> }
+            @if (Model.Type == "biztalk") { <option value="biztalk" selected>BizTalk</option> } else { <option value="biztalk">BizTalk</option> }
+            @if (Model.Type == "database") { <option value="database" selected>Database</option> } else { <option value="database">Database</option> }
+            @if (Model.Type == "local") { <option value="local" selected>Local</option> } else { <option value="local">Local</option> }
+        </select>
+    </div>
+
+    <!-- PRTG Configuration -->
+    <div class="card mb-3">
+        <div class="card-header bg-light py-2">
+            <div class="form-check mb-0">
+                <input type="checkbox" class="form-check-input prtg-toggle"
+                       name="ServiceTypes[@Model.Index].Prtg.Enabled"
+                       value="true"
+                       @(Model.Prtg.Enabled ? "checked" : "")
+                       onchange="togglePrtgSection(this)" />
+                <label class="form-check-label fw-semibold">
+                    <i class="bi bi-bar-chart me-1"></i>PRTG Monitoring
+                </label>
+            </div>
+        </div>
+        <div class="card-body prtg-section @(!Model.Prtg.Enabled ? "d-none" : "")">
+            <div class="mb-3">
+                <label class="form-label">Admin-Pfad</label>
+                <input type="text" name="ServiceTypes[@Model.Index].Prtg.AdminPath"
+                       value="@Model.Prtg.AdminPath"
+                       class="form-control"
+                       placeholder="/admin/{service-typ}/prtg" />
+                <div class="form-text">Schema: /admin/&lt;service-typ&gt;/prtg (z.B. /admin/transfer/prtg)</div>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between align-items-center">
+                <label class="form-label mb-0">PRTG Checks</label>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="addPrtgCheck(this, @Model.Index)">
+                    <i class="bi bi-plus"></i> Check
+                </button>
+            </div>
+            <div class="prtg-checks">
+                @if (Model.Prtg.Checks != null)
+                {
+                    for (var i = 0; i < Model.Prtg.Checks.Count; i++)
+                    {
+                        @await Html.PartialAsync("_PrtgCheckPartial", Model.Prtg.Checks[i])
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- NetScaler Configuration -->
+    <div class="card">
+        <div class="card-header bg-light py-2">
+            <div class="form-check mb-0">
+                <input type="checkbox" class="form-check-input netscaler-toggle"
+                       name="ServiceTypes[@Model.Index].NetScaler.Enabled"
+                       value="true"
+                       @(Model.NetScaler.Enabled ? "checked" : "")
+                       onchange="toggleNetScalerSection(this)" />
+                <label class="form-check-label fw-semibold">
+                    <i class="bi bi-hdd-network me-1"></i>NetScaler Health Checks
+                </label>
+            </div>
+        </div>
+        <div class="card-body netscaler-section @(!Model.NetScaler.Enabled ? "d-none" : "")">
+            <div class="mb-3">
+                <label class="form-label">Admin-Pfad</label>
+                <input type="text" name="ServiceTypes[@Model.Index].NetScaler.AdminPath"
+                       value="@Model.NetScaler.AdminPath"
+                       class="form-control"
+                       placeholder="/admin/{service-typ}/loadbalancer" />
+                <div class="form-text">Schema: /admin/&lt;service-typ&gt;/loadbalancer (z.B. /admin/services/loadbalancer)</div>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between align-items-center">
+                <label class="form-label mb-0">Health Checks</label>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="addHealthCheck(this, @Model.Index)">
+                    <i class="bi bi-plus"></i> Check
+                </button>
+            </div>
+            <div class="health-checks">
+                @if (Model.NetScaler.HealthChecks != null)
+                {
+                    for (var i = 0; i < Model.NetScaler.HealthChecks.Count; i++)
+                    {
+                        @await Html.PartialAsync("_HealthCheckPartial", Model.NetScaler.HealthChecks[i])
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>

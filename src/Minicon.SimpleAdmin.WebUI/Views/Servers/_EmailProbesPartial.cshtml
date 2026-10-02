@@ -1,0 +1,184 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ServerChecksViewModel
+@{
+    var emailProbes = Model?.EmailProbes ?? new Minicon.SimpleAdmin.WebUI.ViewModels.EmailProbesViewModel();
+}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-envelope-arrow-up me-2"></i>E-Mail-Probes (Sender)</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
+                data-bs-target="#emailProbesHelp" aria-expanded="false">
+            <i class="bi bi-question-circle me-1"></i>Hilfe
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="collapse mb-3" id="emailProbesHelp">
+            <div class="card card-body bg-light">
+                <h6><i class="bi bi-info-circle me-1"></i>E-Mail-Probes (Sender-Rolle)</h6>
+                <p class="mb-2">
+                    Diese Instanz sendet in konfigurierten Abständen Test-E-Mails (Probes) per SMTP an ein
+                    gemeinsames Monitoring-Postfach. Jede Probe testet einen eigenen SMTP-Relay-Pfad
+                    (z. B. aus einem anderen Netzwerksegment).
+                </p>
+                <p class="mb-2">
+                    <strong>Rollen:</strong> Eine Instanz kann <em>entweder</em> Probes senden <em>oder</em>
+                    Zustellungen prüfen — nicht beides. Der Checker liest das IMAP-Postfach und prüft, ob
+                    die Probes aller Sender pünktlich ankamen.
+                </p>
+                <h6 class="mt-2">Betreff-Eindeutigkeit</h6>
+                <p class="mb-0">
+                    Der konfigurierte Betreff muss exakt mit dem <strong>Betreff-Filter</strong> im Checker übereinstimmen.
+                    Wählen Sie eindeutige Betreffs pro Probe, z. B. <code>[SA-Probe] seg1-relay</code>.
+                </p>
+            </div>
+        </div>
+
+        <div class="form-check form-switch mb-1">
+            <input type="checkbox" name="Checks.EmailProbes.Enabled" value="true"
+                   class="form-check-input" id="emailProbesEnabled"
+                   @(emailProbes.Enabled ? "checked" : "") />
+            <label class="form-check-label" for="emailProbesEnabled">
+                <strong>E-Mail-Probes aktivieren</strong>
+            </label>
+            <div class="form-text">Dieser Server sendet Probe-E-Mails an das Monitoring-Postfach.</div>
+        </div>
+        <div id="emailProbesRequiredError" class="text-danger small mb-2" style="display:none;">
+            <i class="bi bi-exclamation-circle me-1"></i>Probe erforderlich — bitte eine Probe konfigurieren oder den Toggle deaktivieren.
+        </div>
+
+        <div id="emailProbesConfig" style="@(emailProbes.Enabled ? "" : "display:none;")">
+            <div id="emailProbesList">
+                @for (var pi = 0; pi < emailProbes.Probes.Count; pi++)
+                {
+                    @await Html.PartialAsync("_EmailProbeEditorPartial", emailProbes.Probes[pi])
+                }
+            </div>
+
+            <div id="noEmailProbes" class="text-muted small @(emailProbes.Probes.Count > 0 ? "d-none" : "")">
+                <i class="bi bi-info-circle me-1"></i>Keine Probe konfiguriert.
+            </div>
+
+            <button type="button" id="addEmailProbeBtn" class="btn btn-sm btn-outline-primary mt-2"
+                    onclick="addEmailProbe()"
+                    style="@(emailProbes.Probes.Count > 0 ? "display:none;" : "")">
+                <i class="bi bi-plus-circle me-1"></i>Probe hinzufügen
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('emailProbesEnabled')?.addEventListener('change', function () {
+        document.getElementById('emailProbesConfig').style.display = this.checked ? '' : 'none';
+        if (!this.checked) document.getElementById('emailProbesRequiredError').style.display = 'none';
+    });
+
+    document.getElementById('emailProbesEnabled')?.closest('form')?.addEventListener('submit', function (event) {
+        var toggle = document.getElementById('emailProbesEnabled');
+        if (toggle?.checked && document.querySelectorAll('.email-probe-item').length === 0) {
+            document.getElementById('emailProbesRequiredError').style.display = '';
+            event.preventDefault();
+        }
+    }, true);
+
+    var _emailProbeIndex = @emailProbes.Probes.Count;
+
+    function addEmailProbe() {
+        fetch('@Url.Action("AddEmailProbe", "Servers")', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+            },
+            body: 'probeIndex=' + _emailProbeIndex
+        })
+        .then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+        })
+        .then(html => {
+            document.getElementById('emailProbesList').insertAdjacentHTML('beforeend', html);
+            document.getElementById('noEmailProbes').classList.add('d-none');
+            document.getElementById('addEmailProbeBtn').style.display = 'none';
+            document.getElementById('emailProbesRequiredError').style.display = 'none';
+            _emailProbeIndex++;
+        })
+        .catch(function(err) {
+            document.getElementById('emailProbesRequiredError').textContent =
+                'Fehler beim Laden der Probe-Vorlage: ' + err.message + '. Bitte Seite neu laden.';
+            document.getElementById('emailProbesRequiredError').style.display = '';
+        });
+    }
+
+    function removeEmailProbe(btn) {
+        btn.closest('.email-probe-item').remove();
+        reindexEmailProbes();
+        if (document.querySelectorAll('.email-probe-item').length === 0) {
+            document.getElementById('noEmailProbes').classList.remove('d-none');
+            document.getElementById('addEmailProbeBtn').style.display = '';
+        }
+    }
+
+    function reindexEmailProbes() {
+        document.querySelectorAll('.email-probe-item').forEach(function (item, pi) {
+            item.querySelectorAll('[name]').forEach(function (el) {
+                el.name = el.name.replace(/EmailProbes\.Probes\[\d+\]/, 'EmailProbes.Probes[' + pi + ']');
+            });
+            item.querySelectorAll('[id]').forEach(function (el) {
+                el.id = el.id.replace(/smtpSslMode_\d+/, 'smtpSslMode_' + pi);
+            });
+            item.querySelectorAll('[for]').forEach(function (el) {
+                el.htmlFor = el.htmlFor.replace(/smtpSslMode_\d+/, 'smtpSslMode_' + pi);
+            });
+            item.setAttribute('data-probe-index', pi);
+        });
+        _emailProbeIndex = document.querySelectorAll('.email-probe-item').length;
+    }
+
+    function toggleEmailPassword(btn) {
+        var input = btn.previousElementSibling;
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.innerHTML = '<i class="bi bi-eye-slash"></i>';
+        } else {
+            input.type = 'password';
+            btn.innerHTML = '<i class="bi bi-eye"></i>';
+        }
+    }
+
+    function testSmtp(btn) {
+        var probe = btn.closest('.email-probe-item');
+        var host = probe.querySelector('.probe-smtp-host')?.value ?? '';
+        var port = parseInt(probe.querySelector('.probe-smtp-port')?.value ?? '25', 10);
+        var sslMode = probe.querySelector('.probe-smtp-ssl-mode')?.value ?? 'false';
+        var username = probe.querySelector('.probe-smtp-username')?.value ?? '';
+        var password = probe.querySelector('.probe-smtp-password')?.value ?? '';
+        var from = probe.querySelector('.probe-smtp-from')?.value ?? '';
+        var to = probe.querySelector('.probe-smtp-to')?.value ?? '';
+        var resultDiv = probe.querySelector('.probe-smtp-result');
+
+        if (!host) { resultDiv.innerHTML = '<span class="text-warning">SMTP-Host erforderlich.</span>'; return; }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Teste...';
+        resultDiv.innerHTML = '';
+
+        fetch('@Url.Content("~/api/emailtest/smtp")', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host, port, sslMode, username: username || null, password: password || null, from, to })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                resultDiv.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Verbunden'
+                    + (data.serverCapabilities ? ' — ' + data.serverCapabilities : '') + '</span>';
+            } else {
+                resultDiv.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>'
+                    + (data.error || 'Verbindung fehlgeschlagen') + '</span>';
+            }
+        })
+        .catch(() => { resultDiv.innerHTML = '<span class="text-danger">Anfrage fehlgeschlagen — Bitte Netzwerkverbindung prüfen.</span>'; })
+        .finally(() => { btn.disabled = false; btn.innerHTML = '<i class="bi bi-envelope-check me-1"></i>SMTP testen'; });
+    }
+</script>

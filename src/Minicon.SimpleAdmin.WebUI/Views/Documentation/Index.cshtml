@@ -1,0 +1,2204 @@
+@{
+    ViewData["Title"] = "Dokumentation";
+}
+
+<style>
+    .doc-section {
+        margin-bottom: 2rem;
+    }
+    .doc-section h2 {
+        border-bottom: 2px solid var(--brand-accent, #009ee0);
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .doc-section h3 {
+        color: var(--brand-primary, #003064);
+        margin-top: 1.5rem;
+    }
+    .doc-card {
+        border-left: 4px solid var(--brand-accent, #009ee0);
+        background: #f8f9fa;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+    .doc-card.warning {
+        border-left-color: #fd7e14;
+        background: #fff8f0;
+    }
+    .doc-card.info {
+        border-left-color: var(--brand-accent, #009ee0);
+        background: #f0f8ff;
+    }
+    .doc-card.success {
+        border-left-color: #198754;
+        background: #f0fff4;
+    }
+    .toc {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.5rem;
+        position: sticky;
+        top: 80px;
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+    }
+    .toc ul {
+        list-style: none;
+        padding-left: 0;
+        margin-bottom: 0;
+    }
+    .toc ul ul {
+        padding-left: 1rem;
+    }
+    .toc a {
+        text-decoration: none;
+        display: block;
+        padding: 0.25rem 0;
+    }
+    .toc a:hover {
+        text-decoration: underline;
+    }
+    code {
+        background: #e9ecef;
+        padding: 0.125rem 0.375rem;
+        border-radius: 4px;
+        font-size: 0.9em;
+    }
+    pre {
+        background: #2d3748;
+        color: #e2e8f0;
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+    }
+    pre code {
+        background: transparent;
+        padding: 0;
+        color: inherit;
+    }
+    .keyboard-shortcut {
+        display: inline-block;
+        background: #e9ecef;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 0.125rem 0.5rem;
+        font-family: monospace;
+        font-size: 0.85em;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+</style>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- Table of Contents -->
+        <div class="col-lg-3 d-none d-lg-block">
+            <div class="toc">
+                <h5><i class="bi bi-list-ul me-2"></i>Inhaltsverzeichnis</h5>
+                <ul>
+                    <li><a href="#overview">Überblick</a></li>
+                    <li><a href="#quickstart">Schnellstart</a></li>
+                    <li>
+                        <a href="#modules">Module</a>
+                        <ul>
+                            <li><a href="#servers">Server</a></li>
+                            <li><a href="#environments">Umgebungen</a></li>
+                            <li><a href="#settings">Einstellungen</a></li>
+                            <li><a href="#status-page">Status-Seite</a></li>
+                            <li><a href="#problems-page">Probleme-Seite</a></li>
+                        </ul>
+                    </li>
+                    <li>
+                        <a href="#configuration">Konfiguration</a>
+                        <ul>
+                            <li><a href="#prtg">PRTG Checks</a></li>
+                            <li><a href="#netscaler">NetScaler Health Checks</a></li>
+                            <li><a href="#certificates">Zertifikat-Prüfung</a></li>
+                            <li><a href="#eventlog">EventLog-Prüfung</a></li>
+                            <li><a href="#apppools">AppPool-Prüfung</a></li>
+                            <li><a href="#windows-services">Windows-Dienste</a></li>
+                            <li><a href="#sql-checks">SQL Query Checks</a></li>
+                            <li><a href="#email-monitoring">E-Mail-Monitoring</a></li>
+                            <li><a href="#biztalk">BizTalk-Überwachung</a></li>
+                            <li><a href="#filemonitoring">Datei-/Protokollüberwachung</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#monitoring-badges">Monitoring-Badges</a></li>
+                    <li><a href="#acknowledges">Acknowledge-System</a></li>
+                    <li><a href="#notifications">Benachrichtigungen</a></li>
+                    <li><a href="#authentication">Sicherheit &amp; Authentifizierung</a></li>
+                    <li><a href="#rest-api">REST API</a></li>
+                    <li><a href="#console-app">Konsolenanwendung</a></li>
+                    <li><a href="#workflow">Typischer Workflow</a></li>
+                    <li><a href="#debug-logging">Debug-Logging</a></li>
+                    <li><a href="#faq">FAQ</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-lg-9">
+            <h1 class="mb-4">
+                <i class="bi bi-book me-2"></i>SimpleAdmin WebUI Dokumentation
+            </h1>
+
+            <!-- Overview -->
+            <section id="overview" class="doc-section">
+                <h2><i class="bi bi-info-circle me-2"></i>Überblick</h2>
+                <p>
+                    Der <strong>SimpleAdmin Konfigurator</strong> ist eine webbasierte Benutzeroberfläche zur Verwaltung der
+                    SimpleAdmin-Konfiguration. SimpleAdmin generiert statische Status-Seiten für PRTG-Monitoring und
+                    NetScaler Load Balancer.
+                </p>
+
+                <div class="doc-card info">
+                    <strong><i class="bi bi-lightbulb me-2"></i>Kernprinzip</strong><br>
+                    SimpleAdmin erzeugt statische HTML-Dateien ohne dynamische Backend-Abhängigkeiten.
+                    Die Status-Seiten bleiben auch dann erreichbar, wenn Worker, Datenbanken oder externe Systeme
+                    nicht verfügbar sind.
+                </div>
+
+                <h3>Hauptfunktionen</h3>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="bi bi-hdd-stack me-2 text-info"></i>Server-Verwaltung</h5>
+                                <p class="card-text">Server anlegen, bearbeiten und konfigurieren mit PRTG- und NetScaler-Integration.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="bi bi-diagram-3 me-2 text-info"></i>Umgebungs-Matrix</h5>
+                                <p class="card-text">Server per Drag & Drop Umgebungen und Kategorien zuordnen.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="bi bi-display me-2 text-info"></i>Status & Monitoring</h5>
+                                <p class="card-text">Live-Status aller Server mit CPU, Memory, Disk und AppPool-Anzeige.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="bi bi-exclamation-triangle me-2 text-info"></i>Problem-Management</h5>
+                                <p class="card-text">Aktive Probleme erkennen, bestätigen und mit Acknowledges verwalten.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="bi bi-cloud-arrow-down me-2 text-info"></i>REST API</h5>
+                                <p class="card-text">Programmatischer Zugriff auf Status, Probleme und Acknowledges.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="bi bi-sliders me-2 text-info"></i>Globale Einstellungen</h5>
+                                <p class="card-text">History-Einstellungen und Status-Smoothing konfigurieren.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Quickstart -->
+            <section id="quickstart" class="doc-section">
+                <h2><i class="bi bi-rocket-takeoff me-2"></i>Schnellstart</h2>
+
+                <ol class="list-group list-group-numbered mb-3">
+                    <li class="list-group-item">
+                        <strong>Konfiguration bereitstellen</strong><br>
+                        Setzen Sie <code>ConfigPath</code> in <code>appsettings.json</code> auf das Verzeichnis,
+                        in dem die <code>config.json</code> liegt. Die Anwendung lädt die Konfiguration automatisch beim Start.
+                    </li>
+                    <li class="list-group-item">
+                        <strong>Server anlegen</strong><br>
+                        Unter <a asp-controller="Servers" asp-action="Index">Server</a> können Sie neue Server hinzufügen und
+                        deren Service-Typen konfigurieren.
+                    </li>
+                    <li class="list-group-item">
+                        <strong>Umgebungen zuordnen</strong><br>
+                        In der <a asp-controller="Environments" asp-action="Index">Umgebungs-Matrix</a> ziehen Sie Server
+                        per Drag & Drop in die gewünschten Kategorien.
+                    </li>
+                    <li class="list-group-item">
+                        <strong>Änderungen speichern</strong><br>
+                        Jede Speicher-Aktion (Server, Einstellungen, Umgebungen) schreibt direkt in die unter
+                        <code>ConfigPath</code> konfigurierte Datei.
+                    </li>
+                </ol>
+            </section>
+
+            <!-- Modules -->
+            <section id="modules" class="doc-section">
+                <h2><i class="bi bi-grid-3x3-gap me-2"></i>Module</h2>
+
+                <h3 id="servers"><i class="bi bi-hdd-stack me-2"></i>Server</h3>
+                <p>Die Server-Verwaltung ermöglicht das Anlegen und Konfigurieren von Servern mit ihren Service-Typen.</p>
+
+                <h4>Server-Eigenschaften</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Feld</th>
+                            <th>Beschreibung</th>
+                            <th>Pflicht</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>Name</code></td>
+                            <td>Eindeutiger Servername (nur Buchstaben, Zahlen, -, _, .)</td>
+                            <td><span class="badge bg-danger">Ja</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>Beschreibung</code></td>
+                            <td>Optionale Beschreibung des Servers</td>
+                            <td><span class="badge bg-secondary">Nein</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>Base URL</code></td>
+                            <td>Basis-URL für Status-Abfragen (z.B. https://server.example.com)</td>
+                            <td><span class="badge bg-secondary">Nein</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>Aktiv</code></td>
+                            <td>Nur aktive Server werden verarbeitet und in der Umgebungs-Matrix angezeigt</td>
+                            <td><span class="badge bg-secondary">Nein</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Filter und Sortierung</h4>
+                <p>Die Server-Liste bietet verschiedene Filter- und Sortiermöglichkeiten:</p>
+                <ul>
+                    <li><strong>Suche:</strong> Filtern nach Name oder Beschreibung</li>
+                    <li><strong>Status-Filter:</strong> Alle, nur aktive oder nur inaktive Server anzeigen</li>
+                    <li><strong>Service-Typ-Filter:</strong> Nach Service-Typ filtern</li>
+                    <li><strong>Sortierung:</strong> Klicken Sie auf Spaltenüberschriften zum Sortieren</li>
+                </ul>
+
+                <h3 id="environments"><i class="bi bi-diagram-3 me-2"></i>Umgebungen</h3>
+                <p>
+                    Die Umgebungs-Matrix ermöglicht die Zuordnung von Servern zu Umgebungen (Production, Ref, Development)
+                    und Kategorien (Transfer, Services, Biztalk, Database).
+                </p>
+
+                <div class="doc-card info">
+                    <strong><i class="bi bi-mouse me-2"></i>Drag & Drop</strong><br>
+                    Ziehen Sie Server aus dem Pool links in die gewünschte Kategorie. Änderungen werden automatisch gespeichert.
+                </div>
+
+                <h4>Umgebungs-Farben</h4>
+                <ul>
+                    <li><span class="badge" style="background-color: #e2001a;">Production</span> - Produktionsumgebung (Rot)</li>
+                    <li><span class="badge" style="background-color: #fd7e14;">Ref</span> - Referenzumgebung (Orange)</li>
+                    <li><span class="badge" style="background-color: #198754;">Development</span> - Entwicklungsumgebung (Grün)</li>
+                </ul>
+
+                <h3 id="settings"><i class="bi bi-sliders me-2"></i>Einstellungen</h3>
+                <p>Globale Einstellungen für das SimpleAdmin-System.</p>
+
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Einstellung</th>
+                            <th>Beschreibung</th>
+                            <th>Standard</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>maxEntries</code></td>
+                            <td>Maximale Anzahl History-Einträge pro Service (FIFO-Rotation)</td>
+                            <td>500</td>
+                        </tr>
+                        <tr>
+                            <td><code>minConsecutiveChecks</code></td>
+                            <td>Erforderliche aufeinanderfolgende Checks für Status-Wechsel</td>
+                            <td>5</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="doc-card warning">
+                    <strong><i class="bi bi-exclamation-triangle me-2"></i>Status-Smoothing</strong><br>
+                    Die Einstellung <code>minConsecutiveChecks</code> verhindert Fehlalarme durch temporäre CPU/Memory-Spitzen.
+                    Ein Status-Wechsel erfolgt erst, wenn N aufeinanderfolgende Checks denselben Status ergeben.
+                </div>
+
+                <h3 id="status-page"><i class="bi bi-display me-2"></i>Status-Seite</h3>
+                <p>
+                    Die <a asp-controller="Status" asp-action="Index">Status-Seite</a> zeigt den aktuellen Zustand aller konfigurierten Server.
+                </p>
+
+                <h4>Woher die WebUI den Status holt</h4>
+                <p>
+                    Die WebUI führt alle Quellen zusammen; pro Server und Service-Typ gilt der neueste Stand:
+                </p>
+                <ul>
+                    <li><strong>HTTP (Standard):</strong> Für jeden aktiven Server aus der <code>config.json</code> wird
+                        <code>{baseUrl}/status/{name}.status.json</code> abgerufen — die Datei, die jeder Worker in sein wwwroot
+                        schreibt. Eine zentrale WebUI zeigt so alle Server, ohne gemeinsamen Ordner. Abschaltbar unter
+                        <em>Einstellungen → Zentrales Status-System → „Status aller Server per HTTP abrufen“</em>
+                        (<code>output.pullStatusOverHttp</code>).</li>
+                    <li><strong>Dateien:</strong> Status-Dateien im Statusverzeichnis (<code>StatusDirectory</code> bzw.
+                        <code>output.centralOutputPath</code>) — Einzeldateien, Unterordner <code>status\</code> und
+                        Sammeldateien <code>*.status.json</code>.</li>
+                </ul>
+                <p>
+                    Ein aktiver Server ohne Antwort und ohne Datei erscheint als <strong>„erreichbarkeit / Unbekannt“</strong> —
+                    die Meldung nennt die URL, die nicht abgerufen werden konnte. Bleibt <code>ConfigPath</code> in der
+                    appsettings.json leer, liest die WebUI die <code>config.json</code> aus ihrem eigenen Anwendungsordner.
+                </p>
+
+                <h4>Server-Karten</h4>
+                <p>Jeder Server wird als Karte dargestellt mit folgenden Informationen:</p>
+                <ul>
+                    <li><strong>Gesamtstatus:</strong> Farblich gekennzeichnet (Healthy/Degraded/Unhealthy/Unknown) — wird auch dann korrekt als Unhealthy/Degraded angezeigt, wenn keine PRTG-Metriken konfiguriert sind, aber E-Mail-, AppPool- oder Service-Probleme vorliegen</li>
+                    <li><strong>CPU-Auslastung:</strong> Aktuelle CPU-Last in Prozent mit Fortschrittsbalken</li>
+                    <li><strong>Memory-Auslastung:</strong> Aktuelle Speicherauslastung in Prozent</li>
+                    <li><strong>Disk-Belegung:</strong> Freier Speicherplatz pro Laufwerk</li>
+                    <li><strong>AppPool-Status:</strong> Status der IIS Application Pools (Started/Stopped)</li>
+                    <li><strong>Aktive Probleme:</strong> Anzahl und Schweregrad offener Probleme (inkl. E-Mail-Monitoring-Probleme)</li>
+                </ul>
+
+                <h4>Detail-Ansicht</h4>
+                <p>
+                    Klicken Sie auf einen Server, um die Detail-Ansicht zu öffnen. Sie enthält:
+                </p>
+                <ul>
+                    <li>Vollständige Metriken mit Schwellwerten und History-Diagrammen</li>
+                    <li>AppPool-Tabelle mit Status, Speicherverbrauch (MB) und Laufzeit (h) — farbcodiert</li>
+                    <li>Windows Services mit Startart und Status</li>
+                    <li>Event Log Ereignisse der letzten Stunden — mit Knopf <strong>„Ignorieren“</strong> je Ereignis (siehe <a href="#eventlog">Ignorier-Regeln</a>)</li>
+                    <li>SQL Query Check-Ergebnisse mit Row-Count- und Column-Assertions</li>
+                    <li>E-Mail-Probe-Status (Sender: letzter Sendezeitpunkt, SMTP-Fehler)</li>
+                    <li>E-Mail-Zustellungs-Status (Checker: Alter der neuesten Probe-E-Mail, IMAP-Fehler)</li>
+                    <li>Aktive Probleme mit Acknowledge-Möglichkeit</li>
+                </ul>
+
+                <h3 id="problems-page"><i class="bi bi-exclamation-triangle me-2"></i>Probleme-Seite</h3>
+                <p>
+                    Die <a asp-controller="Problems" asp-action="Index">Probleme-Seite</a> listet alle aktiven Probleme
+                    über alle Server hinweg in einer sortierten Tabelle auf.
+                </p>
+
+                <h4>Problem-Tabelle</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Spalte</th>
+                            <th>Beschreibung</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>Server</code></td>
+                            <td>Name des betroffenen Servers</td>
+                        </tr>
+                        <tr>
+                            <td><code>Schweregrad</code></td>
+                            <td>Critical (rot), Warning (orange) oder Info (blau)</td>
+                        </tr>
+                        <tr>
+                            <td><code>Quelle</code></td>
+                            <td>Welcher Check das Problem erkannt hat (z.B. CPU, Disk, EventLog)</td>
+                        </tr>
+                        <tr>
+                            <td><code>Beschreibung</code></td>
+                            <td>Details zum Problem</td>
+                        </tr>
+                        <tr>
+                            <td><code>Seit</code></td>
+                            <td>Zeitpunkt des ersten Auftretens</td>
+                        </tr>
+                        <tr>
+                            <td><code>Acknowledge</code></td>
+                            <td>Button zum Bestätigen des Problems</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Configuration -->
+            <section id="configuration" class="doc-section">
+                <h2><i class="bi bi-gear me-2"></i>Konfiguration</h2>
+
+                <h3 id="prtg"><i class="bi bi-speedometer2 me-2"></i>PRTG Checks</h3>
+                <p>PRTG-Checks überwachen System-Metriken wie CPU, Memory und Disk.</p>
+
+                <h4>Verfügbare Metriken</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Metrik</th>
+                            <th>Beschreibung</th>
+                            <th>Standard-Schwellwerte</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>cpu</code></td>
+                            <td>CPU-Auslastung in Prozent</td>
+                            <td>Warning: &gt;70%, Critical: &gt;85%</td>
+                        </tr>
+                        <tr>
+                            <td><code>memory</code></td>
+                            <td>Speicherauslastung in Prozent</td>
+                            <td>Warning: &gt;80%, Critical: &gt;90%</td>
+                        </tr>
+                        <tr>
+                            <td><code>disk</code></td>
+                            <td>Freier Speicherplatz in Prozent</td>
+                            <td>Warning: &le;20%, Critical: &le;10%</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Threshold-Operatoren</h4>
+                <p>Folgende Operatoren sind verfügbar: <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>==</code>, <code>!=</code></p>
+
+                <h3 id="netscaler"><i class="bi bi-heart-pulse me-2"></i>NetScaler Health Checks</h3>
+                <p>Health Checks prüfen die Erreichbarkeit und Funktionalität von Endpunkten.</p>
+
+                <h4>Health Check Felder</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Feld</th>
+                            <th>Beschreibung</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>Name</code></td>
+                            <td>Bezeichnung des Health Checks</td>
+                        </tr>
+                        <tr>
+                            <td><code>HTTP-Methode</code></td>
+                            <td>GET, POST, PUT, DELETE oder HEAD</td>
+                        </tr>
+                        <tr>
+                            <td><code>Pfad</code></td>
+                            <td>URL-Pfad zum Endpunkt (z.B. /health)</td>
+                        </tr>
+                        <tr>
+                            <td><code>Erwartete Status-Codes</code></td>
+                            <td>Kommagetrennte Liste (z.B. 200, 201)</td>
+                        </tr>
+                        <tr>
+                            <td><code>Intervall</code></td>
+                            <td>Prüfintervall in Sekunden (5-3600)</td>
+                        </tr>
+                        <tr>
+                            <td><code>Timeout</code></td>
+                            <td>Timeout in Millisekunden (1000-60000)</td>
+                        </tr>
+                        <tr>
+                            <td><code>Payload</code></td>
+                            <td>Optional: Request-Body als JSON</td>
+                        </tr>
+                        <tr>
+                            <td><code>Body enthält</code></td>
+                            <td>Optional: Erwartete Strings im Response-Body (pro Zeile)</td>
+                        </tr>
+                        <tr>
+                            <td><code>Erwartete Header</code></td>
+                            <td>Optional: Header-Prüfungen (Key: Value pro Zeile)</td>
+                        </tr>
+                        <tr>
+                            <td><code>JsonPath-Assertions</code></td>
+                            <td>Optional: JsonPath-Ausdrücke ($.path operator value)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>JsonPath-Assertions Beispiele</h4>
+<pre><code>$.status == healthy
+$.count > 0
+$.data.items[0].active == true
+$.version != deprecated</code></pre>
+
+                <h3 id="certificates"><i class="bi bi-shield-lock me-2"></i>Zertifikat-Prüfung</h3>
+                <p>
+                    Überwacht die Gültigkeit von SSL/TLS-Zertifikaten und warnt vor ablaufenden Zertifikaten.
+                    Das Feature muss global und pro Server aktiviert werden.
+                </p>
+
+                <h4>Zertifikat-Quellen</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Quelle</th>
+                            <th>Beschreibung</th>
+                            <th>Beispiel</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>store://</code></td>
+                            <td>Windows Certificate Store</td>
+                            <td><code>store://LocalMachine/My</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>file://</code></td>
+                            <td>Zertifikatsdatei auf dem Server</td>
+                            <td><code>file://C:\certs\server.pfx</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>iis://</code></td>
+                            <td>IIS-gebundene Zertifikate</td>
+                            <td><code>iis://</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Schwellwerte</h4>
+                <ul>
+                    <li><strong>Warning:</strong> Zertifikat läuft in weniger als 30 Tagen ab (Standard)</li>
+                    <li><strong>Critical:</strong> Zertifikat läuft in weniger als 14 Tagen ab (Standard)</li>
+                </ul>
+
+                <h4>Filter</h4>
+                <p>Zertifikate können nach folgenden Kriterien gefiltert werden:</p>
+                <ul>
+                    <li><code>subjectContains</code> - Subject muss diesen Text enthalten</li>
+                    <li><code>thumbprint</code> - Exakter Thumbprint-Abgleich</li>
+                    <li><code>friendlyNameContains</code> - Friendly Name muss Text enthalten</li>
+                    <li><code>issuerContains</code> - Issuer muss Text enthalten</li>
+                </ul>
+
+                <h3 id="eventlog"><i class="bi bi-journal-text me-2"></i>EventLog-Prüfung</h3>
+                <p>
+                    Überwacht Windows Event Logs (z.B. Application, System) auf Fehler und kritische Ereignisse
+                    innerhalb eines konfigurierbaren Zeitfensters. Die Prüfung erfolgt via PowerShell
+                    <code>Get-WinEvent</code> mit Level-Filter direkt im <code>FilterHashtable</code>.
+                </p>
+
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Nur Windows:</strong> EventLog-Prüfungen sind ausschließlich auf Windows-Systemen verfügbar.
+                    Auf Linux/macOS wird die Prüfung übersprungen und kein Ergebnis gespeichert.
+                </div>
+
+                <h4>Aktivierung (zweistufig)</h4>
+                <p>
+                    Die EventLog-Prüfung erfordert zwei unabhängige Aktivierungsschritte — beide müssen aktiv sein:
+                </p>
+                <ol>
+                    <li>
+                        <strong>Globales Feature-Toggle</strong> unter <em>Einstellungen → Feature-Toggles → Event Log</em>
+                        einschalten. Dort lassen sich auch die globalen Standardwerte konfigurieren.
+                    </li>
+                    <li>
+                        <strong>Pro-Server-Check</strong> unter <em>Server → [Server bearbeiten] → Server-Checks → Event Log</em>
+                        aktivieren.
+                    </li>
+                </ol>
+
+                <h4>Globale Standardwerte</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Einstellung</th>
+                            <th>Beschreibung</th>
+                            <th>Standard</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>timeWindowMinutes</code></td>
+                            <td>Zeitfenster in Minuten, in dem Events gezählt werden</td>
+                            <td>60</td>
+                        </tr>
+                        <tr>
+                            <td><code>levels</code></td>
+                            <td>
+                                Event-Level, die überwacht werden.<br />
+                                Mögliche Werte: <code>Critical</code> (1), <code>Error</code> (2),
+                                <code>Warning</code> (3), <code>Information</code> (4)
+                            </td>
+                            <td>Critical, Error</td>
+                        </tr>
+                        <tr>
+                            <td><code>warningCount</code></td>
+                            <td>Anzahl Events im Zeitfenster, ab der Warning-Status ausgelöst wird</td>
+                            <td>5</td>
+                        </tr>
+                        <tr>
+                            <td><code>criticalCount</code></td>
+                            <td>Anzahl Events im Zeitfenster, ab der Critical-Status ausgelöst wird</td>
+                            <td>20</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Pro-Server-Konfiguration</h4>
+                <p>
+                    Wenn keine Logs explizit konfiguriert sind, werden <strong>Application</strong> und
+                    <strong>System</strong> automatisch geprüft. Individuelle Logs können mit eigenen
+                    Schwellwert-Overrides und Quell-Filtern angegeben werden:
+                </p>
+                <pre><code>{
+  "checks": {
+    "eventLog": {
+      "enabled": true,
+      "logs": [
+        {
+          "name": "Application",
+          "timeWindowMinutes": 30,
+          "levels": ["Critical", "Error"],
+          "warningCount": 3,
+          "criticalCount": 10,
+          "includeSources": ["MSSQLSERVER"],
+          "excludeSources": ["SecurityCenter"]
+        },
+        {
+          "name": "System"
+        }
+      ]
+    }
+  }
+}</code></pre>
+
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr><th>Feld</th><th>Beschreibung</th><th>Standard</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>name</code></td><td>Name des Windows Event Logs (z.B. <code>Application</code>, <code>System</code>, <code>Security</code>)</td><td>–</td></tr>
+                        <tr><td><code>timeWindowMinutes</code></td><td>Überschreibt den globalen Standardwert für diesen Log</td><td>global</td></tr>
+                        <tr><td><code>levels</code></td><td>Überschreibt die globalen Level-Filter für diesen Log</td><td>global</td></tr>
+                        <tr><td><code>warningCount</code></td><td>Überschreibt den globalen Warning-Schwellwert</td><td>global</td></tr>
+                        <tr><td><code>criticalCount</code></td><td>Überschreibt den globalen Critical-Schwellwert</td><td>global</td></tr>
+                        <tr><td><code>includeSources</code></td><td>Nur Events von diesen Quellen berücksichtigen (leer = alle)</td><td>[]</td></tr>
+                        <tr><td><code>excludeSources</code></td><td>Events von diesen Quellen ignorieren</td><td>[]</td></tr>
+                    </tbody>
+                </table>
+
+                <h4>Ignorier-Regeln (zentral)</h4>
+                <p>
+                    Bekanntes Rauschen (z.&nbsp;B. DCOM&nbsp;10016, Schannel&nbsp;36887) lässt sich über zentrale
+                    Ignorier-Regeln dauerhaft ausblenden — konfigurierbar unter
+                    <em>Einstellungen → Feature-Toggles → Event-Log: Ignorier-Regeln</em> oder in
+                    <code>features.eventLog.ignoreRules</code>. Ignorierte Ereignisse zählen nicht in die
+                    Warning-/Critical-Schwellwerte, werden aber separat ausgewiesen
+                    („N&nbsp;Events (M&nbsp;ignoriert)").
+                </p>
+                <pre><code>{
+  "features": {
+    "eventLog": {
+      "enabled": true,
+      "ignoreRules": [
+        {
+          "source": "Microsoft-Windows-DistributedCOM",
+          "eventIds": [10016],
+          "servers": [],
+          "reason": "Bekanntes DCOM-Berechtigungs-Rauschen"
+        },
+        {
+          "source": "MyApp*",
+          "messageContains": "connection reset",
+          "logName": "Application",
+          "servers": ["web0*"],
+          "reason": "Bekannter Reconnect nach Backup-Fenster",
+          "expiresAt": "2026-12-31T23:59:00"
+        }
+      ]
+    }
+  }
+}</code></pre>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr><th>Feld</th><th>Beschreibung</th><th>Standard</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>source</code></td><td>Quelle/Provider (Wildcard <code>*</code>, Groß-/Kleinschreibung egal); leer = jede Quelle</td><td>–</td></tr>
+                        <tr><td><code>eventIds</code></td><td>Liste von Event-IDs; leer = jede ID</td><td>[]</td></tr>
+                        <tr><td><code>messageContains</code></td><td>Substring oder Wildcard-Muster, das die Meldung enthalten muss; leer = jede Meldung</td><td>–</td></tr>
+                        <tr><td><code>logName</code></td><td>Auf ein Log begrenzen (z.&nbsp;B. <code>Application</code>); leer = alle Logs</td><td>–</td></tr>
+                        <tr><td><code>servers</code></td><td>Servernamen (Wildcards erlaubt); <strong>leer = alle Server</strong></td><td>[]</td></tr>
+                        <tr><td><code>reason</code></td><td>Begründung der Unterdrückung (dringend empfohlen — Nachvollziehbarkeit)</td><td>–</td></tr>
+                        <tr><td><code>expiresAt</code></td><td>Optionales Ablaufdatum (UTC): danach greift die Regel nicht mehr und das Ereignis taucht wieder auf (Wiedervorlage)</td><td>–</td></tr>
+                    </tbody>
+                </table>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Eine Regel greift nur, wenn <strong>alle</strong> gesetzten Kriterien zutreffen. Regeln ganz ohne
+                    Kriterien (weder Quelle noch Event-ID noch Meldung) sind inaktiv — sie würden sonst alles unterdrücken.
+                    Für <em>kurzfristiges</em> Stummschalten während eines Incidents ist weiterhin das
+                    zeitlich begrenzte <a href="#acknowledges">Acknowledge</a> das richtige Werkzeug.
+                </div>
+
+                <h5>Einzelne Events direkt ignorieren</h5>
+                <p>
+                    In der Serveransicht (<em>Status → Server → Event Log</em>) hat jedes Ereignis den Knopf
+                    <strong>„Ignorieren“</strong>. Er legt eine Regel für <strong>diesen Server</strong> mit Quelle und Event-ID an —
+                    wahlweise für 1, 7, 30 oder 90&nbsp;Tage, <strong>bis zu einem Datum</strong> oder <strong>für immer</strong>, mit Grund.
+                    Bearbeiter und Zeitpunkt werden im Feld <code>reason</code> vermerkt. Ändern oder löschen lässt sich die Regel
+                    wie jede andere unter <em>Einstellungen → Feature-Toggles → Event-Log: Ignorier-Regeln</em>.
+                </p>
+
+                <h5>Wo die Regeln wirken</h5>
+                <ul>
+                    <li><strong>Worker</strong> eines Servers: filtert exakt, sofern die Regel in <em>seiner</em> <code>config.json</code> steht.</li>
+                    <li><strong>WebUI und Notifier</strong> (zentral): wenden die Regeln aus ihrer <code>config.json</code> auf die
+                        gemeldeten Ereignisse <em>aller</em> Server an. Eine in der zentralen WebUI angelegte Regel beruhigt
+                        Anzeige, Probleme und Mails daher sofort — ohne die config.json auf die Server zu verteilen. Die Zählung
+                        ist dabei eine Näherung, weil ein Server nur seine jüngsten Ereignisse meldet; der Status wird nur
+                        herabgestuft, nie verschärft.</li>
+                </ul>
+
+                <h4>Statuslogik und Problemableitung</h4>
+                <p>
+                    Der Status wird pro Log berechnet und der schlechteste Status über alle konfigurierten Logs gemeldet:
+                </p>
+                <ul>
+                    <li>Ereignisanzahl im Zeitfenster &ge; <code>criticalCount</code> → <span class="badge bg-danger">Critical</span></li>
+                    <li>Ereignisanzahl &ge; <code>warningCount</code> → <span class="badge bg-warning text-dark">Warning</span></li>
+                    <li>Ereignisanzahl &lt; <code>warningCount</code> → <span class="badge bg-success">Healthy</span></li>
+                </ul>
+                <p>
+                    Bei Warning oder Critical wird automatisch ein <strong>aktives Problem</strong> mit
+                    der deterministischen ID <code>eventlog_errors_critical</code> bzw.
+                    <code>eventlog_errors_warning</code> erzeugt. Diese ID ermöglicht das gezielte
+                    Quittieren (Acknowledge) des EventLog-Problems.
+                </p>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Sofortige Auslösung:</strong> EventLog-Probleme unterliegen
+                    <em>nicht</em> dem Status-Smoothing (<code>minConsecutiveChecks</code>).
+                    Sie werden beim ersten Überschreiten der Schwelle sofort gemeldet —
+                    im Gegensatz zu Metrik-Problemen (CPU, Memory, Disk), die N aufeinanderfolgende
+                    Checks benötigen.
+                </div>
+
+                <h4>Anzeige in der WebUI</h4>
+                <p>
+                    Wenn EventLog-Daten vorhanden sind, erscheint auf der Server-Detail-Seite
+                    (<em>Status → [Server] → Details</em>) eine <strong>Event-Log-Karte</strong>
+                    mit einer Tabelle der zuletzt erfassten Ereignisse:
+                    Zeitstempel, Level (farbcodiert), Quelle, Ereignis-ID und Meldung (auf 120 Zeichen gekürzt).
+                    Die Karte zeigt außerdem die Gesamtanzahl der Ereignisse im Badge.
+                </p>
+                <p>
+                    Es werden pro Log maximal 20 Ereignisse und insgesamt maximal 50 Ereignisse gespeichert.
+                    Die Gesamtanzahl (<code>EventCount</code>) gibt die tatsächliche Anzahl der gefundenen
+                    Events wieder, auch wenn mehr als 50 vorliegen.
+                </p>
+
+                <h3 id="windows-services"><i class="bi bi-gear-wide-connected me-2"></i>Windows-Dienste-Prüfung</h3>
+                <p>
+                    Überwacht den Status von Windows-Diensten auf den konfigurierten Servern.
+                </p>
+
+                <h4>Konfiguration</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Feld</th>
+                            <th>Beschreibung</th>
+                            <th>Standard</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>name</code></td>
+                            <td>Windows-Dienstname oder Wildcard-Muster (z.B. <code>SQL*</code>, <code>*BizTalk*</code>)</td>
+                            <td>-</td>
+                        </tr>
+                        <tr>
+                            <td><code>displayName</code></td>
+                            <td>Anzeigename in der UI (optional). Bei Wildcards: Präfix vor dem gefundenen Dienstnamen.</td>
+                            <td>Dienstname</td>
+                        </tr>
+                        <tr>
+                            <td><code>required</code></td>
+                            <td>Beeinflusst nur den <code>NotFound</code>-Fall: <code>true</code> → Critical wenn Dienst nicht gefunden; gestoppte Dienste sind immer Critical</td>
+                            <td>true</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Wildcard-Unterstützung</h4>
+                <p>
+                    Der Dienstname unterstützt <code>*</code> (beliebig viele Zeichen) und <code>?</code> (ein Zeichen).
+                    Wildcard-Muster werden zur Laufzeit auf alle passenden Dienste aufgelöst — jeder Treffer wird
+                    einzeln überwacht.
+                </p>
+                <ul>
+                    <li><code>SQL*</code> → findet z.B. <em>SQLWriter</em>, <em>SQLBrowser</em>, <em>MSSQLSERVER</em></li>
+                    <li><code>*BizTalk*</code> → findet alle Dienste mit „BizTalk" im Namen</li>
+                    <li>Kein Treffer + <code>required: true</code> → Critical-Problem (<code>service_{muster}_nomatch</code>)</li>
+                    <li>Kein Treffer + <code>required: false</code> → kein Problem</li>
+                </ul>
+
+                <h4>Deaktivierte Dienste</h4>
+                <p>
+                    Dienste mit Starttyp <strong>Disabled</strong> werden immer übersprungen — weder ein Status-Eintrag
+                    noch ein Problem wird erzeugt (gilt für exakte Namen und Wildcard-Treffer gleichermaßen).
+                </p>
+
+                <h4>Status-Bewertung</h4>
+                <div class="alert alert-info py-2 small">
+                    Das <code>required</code>-Flag beeinflusst <em>nur</em> den <code>NotFound</code>-Fall.
+                    Ein gefundener, aber gestoppter Dienst erzeugt <strong>immer</strong> ein Critical-Problem —
+                    unabhängig von <code>required</code>.
+                </div>
+                <ul>
+                    <li><strong>Running:</strong> Dienst läuft normal → Healthy</li>
+                    <li><strong>Disabled:</strong> Dienst übersprungen → kein Eintrag, kein Problem</li>
+                    <li><strong>Stopped:</strong> Critical — Dienst gestoppt (gilt für <em>alle</em> Dienste, unabhängig von <code>required</code>)
+                        <br><small class="text-muted">Beispiel Problem-ID: <code>service_com.docker.service_stopped</code></small></li>
+                    <li><strong>NotFound + <code>required: true</code>:</strong> Critical — Dienst nicht gefunden
+                        <br><small class="text-muted">Beispiel Problem-ID: <code>service_sqlwriter_down</code></small></li>
+                    <li><strong>NotFound + <code>required: false</code>:</strong> Healthy — optionaler Dienst fehlt, kein Problem</li>
+                    <li><strong>Wildcard ohne Treffer + <code>required: true</code>:</strong> Critical — kein passender Dienst gefunden
+                        <br><small class="text-muted">Beispiel Problem-ID: <code>service_sql__nomatch</code></small></li>
+                    <li><strong>Wildcard ohne Treffer + <code>required: false</code>:</strong> Healthy — kein Treffer, kein Problem</li>
+                </ul>
+            </section>
+
+            <!-- AppPool Checks -->
+            <section id="apppools" class="doc-section">
+                <h3 id="apppools"><i class="bi bi-layers me-2"></i>IIS AppPool-Prüfung</h3>
+                <p>
+                    Überwacht den Status, den Speicherverbrauch und die Laufzeit von IIS Application Pools.
+                    Das Feature ist standardmäßig deaktiviert und muss global sowie pro Server aktiviert werden.
+                </p>
+
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Nur Windows / IIS:</strong> Die AppPool-Prüfung ist ausschließlich auf Windows-Servern
+                    mit installiertem IIS verfügbar. Voraussetzung ist <code>%SystemRoot%\System32\inetsrv\appcmd.exe</code>.
+                    Auf Systemen ohne IIS wird die Prüfung übersprungen.
+                </div>
+
+                <h4>Aktivierung (zweistufig)</h4>
+                <ol>
+                    <li>
+                        <strong>Globales Feature-Toggle</strong> unter <em>Einstellungen → Feature-Toggles → AppPool-Monitoring</em>
+                        einschalten. Dort werden auch die globalen Standardwerte für Speicher- und Laufzeit-Schwellwerte gesetzt.
+                    </li>
+                    <li>
+                        <strong>Pro-Server-Check</strong> unter <em>Server → [Server bearbeiten] → Server-Checks → IIS AppPool-Überwachung</em>
+                        aktivieren und den Erkennungsmodus wählen.
+                    </li>
+                </ol>
+
+                <h4>Globale Standardwerte (Einstellungen → Features → AppPool-Monitoring)</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Einstellung</th>
+                            <th>Beschreibung</th>
+                            <th>Standard</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>memoryWarningMB</code></td>
+                            <td>Speicherverbrauch des Worker-Prozesses (w3wp.exe), ab dem Warning ausgelöst wird</td>
+                            <td>500 MB</td>
+                        </tr>
+                        <tr>
+                            <td><code>memoryCriticalMB</code></td>
+                            <td>Speicherverbrauch, ab dem Critical ausgelöst wird</td>
+                            <td>1000 MB</td>
+                        </tr>
+                        <tr>
+                            <td><code>uptimeWarningHours</code></td>
+                            <td>Laufzeit seit letztem Recycle, ab der ein Hinweis (Warning) ausgegeben wird. <strong>0 = deaktiviert.</strong></td>
+                            <td>168 h (7 Tage)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="doc-card info">
+                    <strong><i class="bi bi-info-circle me-2"></i>Keine Pool-spezifischen Schwellwerte in der UI</strong><br>
+                    Speicher- und Laufzeit-Schwellwerte werden ausschließlich global konfiguriert.
+                    Per-Pool-Overrides sind technisch möglich, aber bewusst nicht in der UI exponiert,
+                    um die Konfiguration überschaubar zu halten.
+                </div>
+
+                <h4>Erkennungsmodi</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Modus</th>
+                            <th>Beschreibung</th>
+                            <th>Konfiguration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Auto-Discovery</strong></td>
+                            <td>
+                                Alle IIS Application Pools werden automatisch erkannt und überwacht.
+                                Unerwünschte Pools können über eine optionale Ignore-Liste ausgeschlossen werden.
+                            </td>
+                            <td>Checkbox <em>Automatische Pool-Erkennung</em> aktivieren; optionale Ignore-Liste pflegen</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Manuell</strong></td>
+                            <td>
+                                Nur explizit konfigurierte Pools werden überwacht. Geeignet, wenn nur
+                                wenige bestimmte Pools relevant sind.
+                            </td>
+                            <td>Checkbox deaktivieren; Pools einzeln in der Liste <em>Zu überwachende AppPools</em> eintragen</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Wildcard-Unterstützung</h4>
+                <p>
+                    In beiden Modi werden Wildcard-Muster unterstützt. Wildcards werden zur Laufzeit gegen
+                    alle tatsächlich vorhandenen IIS-Pools aufgelöst.
+                </p>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr><th>Muster</th><th>Bedeutung</th><th>Beispiel-Treffer</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>Test*</code></td><td>Beginnt mit „Test"</td><td>TestPool, TestApp</td></tr>
+                        <tr><td><code>*Test*</code></td><td>Enthält „Test"</td><td>MyTestPool, UnitTest</td></tr>
+                        <tr><td><code>*_Dev</code></td><td>Endet mit „_Dev"</td><td>AppPool_Dev, API_Dev</td></tr>
+                    </tbody>
+                </table>
+                <ul>
+                    <li><strong>Auto-Discovery Ignore-Liste:</strong> Pools, die dem Muster entsprechen, werden <em>ausgeschlossen</em></li>
+                    <li><strong>Manueller Modus:</strong> Pools, die dem Muster entsprechen, werden <em>eingeschlossen</em></li>
+                    <li>Manueller Modus erfordert mindestens einen Eintrag (leer = Fehler beim Speichern)</li>
+                </ul>
+
+                <h4>Was wird überwacht?</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr><th>Metrik</th><th>Beschreibung</th><th>Alarm</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Status</strong></td>
+                            <td>Running / Stopped / Starting / Stopping / Unknown</td>
+                            <td><span class="badge bg-danger">Critical</span> wenn nicht Running</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Memory</strong></td>
+                            <td>RAM-Verbrauch des Worker-Prozesses (w3wp.exe) in MB</td>
+                            <td>
+                                <span class="badge bg-warning text-dark">Warning</span> ab <code>memoryWarningMB</code><br>
+                                <span class="badge bg-danger">Critical</span> ab <code>memoryCriticalMB</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Uptime</strong></td>
+                            <td>Laufzeit seit letztem Recycle des Pools in Stunden</td>
+                            <td>
+                                <span class="badge bg-warning text-dark">Warning</span> ab <code>uptimeWarningHours</code>
+                                (Hinweis auf langen Betrieb ohne Recycle)
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Problem-Ableitung</h4>
+                <p>Folgende Probleme werden automatisch abgeleitet und auf der Probleme-Seite angezeigt:</p>
+                <ul>
+                    <li>
+                        <strong>Pool gestoppt:</strong>
+                        <code>apppool_{poolname}_stopped</code> — <span class="badge bg-danger">Critical</span><br>
+                        <small class="text-muted">Enthält optional die Stoppzeit, sofern der Pool bereits im Vorjauf gestoppt war.</small>
+                    </li>
+                    <li>
+                        <strong>Hoher Speicherverbrauch:</strong>
+                        <code>apppool_{poolname}_memory</code> — <span class="badge bg-warning text-dark">Warning</span> oder <span class="badge bg-danger">Critical</span><br>
+                        <small class="text-muted">Zeigt aktuellen Verbrauch und Schwellwert an.</small>
+                    </li>
+                    <li>
+                        <strong>Lange Laufzeit:</strong>
+                        <code>apppool_{poolname}_uptime</code> — <span class="badge bg-warning text-dark">Warning</span><br>
+                        <small class="text-muted">Empfehlung zum Neustart (Recycle).</small>
+                    </li>
+                </ul>
+
+                <div class="doc-card info">
+                    <strong><i class="bi bi-clock-history me-2"></i>StoppedSince — Persistierung</strong><br>
+                    Der Zeitpunkt, seit dem ein Pool gestoppt ist (<code>StoppedSince</code>), wird über mehrere
+                    Worker-Läufe hinweg aus der Status-Datei weitergegeben. Der Wert bleibt stabil, solange der
+                    Pool gestoppt ist — er wird nicht bei jedem Lauf auf den aktuellen Zeitstempel zurückgesetzt.
+                </div>
+
+                <h4>Anzeige in der WebUI</h4>
+                <p>
+                    Auf der Server-Detail-Seite (<em>Status → [Server] → Details → Application Pools</em>)
+                    wird eine Tabelle mit allen überwachten Pools angezeigt:
+                </p>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr><th>Spalte</th><th>Inhalt</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>Name</strong></td><td>AppPool-Name</td></tr>
+                        <tr><td><strong>Status</strong></td><td>Running (grün), Stopped (rot), Starting/Stopping (gelb)</td></tr>
+                        <tr>
+                            <td><strong>Memory</strong></td>
+                            <td>Verbrauch in MB mit farbigem Badge (grün/gelb/rot) + Schwellwert als Referenz; „–" wenn gestoppt</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Uptime</strong></td>
+                            <td>
+                                Laufzeit in Stunden mit Badge (gelb wenn Warning); „–" wenn keine Daten;<br>
+                                bei gestopptem Pool: Zeit seit Stopp (hh:mm:ss)
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Anzeige in statischen HTML-Dateien</h4>
+                <p>
+                    Auf den vom Worker generierten Detail-Seiten (<code>{server}.{service}.html</code>) erscheint
+                    ein Abschnitt <em>IIS Application Pools</em> mit farbcodierten Karten pro Pool:
+                </p>
+                <ul>
+                    <li>Status: farbige Karte (running = grün, stopped = rot)</li>
+                    <li>Memory: farbcodierte Zeile (<code>metric-ok</code> / <code>metric-warning</code> / <code>metric-critical</code>)</li>
+                    <li>Uptime: farbcodierte Zeile (<code>metric-warning</code> wenn Schwellwert überschritten)</li>
+                    <li>Stoppzeit: bei gestoppten Pools Anzeige der bisherigen Stoppdauer</li>
+                </ul>
+            </section>
+
+            <!-- SQL Query Checks -->
+            <section id="sql-checks" class="doc-section">
+                <h3 id="sql-checks"><i class="bi bi-database me-2"></i>SQL Query Checks</h3>
+                <p>
+                    SQL Query Checks ermöglichen die Überwachung von SQL-Datenbankabfragen mit Assertions
+                    für Row-Count- und Column-Value-Validierungen. Pro Server und pro Check-Gruppe können
+                    beliebig viele SQL-Abfragen mit komplexen Validierungsregeln definiert werden.
+                </p>
+
+                <h4>Aktivierung</h4>
+                <p>
+                    SQL Query Checks erfordern zwei unabhängige Aktivierungsschritte:
+                </p>
+                <ol>
+                    <li><strong>Global:</strong> <em>Einstellungen → Features → SQL Query Checks</em> → <code>enabled: true</code></li>
+                    <li><strong>Pro Server:</strong> <em>Server → [Server] → Checks → SQL Queries</em> → <code>enabled: true</code></li>
+                </ol>
+
+                <h4>Check-Konfiguration</h4>
+                <p>
+                    Jeder SQL Check besteht aus:
+                </p>
+                <ul>
+                    <li><strong>Name (Slug):</strong> Eindeutige Kennung für Problem-IDs</li>
+                    <li><strong>Description:</strong> Menschenlesbarer Name</li>
+                    <li><strong>Connection String:</strong> SQL-Serververbindung</li>
+                    <li><strong>Queries:</strong> Liste von SQL-Abfragen mit Assertions</li>
+                </ul>
+
+                <h4>Assertion-Typen</h4>
+                <div class="doc-card success">
+                    <strong>Row Count Assertion:</strong> Validiert die Anzahl der Zeilen
+                    <ul>
+                        <li><code>expectedCount</code>: Erwartete Anzahl (z.B. 5)</li>
+                        <li><code>operator</code>: Vergleichsoperator (<code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>)</li>
+                        <li>Beispiel: <code>"expectedCount": 0, "operator": "=="</code> erwartet genau 0 Zeilen</li>
+                    </ul>
+                </div>
+
+                <div class="doc-card success">
+                    <strong>Column Assertion:</strong> Validiert Werte in Spalten
+                    <ul>
+                        <li><code>column</code>: Spaltenname</li>
+                        <li><code>expectedValue</code>: Erwarteter Wert</li>
+                        <li><code>operator</code>: Vergleichsoperator</li>
+                        <li><code>valueType</code>: <code>String</code>, <code>Integer</code>, oder <code>DateTime</code></li>
+                        <li><strong>Wichtig:</strong> Column Assertions werden auf <strong>alle Zeilen</strong> angewendet</li>
+                    </ul>
+                </div>
+
+                <h4>Problem-Ableitung</h4>
+                <p>
+                    SQL Checks leiten folgende Probleme ab:
+                </p>
+                <ul>
+                    <li><strong>Verbindungsfehler:</strong> <code>sqlquery_{checkId}_connection_error</code> (Critical)</li>
+                    <li><strong>Query-Fehler:</strong> <code>sqlquery_{checkId}_{queryName}_error</code> (Critical)</li>
+                    <li><strong>Row-Count Mismatch:</strong> <code>sqlquery_{checkId}_{queryName}_rowcount_mismatch</code> (Critical)</li>
+                    <li><strong>Column Assertion Fehler:</strong> <code>sqlquery_{checkId}_{queryName}_{assertionName}_mismatch</code> (Critical)</li>
+                </ul>
+
+                <h4>Anzeige in der WebUI</h4>
+                <p>
+                    SQL Check Ergebnisse werden auf der Server-Detail-Seite angezeigt:
+                </p>
+                <ul>
+                    <li>Tabellarische Anzeige der SQL Checks mit Status</li>
+                    <li>Detaillierte Row-Count- und Column-Assertion-Ergebnisse</li>
+                    <li>Fehlerdetails bei Verbindungs- oder Query-Fehlern</li>
+                </ul>
+            </section>
+
+            <!-- Email Monitoring -->
+            <section id="email-monitoring" class="doc-section">
+                <h3 id="email-monitoring"><i class="bi bi-envelope-check me-2"></i>E-Mail-Monitoring</h3>
+                <p>
+                    Das E-Mail-Monitoring prüft, ob E-Mails über konfigurierte SMTP-Relay-Pfade erfolgreich
+                    zugestellt werden — insbesondere über Netzwerksegmentgrenzen hinweg.
+                </p>
+
+                <div class="doc-card info">
+                    <strong><i class="bi bi-diagram-2 me-2"></i>Topologie: Sender- und Checker-Rolle</strong><br>
+                    <strong>Sender-Instanzen</strong> (eine pro Netzwerksegment) senden in konfigurierten Abständen
+                    Probe-E-Mails per SMTP an ein gemeinsames Monitoring-Postfach.<br>
+                    <strong>Checker-Instanz</strong> (genau eine) liest das gemeinsame IMAP-Postfach und prüft,
+                    ob die Probes aller Sender pünktlich angekommen sind. Rollen sind strikt getrennt:
+                    ein Server kann nur Sender <em>oder</em> Checker sein, nicht beides.
+                </div>
+
+                <h4 class="mt-4">Aktivierung</h4>
+                <p>E-Mail-Monitoring wird ausschließlich pro Server aktiviert — es gibt kein globales Feature-Toggle:</p>
+                <ul>
+                    <li><strong>Sender-Rolle:</strong> Im Server-Editor unter <em>E-Mail-Probes (Sender)</em> den Toggle einschalten und Probes konfigurieren.</li>
+                    <li><strong>Checker-Rolle:</strong> Im Server-Editor unter <em>E-Mail-Zustellung (Checker)</em> den Toggle einschalten, IMAP-Verbindung und Checks konfigurieren.</li>
+                </ul>
+                <div class="alert alert-info py-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Im Gegensatz zu AppPool-, EventLog- oder SQL-Checks gibt es kein globales Feature-Toggle unter <em>Einstellungen</em>. Die Aktivierung erfolgt rein auf Server-Ebene.
+                </div>
+
+                <h4 class="mt-4">Sender-Konfiguration (<code>emailProbes</code>)</h4>
+                <pre><code>{
+  "checks": {
+    "emailProbes": {
+      "enabled": true,
+      "probes": [{
+        "name": "seg1-relay",
+        "description": "Segment 1 SMTP-Relay Test",
+        "smtp": {
+          "host": "mailrelay.seg1.example.com",
+          "port": 25,
+          "useSsl": false,
+          "from": "monitor@server-a.example.com",
+          "to": "monitoring-mailbox@example.com",
+          "username": "sa-sender",
+          "password": "enc:v1:...",
+          "timeoutSeconds": 30
+        },
+        "subject": "[SA-Probe] seg1-relay",
+        "sendIntervalMinutes": 15
+      }]
+    }
+  }
+}</code></pre>
+
+                <h4 class="mt-4">Checker-Konfiguration (<code>emailDelivery</code>)</h4>
+                <pre><code>{
+  "checks": {
+    "emailDelivery": {
+      "enabled": true,
+      "imap": {
+        "host": "mail.example.com",
+        "port": 993,
+        "useSsl": true,
+        "username": "monitoring-mailbox@example.com",
+        "password": "enc:v1:...",
+        "folder": "INBOX",
+        "timeoutSeconds": 30
+      },
+      "checks": [
+        {
+          "name": "seg1-relay-check",
+          "description": "Segment 1 Zustellungscheck",
+          "subjectFilter": "[SA-Probe] seg1-relay",
+          "maxAgeWarningMinutes": 20,
+          "maxAgeCriticalMinutes": 60,
+          "deleteAfterCheck": true
+        }
+      ]
+    }
+  }
+}</code></pre>
+                <p class="mt-2 small text-muted">
+                    <code>timeoutSeconds</code> ist optional (Standard: 30&nbsp;s) und gilt für die IMAP-Verbindung
+                    des Checkers bzw. die SMTP-Verbindung des Senders. Sinnvolle Werte: 5–300&nbsp;s.
+                </p>
+
+                <h4 class="mt-4">Prüfintervall der Zustellungs-Checks</h4>
+                <p>
+                    Der Checker hat kein eigenes Prüfintervall pro Check — er läuft bei jedem
+                    Worker-Zyklus (Standard: 60&nbsp;Sekunden) und prüft bei jedem Durchlauf das
+                    IMAP-Postfach. Das <strong>effektive Alarmierungsfenster</strong> wird ausschließlich
+                    über die Schwellwerte gesteuert:
+                </p>
+                <ul>
+                    <li><code>maxAgeWarningMinutes</code> — ab diesem Alter der neuesten Probe-E-Mail → <strong>Warnung</strong></li>
+                    <li><code>maxAgeCriticalMinutes</code> — ab diesem Alter → <strong>Kritisch</strong></li>
+                </ul>
+                <div class="alert alert-info py-2">
+                    <i class="bi bi-lightbulb me-1"></i>
+                    <strong>Faustregel:</strong> <code>maxAgeWarningMinutes</code> sollte größer sein als
+                    <code>sendIntervalMinutes</code> des zugehörigen Senders, damit normale Zustellverzögerungen
+                    keine Fehlalarme auslösen.<br>
+                    Beispiel: Sender schickt alle <strong>15&nbsp;Minuten</strong> → Warning-Schwellwert
+                    <strong>20&nbsp;Minuten</strong>, Critical-Schwellwert <strong>60&nbsp;Minuten</strong>.
+                </div>
+
+                <h4 class="mt-4">Schwellwerte und Status</h4>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr><th>Bedingung</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Neueste Probe-E-Mail jünger als <code>maxAgeWarningMinutes</code></td><td><span class="badge bg-success">Healthy</span></td></tr>
+                        <tr><td>Alter zwischen Warning- und Critical-Schwellwert</td><td><span class="badge bg-warning text-dark">Warning</span></td></tr>
+                        <tr><td>Alter überschreitet <code>maxAgeCriticalMinutes</code></td><td><span class="badge bg-danger">Critical</span></td></tr>
+                        <tr><td>Keine E-Mail mit dem Betreff-Filter gefunden</td><td><span class="badge bg-danger">Critical</span></td></tr>
+                        <tr><td>IMAP-Verbindung fehlgeschlagen</td><td><span class="badge bg-danger">Critical</span></td></tr>
+                        <tr><td>SMTP-Passwort verschlüsselt, aber Schlüssel fehlt</td><td><span class="badge bg-danger">Critical</span></td></tr>
+                    </tbody>
+                </table>
+
+                <h4 class="mt-4">Passwort-Verschlüsselung</h4>
+                <p>
+                    SMTP- und IMAP-Passwörter werden automatisch beim Speichern im Server-Editor verschlüsselt
+                    (Format <code>enc:v1:...</code>). Der WebUI nutzt denselben Schlüssel wie der Worker
+                    (<code>Encryption:ConnectionStringKey</code> in <code>appsettings.json</code>).
+                </p>
+
+                <h4 class="mt-4">Verbindungstest im Server-Editor</h4>
+                <p>
+                    Im Server-Editor sind direkt Test-Buttons für SMTP und IMAP verfügbar.
+                    Der Test verbindet sich mit den aktuell eingegebenen Einstellungen und zeigt
+                    das Ergebnis inline an (10&nbsp;Sekunden Timeout).
+                </p>
+            </section>
+
+            <!-- Monitoring Badges -->
+            <section id="monitoring-badges" class="doc-section">
+                <h2><i class="bi bi-speedometer2 me-2"></i>Monitoring-Badges</h2>
+                <p>
+                    Monitoring-Badges bieten eine kompakte visuelle Zusammenfassung des Zustands von
+                    AppPools, Windows Services, SQL Checks und Event Log auf Index- und Detail-Seiten.
+                </p>
+
+                <h3>Badge-Typen</h3>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Badge</th>
+                            <th>Bedeutung</th>
+                            <th>Grün (OK)</th>
+                            <th>Orange (Warnung)</th>
+                            <th>Rot (Kritisch)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>🔧 <code>X/N Pools</code></td>
+                            <td>AppPool-Status</td>
+                            <td>Alle Pools laufen und innerhalb der Schwellwerte</td>
+                            <td>Pools laufen, aber Speicher- oder Laufzeit-Warnung</td>
+                            <td>Ein oder mehr Pools gestoppt</td>
+                        </tr>
+                        <tr>
+                            <td>🪟 <code>X/N Svcs</code></td>
+                            <td>Windows Services</td>
+                            <td>Alle Services laufen</td>
+                            <td>–</td>
+                            <td>Ein oder mehr Services gestoppt</td>
+                        </tr>
+                        <tr>
+                            <td>🗄️ <code>X/N SQL</code></td>
+                            <td>SQL Query Checks</td>
+                            <td>Alle Checks erfolgreich</td>
+                            <td>–</td>
+                            <td>Ein oder mehr Checks kritisch</td>
+                        </tr>
+                        <tr>
+                            <td>📋 <code>N Events</code></td>
+                            <td>Event Log Einträge</td>
+                            <td>Healthy</td>
+                            <td>Warning-Schwelle überschritten</td>
+                            <td>Critical-Schwelle überschritten</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p class="small text-muted">
+                    <strong>Zähler:</strong> Der AppPool-Badge zeigt <em>gesunde</em> Pools (laufend und innerhalb aller Schwellwerte).
+                    Ein Pool mit hohem Speicherverbrauch zählt nicht als gesund, auch wenn er technisch läuft.
+                </p>
+
+                <h3>Anzeigeorte</h3>
+                <div class="doc-card info">
+                    <strong>WebUI Status-Seite</strong> (<em>/Status</em>)
+                    <ul>
+                        <li>Monitoring-Badges unter den Metriken in jeder Server-Card</li>
+                        <li>Schneller Überblick über den Status auf einen Blick</li>
+                    </ul>
+                </div>
+
+                <div class="doc-card info">
+                    <strong>Statische Index-Seite</strong> (<code>index.html</code>)
+                    <ul>
+                        <li>Vom Worker generierte Übersichtsseite mit gleichen Badges</li>
+                        <li>Auto-Refresh alle 60 Sekunden</li>
+                    </ul>
+                </div>
+
+                <div class="doc-card info">
+                    <strong>Statische Detail-Seiten</strong> (<code>{server}.{service}.html</code>)
+                    <ul>
+                        <li>Neue "Monitoring Status"-Sektion nach den Metriken</li>
+                        <li>Ermöglicht schnelle Fehlererkennung auf der Detail-Seite</li>
+                    </ul>
+                </div>
+
+                <h3>Bedingungen</h3>
+                <ul>
+                    <li><strong>Nur wenn Daten vorhanden:</strong> Badges werden nur angezeigt, wenn entsprechende Monitoring-Daten konfiguriert sind</li>
+                    <li><strong>Farbcodierung:</strong> Grün (alle OK) / Orange (Warning) / Rot (Critical)</li>
+                    <li><strong>Emoji-Icons:</strong> Visuelle Unterscheidung für schnelle Identifikation</li>
+                </ul>
+            </section>
+
+            <!-- Acknowledge System -->
+            <section id="acknowledges" class="doc-section">
+                <h2><i class="bi bi-check2-circle me-2"></i>Acknowledge-System</h2>
+                <p>
+                    Das Acknowledge-System ermöglicht das Bestätigen von bekannten Problemen,
+                    um Fehlalarme zu unterdrücken und den Überblick zu behalten.
+                </p>
+
+                <h4>Acknowledge erstellen</h4>
+                <ul>
+                    <li>Über den Knopf <strong>„Acknowledge“</strong> auf der Probleme-Seite — oder direkt über den Quittier-Link in der Benachrichtigungs-Mail</li>
+                    <li>Über die REST API (<code>POST /api/acknowledges</code>)</li>
+                </ul>
+                <p>Im Dialog wählbare Dauer:</p>
+                <ul>
+                    <li><strong>30 Minuten bis 30 Tage</strong></li>
+                    <li><strong>Bis Datum …</strong> — Datum und Uhrzeit frei wählbar (muss in der Zukunft liegen)</li>
+                    <li><strong>Unbegrenzt (bis aufgehoben)</strong> — kein Ablauf; endet nur durch „Aufheben“</li>
+                </ul>
+                <p>
+                    Als Bearbeiter wird der angemeldete Windows-Benutzer gespeichert. Quittierte Probleme zeigen in der
+                    Probleme-Liste „bis …“ bzw. „unbegrenzt“ und den Bearbeiter; im Statusbericht erscheinen sie unter
+                    „Quittiert (bekannt)“.
+                </p>
+
+                <h4>API-Felder (<code>POST /api/acknowledges</code>)</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Feld</th>
+                            <th>Beschreibung</th>
+                            <th>Standard</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>serverId</code>, <code>problemId</code></td><td>Welches Problem auf welchem Server</td><td>–</td></tr>
+                        <tr><td><code>durationMinutes</code></td><td>Laufzeit in Minuten; <code>0</code> ohne <code>expiresAt</code> = unbegrenzt</td><td>0</td></tr>
+                        <tr><td><code>expiresAt</code></td><td>Optionales Enddatum (ISO 8601); hat Vorrang vor <code>durationMinutes</code>, muss in der Zukunft liegen</td><td>–</td></tr>
+                        <tr><td><code>comment</code></td><td>Grund der Quittierung</td><td>–</td></tr>
+                        <tr><td><code>acknowledgedBy</code></td><td>Bearbeiter — wird bei aktiver Windows-Anmeldung durch den angemeldeten Benutzer ersetzt</td><td>–</td></tr>
+                    </tbody>
+                </table>
+
+                <h4>Lebenszyklus</h4>
+                <ol>
+                    <li><strong>Erstellen:</strong> Problem wird als quittiert markiert und löst keine Benachrichtigungen mehr aus</li>
+                    <li><strong>Verlängern:</strong> Laufzeit um weitere Minuten verlängern (<code>PUT /api/acknowledges/{id}/extend</code>)</li>
+                    <li><strong>Aufheben:</strong> Knopf „Aufheben“ in der Probleme-Liste (<code>DELETE /api/acknowledges/{id}</code>) — das Problem wird danach wieder gemeldet</li>
+                    <li><strong>Ablauf:</strong> Nach dem Enddatum unterdrückt die Quittierung nichts mehr, das Problem erscheint wieder. Unbegrenzte Quittierungen laufen nie ab.</li>
+                </ol>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Eine Quittierung endet <strong>nicht</strong> automatisch, wenn das Problem verschwindet. Tritt es erneut auf,
+                    solange die Quittierung läuft, bleibt es quittiert. Für dauerhaft bekanntes Event-Log-Rauschen sind
+                    <a href="#eventlog">Ignorier-Regeln</a> das passendere Werkzeug.
+                </div>
+            </section>
+
+            <!-- BizTalk -->
+            <section id="biztalk" class="doc-section">
+                <h2><i class="bi bi-gear-wide-connected me-2"></i>BizTalk-Überwachung</h2>
+                <p>
+                    Überwacht eine BizTalk-Gruppe über die <strong>BizTalk Management Service REST-API</strong>:
+                    Anwendungen, Orchestrierungen, Sendeports, Empfangsorte und vor allem
+                    <strong>suspendierte Instanzen</strong>. Probleme erscheinen wie alle anderen in der Status-
+                    und Probleme-Ansicht und — bei aktivem Notifier — in den Benachrichtigungs-Mails.
+                </p>
+                <h4>Aktivierung</h4>
+                <ul>
+                    <li>Global einschalten unter <em>Einstellungen → Feature-Toggles → BizTalk</em> (oder <code>features.biztalk.enabled</code>).</li>
+                    <li>Pro Server unter <em>Server → Bearbeiten → BizTalk-Überwachung</em>: Management-API-URL (Standard <code>http://localhost/BizTalkManagementService</code>) und je Artefaktart der Modus (alle / Liste / keine).</li>
+                    <li>Authentifizierung erfolgt <strong>integriert (Windows)</strong> über das Dienstkonto des Workers — keine gespeicherten Zugangsdaten.</li>
+                </ul>
+                <h4>Was gemeldet wird</h4>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light"><tr><th>Signal</th><th>Bedingung</th><th>Schweregrad</th></tr></thead>
+                    <tbody>
+                        <tr><td>Anwendung / Orchestrierung / Sendeport</td><td>Status ≠ <code>Started</code></td><td>Critical</td></tr>
+                        <tr><td>Empfangsort</td><td>deaktiviert (<code>Enable = false</code>)</td><td>Warning (konfigurierbar Critical)</td></tr>
+                        <tr><td>Suspendierte Instanzen</td><td>Anzahl ≥ Warning-/Critical-Schwelle</td><td>Warning / Critical</td></tr>
+                        <tr><td>Management-API</td><td>nicht erreichbar</td><td>Critical</td></tr>
+                    </tbody>
+                </table>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Den Laufzeitstatus der <strong>Host-Instanz-Dienste</strong> (<code>BTSSvc$…</code>) liefert die API nicht —
+                    diese über die Windows-Dienste-Überwachung auf den BizTalk-Servern abdecken.
+                </div>
+            </section>
+
+            <!-- Datei-/Protokollüberwachung -->
+            <section id="filemonitoring" class="doc-section">
+                <h2><i class="bi bi-folder-check me-2"></i>Datei-/Protokollüberwachung</h2>
+                <p>
+                    Überwacht Fileshares auf <strong>hängengebliebene Dateien</strong> und durchsucht Logdateien nach
+                    <strong>Fehlersignaturen</strong>. Gedacht z.B. für die Verarbeitungsordner von Schnittstellen
+                    (Eingang / Kasse / Log) je Standort. Funde erscheinen wie alle anderen Probleme in der Status- und
+                    Probleme-Ansicht und — bei aktivem Notifier — in den Sammel-Mails, jeweils mit Wiki-Link und
+                    Schritt-für-Schritt-Hinweisen.
+                </p>
+                <h4>Aktivierung</h4>
+                <ul>
+                    <li>Global einschalten unter <em>Einstellungen → Feature-Toggles → Datei-/Protokollüberwachung</em>
+                        (oder <code>features.fileMonitoring.enabled</code>) inkl. Standard-Schwellwerte für das Dateialter.</li>
+                    <li>Pro Server unter <em>Server → Bearbeiten → Datei-/Protokollüberwachung</em>: überwachte Verzeichnisse,
+                        Log-Scans und optionale Betriebszeiten.</li>
+                    <li>Ein <strong>zentraler Worker</strong> erreicht die Standort-Shares über UNC-Pfade
+                        (z.B. <code>\\srv\d$\Daten\schnittstelle\kasse\eingang</code>); das Dienstkonto benötigt Leserechte.</li>
+                </ul>
+                <h4>Hängengebliebene Dateien</h4>
+                <p>
+                    Eine Datei gilt je überwachtem Verzeichnis als hängend, wenn sie <strong>älter</strong> als die
+                    konfigurierte Schwelle ist <em>oder</em> nach der <strong>Cutoff-Zeit</strong> (z.B. <code>21:45</code>)
+                    noch vorhanden ist (der Ordner soll dann leer sein). Filter über <code>*.xml</code>-Muster
+                    (einschließen/ausschließen) sind möglich.
+                </p>
+                <h4>Log-Scans</h4>
+                <p>
+                    Pro Logpfad (oder Glob wie <code>…\log\*.log</code>) werden Signaturen zeilenweise per regulärem
+                    Ausdruck gesucht. In der WebUI eine Signatur pro Zeile im Format
+                    <code>Anzeigename :: Severity :: Regex</code> (Severity = <code>Critical</code> oder <code>Warning</code>).
+                    Treffer werden je Signatur gezählt und mit einer Beispielzeile gemeldet.
+                </p>
+                <h4>Was gemeldet wird</h4>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light"><tr><th>Signal</th><th>Bedingung</th><th>Schweregrad</th></tr></thead>
+                    <tbody>
+                        <tr><td>Hängende Datei (Alter)</td><td>älter als Warning-/Critical-Schwelle</td><td>Warning / Critical</td></tr>
+                        <tr><td>Hängende Datei (Cutoff)</td><td>nach Cutoff-Zeit noch vorhanden</td><td>konfigurierbar (Standard Critical)</td></tr>
+                        <tr><td>Log-Fehler</td><td>Signatur trifft zu</td><td>je Signatur Warning / Critical</td></tr>
+                        <tr><td>Verzeichnis/Log</td><td>nicht erreichbar (Share offline / kein Zugriff)</td><td>Critical</td></tr>
+                    </tbody>
+                </table>
+                <h4>Lösungsanleitung (Wiki)</h4>
+                <p>
+                    Jedes überwachte Verzeichnis und jede Log-Signatur kann einen <strong>Wiki-Link</strong> und
+                    <strong>Nachbearbeitungsschritte</strong> tragen (z.B. „Datei vom Eingang in den Kassenordner verschieben",
+                    „mit Logdatei abgleichen", „bei anhaltendem Fehler die Fachverfahrensbetreuung informieren"). Diese werden direkt am
+                    Problem im Dashboard und in der Benachrichtigungs-Mail angezeigt.
+                </p>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Mit <em>Betriebszeiten</em> (z.B. <code>Mon-Fri 06:00-22:00</code>) wird außerhalb des Fensters nicht
+                    geprüft. Das Tool meldet nur — es verschiebt/löscht keine Dateien.
+                </div>
+            </section>
+
+            <!-- Benachrichtigungen / Notifier -->
+            <section id="notifications" class="doc-section">
+                <h2><i class="bi bi-bell me-2"></i>Benachrichtigungen (Notifier)</h2>
+                <p>
+                    Eine SimpleAdmin-Instanz kann als <strong>zentraler Notifier</strong> laufen und per E-Mail
+                    benachrichtigen, sobald irgendwo ein noch nicht quittiertes Problem auftritt. Sie aggregiert
+                    den Status <em>aller</em> Server über HTTP, leitet die offenen Probleme ab und verschickt
+                    eine Sammel-E-Mail — jede Problemzeile enthält einen <strong>Direkt-Quittier-Link</strong>.
+                </p>
+
+                <h4>Aktivierung</h4>
+                <ul>
+                    <li>Feature einschalten unter <em>Einstellungen → Feature-Toggles → Benachrichtigungen</em> (oder <code>features.notifications.enabled = true</code>).</li>
+                    <li>Einen oder mehrere <strong>sendende Server</strong> auswählen (für Hochverfügbarkeit zwei). Der Worker auf einem dieser Server übernimmt automatisch den Versand — <strong>kein <code>--notify</code> nötig</strong>.</li>
+                    <li>Eine <strong>zentrale WebUI</strong> auswählen (liefert Quittier-Link und Acknowledges). Standard = erster sendender Server.</li>
+                </ul>
+                <p class="text-muted small">
+                    Alle URLs (Status, Peers, Acknowledges, Quittier-Link) werden automatisch aus den
+                    <code>baseUrl</code>s der Server abgeleitet — nichts manuell einzutragen.
+                </p>
+
+                <h4>Hochverfügbarkeit (zwei Instanzen)</h4>
+                <p>
+                    Der Notifier ist darauf ausgelegt, auf <strong>zwei Servern parallel</strong> zu laufen, falls einer
+                    ausfällt. Doppelversand wird ohne zentrale Sperre verhindert: jede Instanz veröffentlicht ihren
+                    Versand-Stand (<code>notify-state.json</code>) über IIS und liest den der anderen; vor dem Senden
+                    wird der Versand „beansprucht" (Zeitstempel wird zuerst geschrieben). Zusammen mit <strong>versetzten
+                    Laufzeiten</strong> (z.&nbsp;B. Instanz A zur Minute 0/5/10, Instanz B zur Minute 2/7/12) bleibt das
+                    Risiko eines Doppelversands minimal, während ein verpasster Versand ausgeschlossen ist.
+                </p>
+
+                <h4>Wichtige Einstellungen</h4>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr><th>Feld</th><th>Beschreibung</th><th>Standard</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>minSeverity</code></td><td>Ab welchem Schweregrad benachrichtigt wird (<code>Warning</code> oder <code>Critical</code>)</td><td>Warning</td></tr>
+                        <tr><td><code>reNotifyIntervalHours</code></td><td>Erinnerung für weiterhin offene, nicht quittierte Probleme</td><td>4</td></tr>
+                        <tr><td><code>retryAfterMinutes</code></td><td>Erneuter Versuch nach einem fehlgeschlagenen Versand</td><td>10</td></tr>
+                        <tr><td><code>notifyOnStaleServer</code></td><td>Server, der sich nicht mehr meldet, als eigenes Problem melden</td><td>true</td></tr>
+                        <tr><td><code>staleThresholdMinutes</code></td><td>Ab welchem Alter eine Statusmeldung als veraltet gilt</td><td>10</td></tr>
+                        <tr><td><code>sendResolvedNotice</code></td><td>Entwarnung senden, wenn ein Problem verschwindet oder quittiert wird</td><td>true</td></tr>
+                        <tr><td><code>notifierServers</code></td><td>Server, die senden (Hostname-Match aktiviert den Notifier; ersetzt <code>--notify</code>)</td><td>[]</td></tr>
+                        <tr><td><code>webUiServer</code></td><td>Server der zentralen WebUI für Quittier-Link &amp; Acknowledges</td><td>erster Notifier</td></tr>
+                        <tr><td><code>smtpRef</code></td><td>Wiederverwendete E-Mail-Probe (<code>Server:Probe</code>)</td><td>erste verfügbare</td></tr>
+                        <tr><td><code>recipients</code></td><td>Empfänger (kommagetrennt)</td><td>To der Probe</td></tr>
+                        <tr><td><code>plainTextOnly</code></td><td>Mails als reiner Text statt multipart/HTML. <strong>Standard: true</strong> (sicherer Default) — manche Content-Filter verwerfen HTML-Mails nach der SMTP-Annahme stillschweigend. Auf <code>false</code> setzen (UI: „HTML-Mails versenden"), um das HTML-Template zu aktivieren</td><td>true</td></tr>
+                        <tr><td><code>localNotifyStatePath</code></td><td>Ablageort der eigenen <code>notify-state.json</code>; zusätzlich wird automatisch eine Kopie nach <code>{wwwroot}\status\</code> publiziert, damit der Peer-Notifier sie per HTTP lesen kann</td><td>Status-Verzeichnis</td></tr>
+                    </tbody>
+                </table>
+
+                <h4>Statusbericht zu festen Uhrzeiten</h4>
+                <p>
+                    Zusätzlich zu den ereignisgesteuerten Problem-Mails kann der Notifier zu festen Uhrzeiten einen
+                    <strong>Statusbericht</strong> senden: eine Übersicht aller Server mit offener Warnung oder offenem
+                    Fehler (inkl. nicht erreichbarer Server, auch wenn <code>notifyOnStaleServer</code> aus ist),
+                    darunter quittierte Probleme und die Server ohne Befund — oder eine Mail „<strong>Alles OK</strong>".
+                    Bei zwei Notifier-Servern wird pro Uhrzeit nur ein Bericht versendet (gleiche Abstimmung über
+                    <code>notify-state.json</code>). Voraussetzung: <code>features.notifications.enabled = true</code>.
+                </p>
+                <pre><code>"notifications": {
+  "enabled": true,
+  "notifierServers": ["srv-monitor01"],
+  "statusReport": {
+    "enabled": true,
+    "times": ["07:00", "13:00", "17:00"],
+    "catchUpMinutes": 60,
+    "plainTextOnly": false
+  }
+}</code></pre>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr><th>Feld</th><th>Beschreibung</th><th>Standard</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>statusReport.enabled</code></td><td>Statusbericht einschalten</td><td>false</td></tr>
+                        <tr><td><code>statusReport.times</code></td><td>Sendezeiten in lokaler Zeit (<code>HH:mm</code>)</td><td>07:00, 13:00, 17:00</td></tr>
+                        <tr><td><code>statusReport.catchUpMinutes</code></td><td>Wie lange nach einer Sendezeit ein verpasster Bericht noch nachgeholt wird (z.&nbsp;B. Worker oder SMTP kurz ausgefallen); danach wird die Uhrzeit übersprungen</td><td>60</td></tr>
+                        <tr><td><code>statusReport.plainTextOnly</code></td><td>Nur Text (<code>true</code>) oder HTML + Text (<code>false</code>); leer = wie <code>plainTextOnly</code> der Problem-Mails</td><td>leer</td></tr>
+                    </tbody>
+                </table>
+
+                <h4>Test-Mail senden</h4>
+                <p>
+                    Unter <em>Einstellungen → Feature-Toggles → Benachrichtigungen → E-Mail-Versand</em> prüft der Button
+                    <strong>„Test-Mail senden"</strong> den kompletten Versandweg, ohne auf ein echtes Problem zu warten:
+                    Er löst die SMTP-Quelle (<code>Server:Probe</code>) exakt wie der Notifier auf — inklusive Fallback auf
+                    die erste verfügbare Probe und Entschlüsselung der Zugangsdaten — und sendet eine Test-Benachrichtigung
+                    an die eingetragenen Empfänger.
+                </p>
+                <ul>
+                    <li>Verwendet die <strong>aktuellen Formularwerte</strong> (SMTP-Quelle, Empfänger, Betreff-Präfix) — funktioniert also auch vor dem Speichern.</li>
+                    <li>Bei Erfolg wird die aufgelöste Quelle samt Host und Empfängern angezeigt.</li>
+                    <li>Bei Fehlern erscheint die konkrete Ursache: Probe nicht gefunden, keine Empfänger, Authentifizierung fehlgeschlagen, SSL-Fehler, Host nicht erreichbar oder Timeout.</li>
+                    <li>REST-Endpunkt: <code>POST /api/notificationtest/send</code>.</li>
+                </ul>
+
+                <h4>Quittieren aus der E-Mail</h4>
+                <p>
+                    Der Link in der E-Mail öffnet die Probleme-Seite mit vorausgefülltem Quittier-Dialog
+                    (<code>/Problems?ackServer=…&ackProblem=…</code>). Nach dem Quittieren entfällt die weitere
+                    Benachrichtigung; optional wird eine Entwarnung verschickt.
+                </p>
+
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Voraussetzung für das Quittieren aus der Ferne: Diese WebUI veröffentlicht die aktiven
+                    Acknowledges automatisch nach <code>wwwroot/status/acknowledges.json</code>, damit der Notifier
+                    sie über HTTP lesen kann.
+                </div>
+            </section>
+
+            <!-- Sicherheit & Authentifizierung -->
+            <section id="authentication" class="doc-section">
+                <h2><i class="bi bi-shield-lock me-2"></i>Sicherheit &amp; Authentifizierung</h2>
+                <p>
+                    Die WebUI ist <strong>standardmäßig abgesichert</strong>: Jede Controller-Route — Seiten wie auch
+                    REST-API-Endpunkte — erfordert einen authentifizierten Windows-Benutzer
+                    (<strong>Negotiate</strong>, also Kerberos/NTLM) über eine globale Fallback-Policy.
+                    Damit sind insbesondere die Verbindungstests (<code>/api/sqlquerytest</code>,
+                    <code>/api/emailtest</code>, <code>/api/notificationtest</code>) und die
+                    Konfigurationsverwaltung nie anonym erreichbar.
+                </p>
+
+                <h4>Konfiguration (appsettings.json der Host-Anwendung)</h4>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr><th>Einstellung</th><th>Beschreibung</th><th>Standard</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>Authentication:Enabled</code></td>
+                            <td>Windows-Authentifizierung ein-/ausschalten. <code>false</code> nur für Umgebungen ohne
+                                Windows-Auth (z.&nbsp;B. lokale Entwicklung unter Linux/macOS) — dann ist
+                                <strong>jeder</strong> Endpunkt öffentlich erreichbar (Warnung im Log).</td>
+                            <td><code>true</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>Authentication:RequiredRole</code></td>
+                            <td>Optional: zusätzlich auf eine AD-Gruppe einschränken,
+                                z.&nbsp;B. <code>DOMAIN\SimpleAdmin-Admins</code>. Leer = jeder authentifizierte Benutzer.</td>
+                            <td>–</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Statische Dateien bleiben öffentlich:</strong> Inhalte unter <code>wwwroot</code> —
+                    insbesondere die veröffentlichten <code>status/*.json</code> und
+                    <code>status/acknowledges.json</code> — werden <em>vor</em> der Auth-Middleware ausgeliefert.
+                    Das ist Absicht: Der zentrale Notifier und Peer-Server lesen diese Dateien ohne
+                    Anmeldedaten per HTTP.
+                </div>
+
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Für IIS-Deployments muss die <strong>Windows-Authentifizierung</strong> auf der Site aktiviert sein
+                    (Anonym kann aktiv bleiben — die Anwendung fordert die Anmeldung per Negotiate-Challenge an).
+                    Beim Deaktivieren von <code>Authentication:Enabled</code> sollte der Zugriff stattdessen auf
+                    Netzwerkebene (Firewall/Reverse-Proxy) beschränkt werden.
+                </div>
+            </section>
+
+            <!-- REST API -->
+            <section id="rest-api" class="doc-section">
+                <h2><i class="bi bi-cloud-arrow-down me-2"></i>REST API</h2>
+                <p>
+                    SimpleAdmin bietet eine REST API für den programmatischen Zugriff auf Status-Daten,
+                    Probleme und Acknowledges. Alle Endpunkte liefern JSON.
+                </p>
+
+                <h3>Status API</h3>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Methode</th>
+                            <th>Pfad</th>
+                            <th>Beschreibung</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/status</code></td>
+                            <td>Alle Server-Status (Übersicht)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/status/{serverId}</code></td>
+                            <td>Vollständiger Status eines Servers</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/status/{serverId}/metrics</code></td>
+                            <td>Metriken (CPU, Memory, Disk) eines Servers</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/status/{serverId}/apppools</code></td>
+                            <td>AppPool-Status eines Servers</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Problems API</h3>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Methode</th>
+                            <th>Pfad</th>
+                            <th>Beschreibung</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/problems</code></td>
+                            <td>Alle aktiven Probleme</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/problems/server/{serverId}</code></td>
+                            <td>Probleme eines bestimmten Servers</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/problems/{problemId}?serverId=...</code></td>
+                            <td>Details zu einem bestimmten Problem</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Acknowledges API</h3>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Methode</th>
+                            <th>Pfad</th>
+                            <th>Beschreibung</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/acknowledges</code></td>
+                            <td>Alle aktiven Acknowledges</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/acknowledges/server/{serverId}</code></td>
+                            <td>Acknowledges eines bestimmten Servers</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/acknowledges/{id}</code></td>
+                            <td>Details zu einem Acknowledge</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-primary">POST</span></td>
+                            <td><code>/api/acknowledges</code></td>
+                            <td>Neues Acknowledge erstellen</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-warning text-dark">PUT</span></td>
+                            <td><code>/api/acknowledges/{id}/extend</code></td>
+                            <td>Acknowledge verlängern</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-danger">DELETE</span></td>
+                            <td><code>/api/acknowledges/{id}</code></td>
+                            <td>Acknowledge abbrechen</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Console Application -->
+            <section id="console-app" class="doc-section">
+                <h2><i class="bi bi-terminal me-2"></i>Konsolenanwendung</h2>
+                <p>
+                    Die SimpleAdmin-Konsolenanwendung läuft periodisch (typisch alle 60 Sekunden via Windows Scheduled Task)
+                    und generiert statische HTML-Dateien sowie Status-Daten.
+                </p>
+
+                <h4>Generierte Dateien</h4>
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Datei</th>
+                            <th>Beschreibung</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>wwwroot/index.html</code></td>
+                            <td>Lokale Server-Übersicht mit Status-Karten (Auto-Refresh: 60s)</td>
+                        </tr>
+                        <tr>
+                            <td><code>wwwroot/all.html</code></td>
+                            <td>Alle Umgebungen - fetcht Status von allen erreichbaren Servern parallel</td>
+                        </tr>
+                        <tr>
+                            <td><code>wwwroot/&lt;server&gt;.&lt;service&gt;.html</code></td>
+                            <td>Detail-Seite pro Server und Service-Typ mit Metriken und History</td>
+                        </tr>
+                        <tr>
+                            <td><code>wwwroot/admin/&lt;service&gt;/&lt;endpoint&gt;/index.html</code></td>
+                            <td>Endpunkt-Seiten für PRTG und NetScaler Monitoring</td>
+                        </tr>
+                        <tr>
+                            <td><code>wwwroot/status/&lt;server&gt;.&lt;service&gt;.json</code></td>
+                            <td>JSON-Status für serverübergreifende Abfragen</td>
+                        </tr>
+                        <tr>
+                            <td><code>status/&lt;server&gt;.&lt;service&gt;.json</code></td>
+                            <td>Persistierter RuntimeStatus pro Server und Service mit History, Status und optionalen AppPools</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Ausführung</h4>
+<pre><code># Standard-Pfade (config/config.json, status/, wwwroot/)
+dotnet run --project Minicon.SimpleAdmin
+
+# Benutzerdefinierte Pfade
+dotnet run --project Minicon.SimpleAdmin -- &lt;config-pfad&gt; &lt;status-dir&gt; &lt;wwwroot-dir&gt;</code></pre>
+
+                <div class="doc-card info">
+                    <strong><i class="bi bi-info-circle me-2"></i>Verfügbarkeit</strong><br>
+                    Die generierten HTML-Dateien werden von IIS (Windows), nginx oder Apache ausgeliefert.
+                    Da keine dynamische Verarbeitung erforderlich ist, bleiben die Status-Seiten auch dann
+                    erreichbar, wenn die SimpleAdmin-Anwendung nicht läuft.
+                </div>
+            </section>
+
+            <!-- Workflow -->
+            <section id="workflow" class="doc-section">
+                <h2><i class="bi bi-diagram-2 me-2"></i>Typischer Workflow</h2>
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-stretch gap-3">
+                            <div class="card flex-fill text-center">
+                                <div class="card-body">
+                                    <div class="display-6 text-info mb-2">1</div>
+                                    <h5>Konfiguration</h5>
+                                    <p class="small text-muted mb-0">ConfigPath in appsettings.json auf das Verzeichnis mit config.json setzen</p>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center d-none d-md-flex">
+                                <i class="bi bi-arrow-right fs-3 text-muted"></i>
+                            </div>
+                            <div class="card flex-fill text-center">
+                                <div class="card-body">
+                                    <div class="display-6 text-info mb-2">2</div>
+                                    <h5>Server</h5>
+                                    <p class="small text-muted mb-0">Server anlegen und Service-Typen konfigurieren</p>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center d-none d-md-flex">
+                                <i class="bi bi-arrow-right fs-3 text-muted"></i>
+                            </div>
+                            <div class="card flex-fill text-center">
+                                <div class="card-body">
+                                    <div class="display-6 text-info mb-2">3</div>
+                                    <h5>Umgebungen</h5>
+                                    <p class="small text-muted mb-0">Server per Drag & Drop zuordnen</p>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center d-none d-md-flex">
+                                <i class="bi bi-arrow-right fs-3 text-muted"></i>
+                            </div>
+                            <div class="card flex-fill text-center">
+                                <div class="card-body">
+                                    <div class="display-6 text-info mb-2">4</div>
+                                    <h5>Speichern</h5>
+                                    <p class="small text-muted mb-0">Jede Änderung wird sofort in die config.json geschrieben</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Debug-Logging -->
+            <section id="debug-logging" class="doc-section">
+                <h2><i class="bi bi-terminal me-2"></i>Debug-Logging</h2>
+
+                <p>
+                    Der Worker gibt alle Logs über die Konsole (<code>stdout</code>) aus. Der Log-Level wird
+                    ausschließlich über <code>appsettings.json</code> gesteuert — es gibt keinen hardcodierten
+                    Mindestwert im Code.
+                </p>
+
+                <h3>Verfügbare Log-Kategorien</h3>
+                <p>
+                    Jeder parallele Checker hat eine eigene Kategorie. Einzelne Kategorien können selektiv
+                    auf <code>"Debug"</code> gestellt werden, ohne andere zu beeinflussen:
+                </p>
+
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Kategorie</th>
+                                <th>Was wird bei <code>Debug</code> geloggt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>…SimpleAdminWorker</code></td>
+                                <td>Gesamt-Timing aller parallelen Checker (<em>All parallel checkers finished in Xms</em>)</td>
+                            </tr>
+                            <tr>
+                                <td><code>…Checkers.AppPools</code></td>
+                                <td><code>[AppPools] starting</code> / <code>completed in Xms</code> / <code>failed after Xms</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>…Checkers.Services</code></td>
+                                <td><code>[Services] starting</code> / <code>completed</code> / <code>failed</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>…Checkers.EventLog</code></td>
+                                <td><code>[EventLog] starting</code> / <code>completed</code> / <code>failed</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>…Checkers.SqlQueries</code></td>
+                                <td><code>[SqlQueries] starting</code> / <code>completed</code> / <code>failed</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>…Checkers.EmailProbes</code></td>
+                                <td><code>[EmailProbes] starting</code> / <code>completed</code> / <code>failed</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>…Checkers.EmailDelivery</code></td>
+                                <td><code>[EmailDelivery] starting</code> / <code>completed</code> / <code>failed</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>…Checkers.Metrics</code></td>
+                                <td><code>[Metrics] starting</code> / <code>completed</code> / <code>failed</code> + <em>collecting for service type 'X'</em> je Service-Typ</td>
+                            </tr>
+                            <tr>
+                                <td><code>…Services.EmailProbeSender</code></td>
+                                <td>Vollständiger SMTP-Schritt-Trace: connect → auth → send → disconnect</td>
+                            </tr>
+                            <tr>
+                                <td><code>…Services.EmailDeliveryChecker</code></td>
+                                <td>Vollständiger IMAP-Schritt-Trace: connect → auth → Ordner öffnen → suchen → abrufen → löschen → schließen</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Hinweis:</strong> Deaktivierte Checker (Feature-Toggle oder Server-Check nicht aktiv) erzeugen
+                    <em>keine</em> Log-Ausgabe — ihre Abwesenheit im Log zeigt, dass sie ausgeschaltet sind.
+                </div>
+
+                <h3>Selektives Debug-Logging aktivieren</h3>
+                <p>
+                    Ändern Sie in <code>appsettings.json</code> nur die gewünschte Kategorie auf <code>"Debug"</code>.
+                    Alle anderen bleiben auf <code>"Information"</code> und produzieren keine Debug-Ausgabe.
+                </p>
+
+                <h4>Beispiel 1 — Nur E-Mail-Zustellungs-Timing</h4>
+                <pre><code>"Minicon.SimpleAdmin.Checkers.EmailDelivery": "Debug"</code></pre>
+                <p>Ausgabe: <code>[EmailDelivery] starting</code> und <code>[EmailDelivery] completed in 1350ms</code></p>
+
+                <h4>Beispiel 2 — Vollständiger SMTP-Schritt-Trace (Probe-E-Mails kommen nicht an)</h4>
+                <pre><code>"Minicon.SimpleAdmin.Services.EmailProbeSender": "Debug"</code></pre>
+                <p>
+                    Jeder SMTP-Schritt wird geloggt. Die erste fehlende Zeile identifiziert die Fehlerursache
+                    (z. B. kein <em>connected</em> → TCP-Verbindung schlägt fehl).
+                </p>
+
+                <h4>Beispiel 3 — Vollständiger IMAP-Schritt-Trace (Zustellungs-Checker meldet Fehler)</h4>
+                <pre><code>"Minicon.SimpleAdmin.Services.EmailDeliveryChecker": "Debug"</code></pre>
+
+                <h4>Beispiel 4 — Alle Checker-Timings gleichzeitig</h4>
+                <pre><code>"Minicon.SimpleAdmin.SimpleAdminWorker":          "Debug",
+"Minicon.SimpleAdmin.Checkers.AppPools":          "Debug",
+"Minicon.SimpleAdmin.Checkers.Services":          "Debug",
+"Minicon.SimpleAdmin.Checkers.EventLog":          "Debug",
+"Minicon.SimpleAdmin.Checkers.SqlQueries":        "Debug",
+"Minicon.SimpleAdmin.Checkers.EmailProbes":       "Debug",
+"Minicon.SimpleAdmin.Checkers.EmailDelivery":     "Debug",
+"Minicon.SimpleAdmin.Checkers.Metrics":           "Debug"</code></pre>
+
+                <p>Erwartete Ausgabe (die Tasks laufen parallel, Reihenfolge variiert):</p>
+                <pre><code>[AppPools] starting
+[Services] starting
+[EventLog] starting
+[EmailDelivery] starting
+[Metrics] starting
+[Metrics] collecting for service type 'services'
+[EventLog] completed in 312ms
+[Services] completed in 480ms
+[AppPools] completed in 891ms
+[EmailDelivery] completed in 1350ms
+[Metrics] completed in 3200ms
+All parallel checkers finished in 3201ms total</code></pre>
+
+                <h3>Logs aus einem Windows Scheduled Task erfassen</h3>
+                <p>
+                    Da der Worker als Scheduled Task läuft, wird <code>stdout</code> normalerweise verworfen.
+                    Um Logs dauerhaft zu erfassen:
+                </p>
+                <p><strong>Option A — Umleitung im Task:</strong></p>
+                <pre><code>Programm:   cmd.exe
+Argumente:  /c "C:\Pfad\zu\SimpleAdmin.exe &gt;&gt; C:\Logs\simpleadmin.log 2&gt;&amp;1"</code></pre>
+                <p><strong>Option B — File-Logger via NuGet</strong> (<code>Microsoft.Extensions.Logging.File</code> oder Serilog) für rotierende Log-Dateien.</p>
+            </section>
+
+            <!-- FAQ -->
+            <section id="faq" class="doc-section">
+                <h2><i class="bi bi-question-circle me-2"></i>FAQ</h2>
+
+                <div class="accordion" id="faqAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                                Warum werden inaktive Server nicht in der Umgebungs-Matrix angezeigt?
+                            </button>
+                        </h2>
+                        <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Im Server-Pool werden nur aktive Server angezeigt. Server, die bereits einer Umgebung
+                                zugeordnet sind, bleiben dort sichtbar - auch wenn sie inzwischen deaktiviert wurden.
+                                So können Sie bestehende Zuordnungen überprüfen und bei Bedarf entfernen.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                                Was bedeutet "Status-Smoothing"?
+                            </button>
+                        </h2>
+                        <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Status-Smoothing verhindert Fehlalarme durch temporäre Lastspitzen. Ein Status-Wechsel
+                                (z.B. von "Healthy" zu "Warning") erfolgt erst, wenn N aufeinanderfolgende Checks denselben
+                                Status ergeben. Die Anzahl N wird über <code>minConsecutiveChecks</code> konfiguriert.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                                Wie werden Änderungen in der Umgebungs-Matrix gespeichert?
+                            </button>
+                        </h2>
+                        <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Änderungen in der Umgebungs-Matrix werden automatisch per AJAX gespeichert. Sie sehen
+                                eine kurze "Speichern..."-Anzeige in der Kopfzeile. Die Änderungen sind sofort in der
+                                Konfiguration aktiv, müssen aber noch über Import/Export gespeichert oder exportiert werden.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+                                Kann ich neue Umgebungen anlegen?
+                            </button>
+                        </h2>
+                        <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Die Standard-Umgebungen (Production, Ref, Development) sind vordefiniert und können nicht
+                                gelöscht werden. Zusätzliche Umgebungen können bei Bedarf direkt in der <code>config.json</code>
+                                angelegt werden.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5">
+                                Wie funktionieren JsonPath-Assertions?
+                            </button>
+                        </h2>
+                        <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                JsonPath-Assertions ermöglichen die Validierung von JSON-Responses. Das Format ist:<br>
+                                <code>$.pfad.zum.wert operator erwarteter_wert</code><br><br>
+                                Beispiele:
+                                <ul>
+                                    <li><code>$.status == healthy</code> - Status muss "healthy" sein</li>
+                                    <li><code>$.items.length > 0</code> - Array muss Elemente enthalten</li>
+                                    <li><code>$.data.active == true</code> - Boolean-Prüfung</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq6">
+                                Was ist der Unterschied zwischen Speichern und Export?
+                            </button>
+                        </h2>
+                        <div id="faq6" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                <strong>Speichern</strong> überschreibt die Originaldatei auf dem Server direkt.
+                                Dies ist nur möglich, wenn die Konfiguration über einen Server-Pfad geladen wurde.
+                                <strong>Export</strong> bietet die Konfiguration als Download an - die Originaldatei
+                                auf dem Server wird dabei nicht verändert.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq7">
+                                Wie funktioniert das Acknowledge-System?
+                            </button>
+                        </h2>
+                        <div id="faq7" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Mit einem Acknowledge bestätigen Sie ein bekanntes Problem. Das Problem bleibt sichtbar,
+                                wird aber als "bestätigt" markiert und Alarme werden unterdrückt. Acknowledges haben eine
+                                einstellbare Dauer und können automatisch zurückgesetzt werden, wenn das Problem behoben ist.
+                                Sie können Acknowledges auch manuell verlängern oder abbrechen.
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq8">
+                                Warum zeigt der Server "Unknown", obwohl E-Mail-Checks konfiguriert sind?
+                            </button>
+                        </h2>
+                        <div id="faq8" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                <strong>Unknown</strong> erscheint nur, wenn weder PRTG-Metriken noch andere Monitoring-Daten vorhanden sind.
+                                Sobald E-Mail-Probes oder Delivery-Checks konfiguriert und aktiv sind, wird der Status korrekt als
+                                <strong>Healthy</strong> (alles OK), <strong>Degraded</strong> (Warning) oder <strong>Unhealthy</strong>
+                                (Critical, z.B. keine Probe-E-Mail gefunden) angezeigt — auch ohne PRTG-Metriken.
+                                <br><br>
+                                Prüfen Sie, ob der Worker mindestens einmal seit der Konfigurationsänderung gelaufen ist.
+                                Die Status-Datei (<code>status/&lt;server&gt;.&lt;service&gt;.json</code>) muss
+                                <code>emailProbes</code>- bzw. <code>emailDelivery</code>-Einträge enthalten.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq9">
+                                Wie nutze ich die REST API?
+                            </button>
+                        </h2>
+                        <div id="faq9" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                Die REST API ist unter <code>/api/</code> erreichbar und liefert JSON-Daten.
+                                Verwenden Sie GET-Anfragen zum Lesen von Status und Problemen, POST zum Erstellen
+                                von Acknowledges, PUT zum Verlängern und DELETE zum Abbrechen. Beispiel:<br>
+                                <code>GET /api/status</code> liefert eine Übersicht aller Server-Status.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <div class="doc-section text-center text-muted py-4">
+                <hr>
+                <p class="small mb-0">
+                    <i class="bi bi-shield-check me-1"></i>
+                    SimpleAdmin Konfigurator
+                </p>
+            </div>
+        </div>
+    </div>
+</div>

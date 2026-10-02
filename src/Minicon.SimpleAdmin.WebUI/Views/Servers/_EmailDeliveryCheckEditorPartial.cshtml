@@ -1,0 +1,56 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.EmailDeliveryCheckEditorViewModel
+@{
+    var i = Model?.Index ?? 0;
+}
+
+<div class="card mb-2 email-delivery-check-item" data-check-index="@i">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Name (Slug) <span class="text-danger">*</span></label>
+                <input type="text" name="Checks.EmailDelivery.Checks[@i].Name"
+                       value="@Model?.Name" class="form-control form-control-sm font-monospace"
+                       placeholder="seg1-check" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Beschreibung</label>
+                <input type="text" name="Checks.EmailDelivery.Checks[@i].Description"
+                       value="@Model?.Description" class="form-control form-control-sm"
+                       placeholder="Segment 1 Zustellungscheck" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Betreff-Filter <span class="text-danger">*</span></label>
+                <input type="text" name="Checks.EmailDelivery.Checks[@i].SubjectFilter"
+                       value="@Model?.SubjectFilter" class="form-control form-control-sm font-monospace"
+                       placeholder="[SA-Probe] seg1-relay" />
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small mb-1">Warn. (Min.)</label>
+                <input type="number" name="Checks.EmailDelivery.Checks[@i].MaxAgeWarningMinutes"
+                       value="@(Model?.MaxAgeWarningMinutes ?? 20)" class="form-control form-control-sm"
+                       min="1" max="1440" />
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small mb-1">Krit. (Min.)</label>
+                <input type="number" name="Checks.EmailDelivery.Checks[@i].MaxAgeCriticalMinutes"
+                       value="@(Model?.MaxAgeCriticalMinutes ?? 60)" class="form-control form-control-sm"
+                       min="1" max="1440" />
+            </div>
+            <div class="col-md-1 text-center">
+                <input type="hidden" name="Checks.EmailDelivery.Checks[@i].DeleteAfterCheck" value="false" />
+                <input type="checkbox" name="Checks.EmailDelivery.Checks[@i].DeleteAfterCheck" value="true"
+                       class="form-check-input" id="delAfterCheck_@i"
+                       title="Löschen nach Prüfung"
+                       @(Model?.DeleteAfterCheck != false ? "checked" : "") />
+                <label class="visually-hidden" for="delAfterCheck_@i">Löschen nach Prüfung</label>
+            </div>
+            <div class="col-md-1 text-end">
+                <button type="button" class="btn btn-sm btn-outline-danger py-0"
+                        onclick="removeEmailDeliveryCheck(this)"
+                        title="Entfernen">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

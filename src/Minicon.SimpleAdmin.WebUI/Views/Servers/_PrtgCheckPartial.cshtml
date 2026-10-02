@@ -1,0 +1,68 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.PrtgCheckViewModel
+
+<div class="prtg-check-item border rounded p-2 mb-2 bg-light" data-service-index="@Model.ServiceIndex" data-check-index="@Model.CheckIndex">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <small class="text-muted">Check #@(Model.CheckIndex + 1)</small>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeCheck(this)">
+            <i class="bi bi-x"></i>
+        </button>
+    </div>
+    <div class="row g-2">
+        <div class="col-md-4">
+            <label class="form-label small">Metrik</label>
+            @{
+                var metricName = $"ServiceTypes[{Model.ServiceIndex}].Prtg.Checks[{Model.CheckIndex}].Metric";
+            }
+            <select name="@metricName" class="form-select form-select-sm">
+                @if (Model.Metric == "cpu") { <option value="cpu" selected>CPU</option> } else { <option value="cpu">CPU</option> }
+                @if (Model.Metric == "memory") { <option value="memory" selected>Memory</option> } else { <option value="memory">Memory</option> }
+                @if (Model.Metric == "disk") { <option value="disk" selected>Disk</option> } else { <option value="disk">Disk</option> }
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label small">Anzeigename</label>
+            <input type="text" name="ServiceTypes[@Model.ServiceIndex].Prtg.Checks[@Model.CheckIndex].DisplayName"
+                   value="@Model.DisplayName"
+                   class="form-control form-control-sm"
+                   placeholder="z.B. CPU Usage" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label small">Ziel (für disk)</label>
+            <input type="text" name="ServiceTypes[@Model.ServiceIndex].Prtg.Checks[@Model.CheckIndex].Target"
+                   value="@Model.Target"
+                   class="form-control form-control-sm"
+                   placeholder="c:" />
+        </div>
+    </div>
+    <div class="row g-2 mt-1">
+        <div class="col-md-3">
+            <label class="form-label small">Operator</label>
+            @{
+                var opName = $"ServiceTypes[{Model.ServiceIndex}].Prtg.Checks[{Model.CheckIndex}].Threshold.Operator";
+                var op = Model.Threshold?.Operator ?? ">";
+            }
+            <select name="@opName" class="form-select form-select-sm">
+                @if (op == ">") { <option value=">" selected>&gt;</option> } else { <option value=">">&gt;</option> }
+                @if (op == ">=") { <option value=">=" selected>&gt;=</option> } else { <option value=">=">&gt;=</option> }
+                @if (op == "<") { <option value="<" selected>&lt;</option> } else { <option value="<">&lt;</option> }
+                @if (op == "<=") { <option value="<=" selected>&lt;=</option> } else { <option value="<=">&lt;=</option> }
+                @if (op == "==") { <option value="==" selected>==</option> } else { <option value="==">==</option> }
+                @if (op == "!=") { <option value="!=" selected>!=</option> } else { <option value="!=">!=</option> }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">Warning</label>
+            <input type="number" name="ServiceTypes[@Model.ServiceIndex].Prtg.Checks[@Model.CheckIndex].Threshold.Warning"
+                   value="@Model.Threshold?.Warning"
+                   class="form-control form-control-sm"
+                   min="0" max="100" step="1" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">Critical</label>
+            <input type="number" name="ServiceTypes[@Model.ServiceIndex].Prtg.Checks[@Model.CheckIndex].Threshold.Critical"
+                   value="@Model.Threshold?.Critical"
+                   class="form-control form-control-sm"
+                   min="0" max="100" step="1" />
+        </div>
+    </div>
+</div>

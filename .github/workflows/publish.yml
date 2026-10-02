@@ -1,0 +1,49 @@
+name: Publish to NuGet.org
+
+# Veröffentlicht alle Pakete bei nuget.org, sobald ein Tag der Form v* gepusht wird,
+# z. B.  git tag v2.13.0 && git push origin v2.13.0
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: # erlaubt manuelles Auslösen über die GitHub-Oberfläche
+
+jobs:
+  publish:
+    # GitHub-hosted Runner. Das Repo ist oeffentlich - keine self-hosted Runner verwenden.
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # nötig für OIDC -> Trusted Publishing
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore Minicon.SimpleAdmin.slnx
+
+      - name: Build
+        run: dotnet build Minicon.SimpleAdmin.slnx --configuration Release --no-restore
+
+      - name: Pack
+        run: dotnet pack Minicon.SimpleAdmin.slnx --configuration Release --no-build --output ${{ github.workspace }}/artifacts
+
+      # OIDC-Token gegen kurzlebigen nuget.org-API-Key tauschen
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: nitr0n # nuget.org-Benutzername (Profilname), NICHT die E-Mail
+
+      - name: Push packages
+        run: >
+          dotnet nuget push "${{ github.workspace }}/artifacts/*.nupkg"
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

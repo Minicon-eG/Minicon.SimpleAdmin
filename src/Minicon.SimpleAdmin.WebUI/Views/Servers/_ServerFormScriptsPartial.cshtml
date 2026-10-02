@@ -1,0 +1,205 @@
+<script>
+    let serviceTypeIndex = document.querySelectorAll('.service-type-item').length;
+
+    // Automatisch AdminPath setzen basierend auf Service-Typ
+    function updateAdminPaths(selectElement) {
+        const serviceType = selectElement.value;
+        if (!serviceType) return;
+
+        const serviceItem = selectElement.closest('.service-type-item');
+        const index = serviceItem.dataset.index;
+
+        // NetScaler AdminPath setzen: /admin/{serviceType}/loadbalancer
+        const netscalerPath = serviceItem.querySelector(`input[name="ServiceTypes[${index}].NetScaler.AdminPath"]`);
+        if (netscalerPath && !netscalerPath.value) {
+            netscalerPath.value = `/admin/${serviceType}/loadbalancer`;
+        }
+
+        // PRTG AdminPath setzen: /admin/{serviceType}/prtg  
+        const prtgPath = serviceItem.querySelector(`input[name="ServiceTypes[${index}].Prtg.AdminPath"]`);
+        if (prtgPath && !prtgPath.value) {
+            prtgPath.value = `/admin/${serviceType}/prtg`;
+        }
+    }
+
+    function addServiceType() {
+        const container = document.getElementById('serviceTypes');
+        const noServiceTypes = document.getElementById('noServiceTypes');
+
+        fetch('@Url.Action("AddServiceType", "Servers")', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+            },
+            body: 'index=' + serviceTypeIndex
+        })
+            .then(response => response.text())
+            .then(html => {
+                const div = document.createElement('div');
+                div.innerHTML = html;
+                container.appendChild(div.firstElementChild);
+                serviceTypeIndex++;
+                noServiceTypes.classList.add('d-none');
+                updateServiceTypeWarning();
+            });
+    }
+
+    function removeServiceType(button) {
+        const item = button.closest('.service-type-item');
+        item.remove();
+        reindexServiceTypes();
+
+        const container = document.getElementById('serviceTypes');
+        const noServiceTypes = document.getElementById('noServiceTypes');
+        if (container.children.length === 0) {
+            noServiceTypes.classList.remove('d-none');
+        }
+        updateServiceTypeWarning();
+    }
+
+    function anyCheckEnabled() {
+        return ['appPoolsEnabled', 'servicesEnabled', 'eventLogEnabled',
+                'sqlQueriesEnabled', 'emailProbesEnabled', 'emailDeliveryEnabled']
+            .some(function(id) {
+                const el = document.getElementById(id);
+                return el && el.checked;
+            });
+    }
+
+    function updateServiceTypeWarning() {
+        const hasServiceTypes = document.querySelectorAll('.service-type-item').length > 0;
+        const warn = document.getElementById('noServiceTypeWarning');
+        if (warn) {
+            warn.style.display = (!hasServiceTypes && anyCheckEnabled()) ? '' : 'none';
+        }
+    }
+
+    // Wire the warning to all check toggles
+    ['appPoolsEnabled', 'servicesEnabled', 'eventLogEnabled',
+     'sqlQueriesEnabled', 'emailProbesEnabled', 'emailDeliveryEnabled'].forEach(function(id) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', updateServiceTypeWarning);
+    });
+
+    // Run once on load in case checks are already enabled without service types
+    updateServiceTypeWarning();
+
+    function reindexServiceTypes() {
+        const items = document.querySelectorAll('.service-type-item');
+        serviceTypeIndex = items.length;
+
+        items.forEach((item, index) => {
+            item.dataset.index = index;
+
+            // Update all input/select names
+            item.querySelectorAll('input, select, textarea').forEach(el => {
+                if (el.name) {
+                    el.name = el.name.replace(/ServiceTypes\[\d+\]/g, `ServiceTypes[${index}]`);
+                }
+            });
+
+            // Update header
+            const header = item.querySelector('h6');
+            if (header) {
+                header.innerHTML = `<i class="bi bi-gear-fill me-1"></i>Service-Typ #${index + 1}`;
+            }
+
+            // Reindex PRTG checks
+            reindexChecks(item, index, '.prtg-check-item', 'Prtg.Checks');
+
+            // Reindex Health checks
+            reindexChecks(item, index, '.health-check-item', 'NetScaler.HealthChecks');
+        });
+    }
+
+    function reindexChecks(serviceItem, serviceIndex, checkSelector, checkPath) {
+        const checks = serviceItem.querySelectorAll(checkSelector);
+        checks.forEach((check, checkIndex) => {
+            check.dataset.serviceIndex = serviceIndex;
+            check.dataset.checkIndex = checkIndex;
+
+            check.querySelectorAll('input, select, textarea').forEach(el => {
+                if (el.name) {
+                    const regex = new RegExp(`ServiceTypes\\[\\d+\\]\\.${checkPath.replace('.', '\\.')}\\[\\d+\\]`);
+                    el.name = el.name.replace(regex, `ServiceTypes[${serviceIndex}].${checkPath}[${checkIndex}]`);
+                }
+            });
+
+            const label = check.querySelector('.text-muted');
+            if (label) {
+                label.textContent = `Check #${checkIndex + 1}`;
+            }
+        });
+    }
+
+    function togglePrtgSection(checkbox) {
+        const section = checkbox.closest('.card').querySelector('.prtg-section');
+        if (checkbox.checked) {
+            section.classList.remove('d-none');
+        } else {
+            section.classList.add('d-none');
+        }
+    }
+
+    function toggleNetScalerSection(checkbox) {
+        const section = checkbox.closest('.card').querySelector('.netscaler-section');
+        if (checkbox.checked) {
+            section.classList.remove('d-none');
+        } else {
+            section.classList.add('d-none');
+        }
+    }
+
+    function addPrtgCheck(button, serviceIndex) {
+        const container = button.closest('.card-body').querySelector('.prtg-checks');
+        const checkIndex = container.querySelectorAll('.prtg-check-item').length;
+
+        fetch('@Url.Action("AddPrtgCheck", "Servers")?serviceIndex=' + serviceIndex + '&checkIndex=' + checkIndex, {
+            method: 'POST',
+            headers: {
+                'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+            }
+        })
+            .then(response => response.text())
+            .then(html => {
+                const div = document.createElement('div');
+                div.innerHTML = html;
+                container.appendChild(div.firstElementChild);
+            });
+    }
+
+    function addHealthCheck(button, serviceIndex) {
+        const container = button.closest('.card-body').querySelector('.health-checks');
+        const checkIndex = container.querySelectorAll('.health-check-item').length;
+
+        fetch('@Url.Action("AddHealthCheck", "Servers")?serviceIndex=' + serviceIndex + '&checkIndex=' + checkIndex, {
+            method: 'POST',
+            headers: {
+                'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+            }
+        })
+            .then(response => response.text())
+            .then(html => {
+                const div = document.createElement('div');
+                div.innerHTML = html;
+                container.appendChild(div.firstElementChild);
+            });
+    }
+
+    function removeCheck(button) {
+        const item = button.closest('.prtg-check-item, .health-check-item');
+        const serviceItem = item.closest('.service-type-item');
+        const serviceIndex = parseInt(serviceItem.dataset.index);
+
+        item.remove();
+
+        // Reindex remaining checks
+        if (item.classList.contains('prtg-check-item')) {
+            reindexChecks(serviceItem, serviceIndex, '.prtg-check-item', 'Prtg.Checks');
+        } else {
+            reindexChecks(serviceItem, serviceIndex, '.health-check-item', 'NetScaler.HealthChecks');
+        }
+    }
+
+</script>

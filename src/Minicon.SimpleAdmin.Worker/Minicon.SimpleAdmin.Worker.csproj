@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Minicon.SimpleAdmin.Worker</RootNamespace>
+    <AssemblyName>Minicon.SimpleAdmin.Worker</AssemblyName>
+    <PackageId>Minicon.SimpleAdmin.Worker</PackageId>
+    <Version>2.26.0</Version>
+    <Authors>Minicon Contributors</Authors>
+    <Description>Standalone console worker that orchestrates monitoring checks, problem derivation and static HTML generation for the Minicon SimpleAdmin monitoring platform.</Description>
+    <PackageTags>monitoring;simpleadmin;worker;console</PackageTags>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Minicon.SimpleAdmin.Shared/Minicon.SimpleAdmin.Shared.csproj" />
+    <ProjectReference Include="../Minicon.SimpleAdmin.Services/Minicon.SimpleAdmin.Services.csproj" />
+    <ProjectReference Include="../Minicon.SimpleAdmin.Checkers/Minicon.SimpleAdmin.Checkers.csproj" />
+    <ProjectReference Include="../Minicon.SimpleAdmin.HtmlGenerator/Minicon.SimpleAdmin.HtmlGenerator.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.8" />
+    <PackageReference Include="System.IO.Abstractions" Version="22.1.1" />
+  </ItemGroup>
+
+</Project>

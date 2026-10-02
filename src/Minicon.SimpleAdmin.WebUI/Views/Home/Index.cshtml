@@ -1,0 +1,125 @@
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="container-fluid">
+    <h1 class="mb-4">
+        <i class="bi bi-speedometer2 me-2"></i>Dashboard
+    </h1>
+
+    @if (ViewBag.IsLoaded == true)
+    {
+        <div class="row g-4">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2">Server</h6>
+                                <h2 class="card-title mb-0">@ViewBag.ServerCount</h2>
+                            </div>
+                            <i class="bi bi-hdd-stack fs-1 opacity-50"></i>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent border-0">
+                        <a asp-controller="Servers" asp-action="Index" class="text-white text-decoration-none small">
+                            Server verwalten <i class="bi bi-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card bg-success text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2">Aktive Server</h6>
+                                <h2 class="card-title mb-0">@ViewBag.ActiveServerCount</h2>
+                            </div>
+                            <i class="bi bi-check-circle fs-1 opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card bg-info text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2">Umgebungen</h6>
+                                <h2 class="card-title mb-0">@ViewBag.EnvironmentCount</h2>
+                            </div>
+                            <i class="bi bi-layers fs-1 opacity-50"></i>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent border-0">
+                        <a asp-controller="Environments" asp-action="Index" class="text-white text-decoration-none small">
+                            Umgebungen verwalten <i class="bi bi-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="card @(ViewBag.HasChanges == true ? "bg-warning" : "bg-secondary") text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2">Status</h6>
+                                <h5 class="card-title mb-0">
+                                    @if (ViewBag.HasChanges == true)
+                                    {
+                                        <span>Ungespeicherte Änderungen</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Keine Änderungen</span>
+                                    }
+                                </h5>
+                            </div>
+                            <i class="bi @(ViewBag.HasChanges == true ? "bi-exclamation-triangle" : "bi-check2-all") fs-1 opacity-50"></i>
+                        </div>
+                    </div>
+                    @if (ViewBag.HasChanges == true)
+                    {
+                        <div class="card-footer bg-transparent border-0">
+                            <small>Änderungen werden beim nächsten Speichern übernommen.</small>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-lightning-charge me-2"></i>Schnellaktionen
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap gap-2">
+                            <a asp-controller="Servers" asp-action="Create" class="btn btn-outline-primary">
+                                <i class="bi bi-plus-circle me-1"></i>Neuen Server erstellen
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning">
+            <h4 class="alert-heading">
+                <i class="bi bi-exclamation-triangle me-2"></i>Keine Konfiguration geladen
+            </h4>
+            @if (ViewBag.LoadError != null)
+            {
+                <p class="mb-1"><strong>Ursache:</strong> @ViewBag.LoadError</p>
+            }
+            <p class="mb-0">Bitte prüfen Sie die Einstellung <code>ConfigPath</code> in <code>appsettings.json</code> und starten Sie die Anwendung neu.</p>
+        </div>
+    }
+</div>

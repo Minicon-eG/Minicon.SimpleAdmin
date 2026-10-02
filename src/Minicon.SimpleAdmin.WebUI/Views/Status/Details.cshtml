@@ -1,0 +1,1075 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ServerStatusView
+@using StatusNs = Minicon.SimpleAdmin.Models.Status
+@using StateNs = Minicon.SimpleAdmin.Models.State
+
+@{
+    ViewData["Title"] = $"Status - {Model.ServerId}";
+    System.Diagnostics.Debug.WriteLine($"=== Details View for {Model.ServerId} ===");
+    System.Diagnostics.Debug.WriteLine($"  OverallStatus: {Model.OverallStatus}");
+    System.Diagnostics.Debug.WriteLine($"  Services: {Model.Services?.Count ?? 0}");
+    System.Diagnostics.Debug.WriteLine($"  SqlQueryChecks: {Model.SqlQueryChecks?.Count ?? 0}");
+    System.Diagnostics.Debug.WriteLine($"  AppPools: {Model.AppPools?.Count ?? 0}");
+    System.Diagnostics.Debug.WriteLine($"  WindowsServices: {Model.WindowsServices?.Count ?? 0}");
+    System.Diagnostics.Debug.WriteLine($"  EventLogs: {(Model.EventLogs != null ? "yes" : "no")}");
+    System.Diagnostics.Debug.WriteLine($"  BaseUrl: {Model.BaseUrl}");
+    if (Model.SqlQueryChecks?.Count > 0)
+    {
+        foreach (var (checkId, check) in Model.SqlQueryChecks)
+        {
+            System.Diagnostics.Debug.WriteLine($"    Check '{checkId}': {check.CheckName}, Status={check.Status}, Results={check.Results?.Count ?? 0}");
+        }
+    }
+
+    var statusBadge = Model.OverallStatus switch
+    {
+        StatusNs.ServiceStatus.Healthy => "bg-success",
+        StatusNs.ServiceStatus.Degraded => "bg-warning text-dark",
+        StatusNs.ServiceStatus.Unhealthy => "bg-danger",
+        StatusNs.ServiceStatus.Acknowledged => "bg-info text-dark",
+        _ => "bg-secondary"
+    };
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1>
+            <i class="bi bi-hdd-rack me-2"></i>@Model.ServerId
+            <span class="badge @statusBadge fs-5 ms-2">@Model.OverallStatus</span>
+        </h1>
+        <p class="text-muted mb-0">Letzte Aktualisierung: @Model.LastCheck.ToString("yyyy-MM-dd HH:mm:ss") UTC</p>
+    </div>
+    <div>
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Zurück
+        </a>
+    </div>
+</div>
+
+@* --- Metriken --- *@
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-speedometer2 me-2"></i>Metriken</h5>
+    </div>
+    <div class="card-body">
+        @if (Model.Metrics.Count == 0)
+        {
+            <p class="text-muted mb-0">Keine Metriken verfügbar.</p>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var metric in Model.Metrics)
+                {
+                    var metricBadge = metric.Status switch
+                    {
+                        StatusNs.MetricStatus.Ok => "bg-success",
+                        StatusNs.MetricStatus.Warning => "bg-warning text-dark",
+                        StatusNs.MetricStatus.Critical => "bg-danger",
+                        _ => "bg-secondary"
+                    };
+
+                    var progressColor = metric.Status switch
+                    {
+                        StatusNs.MetricStatus.Ok => "bg-success",
+                        StatusNs.MetricStatus.Warning => "bg-warning",
+                        StatusNs.MetricStatus.Critical => "bg-danger",
+                        _ => "bg-secondary"
+                    };
+
+                    var progressValue = Math.Min(metric.Value, 100);
+
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <strong>@metric.DisplayName</strong>
+                                    <span class="badge @metricBadge">@metric.Status</span>
+                                </div>
+                                <div class="progress mb-2" style="height: 20px;">
+                                    <div class="progress-bar @progressColor" role="progressbar"
+                                         style="width: @progressValue.ToString("F0")%"
+                                         aria-valuenow="@metric.Value" aria-valuemin="0" aria-valuemax="100">
+                                        @metric.Value.ToString("F1")@metric.Unit
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between text-muted small">
+                                    @if (metric.AverageValue.HasValue)
+                                    {
+                                        <span>Durchschnitt: @metric.AverageValue.Value.ToString("F1")@metric.Unit (@(metric.AverageSampleCount ?? 0) Samples)</span>
+                                    }
+                                    @if (metric.Target != null)
+                                    {
+                                        <span>Ziel: @metric.Target</span>
+                                    }
+                                </div>
+                                @if (metric.Threshold != null)
+                                {
+                                    <div class="text-muted small mt-1">
+                                        Schwellenwerte: Warning @metric.Threshold.Operator @metric.Threshold.Warning, Critical @metric.Threshold.Operator @metric.Threshold.Critical
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@* --- Services --- *@
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Services</h5>
+    </div>
+    <div class="card-body">
+        @if ((Model.Services?.Count ?? 0) == 0)
+        {
+            <p class="text-muted mb-0">Keine Services verfügbar.</p>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var service in (Model.Services ?? []).OrderBy(s => s.Service))
+                {
+                    var svcBadge = service.Status switch
+                    {
+                        StatusNs.ServiceStatus.Healthy => "bg-success",
+                        StatusNs.ServiceStatus.Degraded => "bg-warning text-dark",
+                        StatusNs.ServiceStatus.Unhealthy => "bg-danger",
+                        StatusNs.ServiceStatus.Acknowledged => "bg-info text-dark",
+                        StatusNs.ServiceStatus.Unreachable => "bg-dark",
+                        _ => "bg-secondary"
+                    };
+
+                    var staticHtmlUrl = Model.BaseUrl != null
+                        ? $"{Model.BaseUrl.TrimEnd('/')}/{Model.ServerId}.{service.Service}.html"
+                        : null;
+
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <strong>@service.Service</strong>
+                                <span class="badge @svcBadge">@service.Status</span>
+                            </div>
+                            <div class="card-body">
+                                @if (service.Metrics.Count > 0)
+                                {
+                                    <div class="mb-2">
+                                        @foreach (var m in service.Metrics.Take(3))
+                                        {
+                                            var mBadge = m.Status switch
+                                            {
+                                                StatusNs.MetricStatus.Ok => "bg-success",
+                                                StatusNs.MetricStatus.Warning => "bg-warning text-dark",
+                                                StatusNs.MetricStatus.Critical => "bg-danger",
+                                                _ => "bg-secondary"
+                                            };
+                                            <span class="badge @mBadge me-1 mb-1">@m.DisplayName: @m.Value.ToString("F1")@m.Unit</span>
+                                        }
+                                    </div>
+                                }
+                                @if (service.Endpoints?.Count > 0)
+                                {
+                                    <div class="text-muted small">
+                                        <strong>Endpoints:</strong>
+                                        @foreach (var ep in service.Endpoints.Where(e => e.Enabled))
+                                        {
+                                            <div>@ep.Type: @ep.Path</div>
+                                        }
+                                    </div>
+                                }
+                                <div class="text-muted small mt-2">
+                                    <small>Aktualisiert: @service.LastUpdate.ToString("dd.MM. HH:mm")</small>
+                                </div>
+                            </div>
+                            @if (staticHtmlUrl != null)
+                            {
+                                <div class="card-footer">
+                                    <a href="@staticHtmlUrl" target="_blank" class="btn btn-sm btn-outline-secondary w-100">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>HTML-Report
+                                    </a>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@* --- Probleme --- *@
+@if (Model.ActiveProblems.Count > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-exclamation-triangle me-2"></i>Aktive Probleme
+                <span class="badge bg-danger ms-2">@Model.ActiveProblems.Count</span>
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Typ</th>
+                            <th>Schweregrad</th>
+                            <th>Beschreibung</th>
+                            <th>Seit</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var problem in Model.ActiveProblems.OrderByDescending(p => p.Severity))
+                        {
+                            var sevBadge = problem.Severity switch
+                            {
+                                StateNs.ProblemSeverity.Critical => "bg-danger",
+                                StateNs.ProblemSeverity.Warning => "bg-warning text-dark",
+                                _ => "bg-info text-dark"
+                            };
+
+                            <tr>
+                                <td>@problem.Type</td>
+                                <td><span class="badge @sevBadge">@problem.Severity</span></td>
+                                <td>@problem.Message</td>
+                                <td><small>@problem.Since.ToString("yyyy-MM-dd HH:mm:ss")</small></td>
+                                <td>
+                                    @if (problem.Acknowledged)
+                                    {
+                                        <span class="badge bg-info text-dark"><i class="bi bi-check-circle me-1"></i>Acknowledged</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger"><i class="bi bi-exclamation-circle me-1"></i>Offen</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@* --- AppPools --- *@
+@if (Model.AppPools?.Count > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-layers me-2"></i>Application Pools</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Memory</th>
+                            <th>Uptime</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var pool in Model.AppPools.OrderBy(p => p.Key))
+                        {
+                            var poolBadge = pool.Value.Status switch
+                            {
+                                StateNs.AppPoolStatus.Running => "bg-success",
+                                StateNs.AppPoolStatus.Stopped => "bg-danger",
+                                StateNs.AppPoolStatus.Starting => "bg-warning text-dark",
+                                StateNs.AppPoolStatus.Stopping => "bg-warning text-dark",
+                                _ => "bg-secondary"
+                            };
+                            var memBadge = pool.Value.MemoryStatus switch
+                            {
+                                StateNs.MetricStatus.Critical => "bg-danger",
+                                StateNs.MetricStatus.Warning  => "bg-warning text-dark",
+                                _                             => "bg-success"
+                            };
+                            var uptimeBadge = pool.Value.UptimeStatus switch
+                            {
+                                StateNs.MetricStatus.Warning => "bg-warning text-dark",
+                                _                            => "bg-success"
+                            };
+
+                            <tr data-pool="@pool.Key">
+                                <td>@pool.Key</td>
+                                <td><span class="badge @poolBadge">@pool.Value.Status</span></td>
+                                <td>
+                                    @if (pool.Value.Status == StateNs.AppPoolStatus.Running && pool.Value.WorkerProcessId.HasValue)
+                                    {
+                                        <span class="badge @memBadge">@pool.Value.MemoryMB.ToString("F0") MB</span>
+                                        if (pool.Value.MemoryWarningMB > 0)
+                                        {
+                                            <small class="text-muted ms-1">/ @pool.Value.MemoryWarningMB MB</small>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">–</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (pool.Value.Status == StateNs.AppPoolStatus.Running && pool.Value.WorkerProcessId.HasValue && pool.Value.UptimeHours > 0)
+                                    {
+                                        <span class="badge @uptimeBadge">@pool.Value.UptimeHours.ToString("F1") h</span>
+                                        if (pool.Value.UptimeWarningHours > 0)
+                                        {
+                                            <small class="text-muted ms-1">/ @pool.Value.UptimeWarningHours h</small>
+                                        }
+                                    }
+                                    else if (pool.Value.Status == StateNs.AppPoolStatus.Stopped && pool.Value.StoppedSince.HasValue)
+                                    {
+                                        var stoppedFor = DateTime.UtcNow - pool.Value.StoppedSince.Value;
+                                        <small class="text-muted">Gestoppt seit @stoppedFor.ToString("hh\\:mm\\:ss")</small>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">–</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@* --- Windows Services --- *@
+@if (Model.WindowsServices?.Count > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-window me-2"></i>Windows Services</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Name</th>
+                            <th>Anzeigename</th>
+                            <th>Status</th>
+                            <th>Startart</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var svc in Model.WindowsServices.OrderBy(s => s.Key))
+                        {
+                            var svcBadge = svc.Value.Status switch
+                            {
+                                "Running" => "bg-success",
+                                "Stopped" or "PatternNoMatch" => "bg-danger",
+                                "Starting" or "Stopping" or "ContinuePending" or "PausePending" => "bg-warning text-dark",
+                                "Paused" => "bg-info text-dark",
+                                _ => "bg-secondary"
+                            };
+                            <tr>
+                                <td><code>@svc.Key</code></td>
+                                <td>@svc.Value.DisplayName</td>
+                                <td><span class="badge @svcBadge">@(svc.Value.Status == "PatternNoMatch" ? "Kein Dienst gefunden" : svc.Value.Status)</span></td>
+                                <td>@(svc.Value.StartupType switch { "Automatic" => "Automatisch", "Manual" => "Manuell", _ => "–" })</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@* --- Event Log --- *@
+@if (Model.EventLogs != null && (Model.EventLogs.RecentEvents.Count > 0 || Model.EventLogs.IgnoredCount > 0))
+{
+    var elBadge = Model.EventLogs.Status switch
+    {
+        StateNs.MetricStatus.Critical => "bg-danger",
+        StateNs.MetricStatus.Warning  => "bg-warning text-dark",
+        _                             => "bg-success"
+    };
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>Event Log</h5>
+            <span class="badge @elBadge">
+                @Model.EventLogs.EventCount Ereignisse@(Model.EventLogs.IgnoredCount > 0 ? $" ({Model.EventLogs.IgnoredCount} ignoriert)" : "")
+            </span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Zeitstempel</th>
+                            <th>Level</th>
+                            <th>Quelle</th>
+                            <th>ID</th>
+                            <th>Meldung</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.EventLogs.RecentEvents.Count == 0)
+                        {
+                            <tr><td colspan="6" class="text-muted small">Keine aktuellen Ereignisse — alle gemeldeten Ereignisse werden ignoriert
+                                (Regeln unter <em>Einstellungen → Feature-Toggles → Event Log</em>).</td></tr>
+                        }
+                        @foreach (var ev in Model.EventLogs.RecentEvents)
+                        {
+                            var evBadge = ev.Level switch
+                            {
+                                "Critical" or "Error" => "bg-danger",
+                                "Warning"             => "bg-warning text-dark",
+                                _                     => "bg-secondary"
+                            };
+                            <tr>
+                                <td><small class="text-muted">@ev.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</small></td>
+                                <td><span class="badge @evBadge">@ev.Level</span></td>
+                                <td><small>@ev.Source</small></td>
+                                <td><small>@ev.EventId</small></td>
+                                <td><small>@(ev.Message.Length > 120 ? ev.Message[..120] + "…" : ev.Message)</small></td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0"
+                                            data-source="@ev.Source" data-event-id="@ev.EventId"
+                                            onclick="openEventIgnore(this)" title="Dieses Event auf diesem Server ignorieren">
+                                        <i class="bi bi-eye-slash"></i> Ignorieren
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@* --- SQL Query Checks --- *@
+@if ((Model.SqlQueryChecks?.Count ?? 0) > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-database me-2"></i>SQL Query Checks</h5>
+        </div>
+        <div class="card-body">
+            @foreach (var (checkId, check) in (Model.SqlQueryChecks ?? []).OrderBy(kvp => kvp.Key))
+            {
+                var checkBadge = check.Status switch
+                {
+                    StateNs.MetricStatus.Critical => "bg-danger",
+                    StateNs.MetricStatus.Warning  => "bg-warning text-dark",
+                    _                             => "bg-success"
+                };
+
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <strong><i class="bi bi-database-check me-1"></i>@check.CheckName</strong>
+                        <div>
+                            <span class="badge @checkBadge">@check.Status</span>
+                            <small class="text-muted ms-2">@check.LastChecked.ToString("yyyy-MM-dd HH:mm:ss")</small>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (!string.IsNullOrEmpty(check.ConnectionError))
+                        {
+                            <div class="alert alert-danger m-3 mb-0">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                <strong>Verbindungsfehler:</strong> @check.ConnectionError
+                            </div>
+                        }
+                        else if (check.Results.Count > 0)
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Query</th>
+                                            <th>Status</th>
+                                            <th>Detail</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @{ var queryIdx = 0; }
+                                        @foreach (var result in check.Results.OrderBy(r => r.QueryName))
+                                        {
+                                            var qBadge = result.Status switch
+                                            {
+                                                StateNs.MetricStatus.Critical => "bg-danger",
+                                                StateNs.MetricStatus.Warning  => "bg-warning text-dark",
+                                                _                             => "bg-success"
+                                            };
+                                            var rowsCollapseId = $"sql-rows-{checkId}-{queryIdx}";
+
+                                            <tr>
+                                                <td><strong>@result.QueryName</strong></td>
+                                                <td><span class="badge @qBadge">@result.Status</span></td>
+                                                <td>
+                                                    @if (!string.IsNullOrEmpty(result.ExecutionError))
+                                                    {
+                                                        <span class="text-danger"><i class="bi bi-x-circle me-1"></i>@result.ExecutionError</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        @if (result.RowCount != null)
+                                                        {
+                                                            var rcClass = result.RowCount.Passed ? "text-success" : "text-danger";
+                                                            <span class="@rcClass me-2">
+                                                                Rows: @result.RowCount.ActualCount @result.RowCount.Operator @result.RowCount.ExpectedCount
+                                                                <i class="bi bi-@(result.RowCount.Passed ? "check" : "x")-circle ms-1"></i>
+                                                            </span>
+                                                        }
+                                                        @foreach (var col in result.ColumnResults.OrderBy(c => c.AssertionName))
+                                                        {
+                                                            var colClass = col.Passed ? "text-success" : "text-danger";
+                                                            <span class="@colClass me-2" title="@col.FailureReason">
+                                                                @col.AssertionName: @col.ActualValue @col.Operator '@col.ExpectedValue'
+                                                                <i class="bi bi-@(col.Passed ? "check" : "x")-circle ms-1"></i>
+                                                            </span>
+                                                        }
+                                                    }
+                                                    @if (result.Rows.Count > 0)
+                                                    {
+                                                        <div class="mt-2">
+                                                            <button class="btn btn-sm btn-outline-secondary" type="button"
+                                                                    data-bs-toggle="collapse" data-bs-target="#@rowsCollapseId">
+                                                                <i class="bi bi-table me-1"></i>Ergebnis anzeigen (@result.Rows.Count von @result.TotalRows Zeilen)
+                                                            </button>
+                                                            <div class="collapse mt-2" id="@rowsCollapseId">
+                                                                <div class="table-responsive">
+                                                                    <table class="table table-sm table-bordered font-monospace small mb-0">
+                                                                        <thead class="table-light">
+                                                                            <tr>
+                                                                                @foreach (var colName in result.Columns)
+                                                                                {
+                                                                                    <th>@colName</th>
+                                                                                }
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            @foreach (var row in result.Rows)
+                                                                            {
+                                                                                <tr>
+                                                                                    @foreach (var cell in row)
+                                                                                    {
+                                                                                        <td>@(cell ?? "NULL")</td>
+                                                                                    }
+                                                                                </tr>
+                                                                            }
+                                                                        </tbody>
+                                                                    </table>
+                                                                    @if (result.TotalRows > result.Rows.Count)
+                                                                    {
+                                                                        <div class="alert alert-info py-1 mt-2 small mb-0">
+                                                                            Nur die ersten @result.Rows.Count von @result.TotalRows Zeilen sind gespeichert.
+                                                                        </div>
+                                                                    }
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                </td>
+                                            </tr>
+                                            queryIdx++;
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted p-3 mb-0">Keine Abfrageergebnisse.</p>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@* --- Email Probes (Sender Role) --- *@
+@if ((Model.EmailProbes?.Count ?? 0) > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-envelope me-2"></i>E-Mail-Probes (Sender)</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Letzte Sendung</th>
+                        <th>Fehler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (_, probe) in (Model.EmailProbes ?? []).OrderBy(kvp => kvp.Key))
+                    {
+                        var probeBadge = probe.Status switch
+                        {
+                            StateNs.MetricStatus.Critical => "bg-danger",
+                            StateNs.MetricStatus.Warning  => "bg-warning text-dark",
+                            _                             => "bg-success"
+                        };
+                        <tr>
+                            <td>@probe.ProbeName</td>
+                            <td><span class="badge @probeBadge">@probe.Status</span></td>
+                            <td>@(probe.LastSentAt.HasValue ? probe.LastSentAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss") : "–")</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(probe.ErrorMessage))
+                                {
+                                    <span class="text-danger">@probe.ErrorMessage</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">–</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@* --- Email Delivery (Checker Role) --- *@
+@if ((Model.EmailDelivery?.Count ?? 0) > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-envelope-check me-2"></i>E-Mail-Zustellung (Checker)</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Letzter Eingang</th>
+                        <th>Alter (Min)</th>
+                        <th>Fehler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (_, check) in (Model.EmailDelivery ?? []).OrderBy(kvp => kvp.Key))
+                    {
+                        var deliveryBadge = check.Status switch
+                        {
+                            StateNs.MetricStatus.Critical => "bg-danger",
+                            StateNs.MetricStatus.Warning  => "bg-warning text-dark",
+                            _                             => "bg-success"
+                        };
+                        <tr>
+                            <td>@check.CheckName</td>
+                            <td><span class="badge @deliveryBadge">@check.Status</span></td>
+                            <td>@(check.LastReceivedAt.HasValue ? check.LastReceivedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss") : "–")</td>
+                            <td>@(check.AgeMinutes.HasValue ? $"{check.AgeMinutes.Value:F0}" : "–")</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(check.ErrorMessage))
+                                {
+                                    <span class="text-danger">@check.ErrorMessage</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">–</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@* --- Certificates --- *@
+@if ((Model.Certificates?.Count ?? 0) > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-shield-lock me-2"></i>Zertifikate</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Subject</th>
+                        <th>Thumbprint</th>
+                        <th>Läuft ab</th>
+                        <th>Restzeit</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (_, cert) in (Model.Certificates ?? []).OrderBy(kvp => kvp.Value.DaysUntilExpiry))
+                    {
+                        var certBadge = cert.Status switch
+                        {
+                            StateNs.MetricStatus.Critical => "bg-danger",
+                            StateNs.MetricStatus.Warning  => "bg-warning text-dark",
+                            StateNs.MetricStatus.Healthy  => "bg-success",
+                            _                             => "bg-secondary"
+                        };
+                        var thumb = string.IsNullOrEmpty(cert.Thumbprint) ? "–" : (cert.Thumbprint.Length > 16 ? cert.Thumbprint[..16] + "…" : cert.Thumbprint);
+                        var rest = cert.DaysUntilExpiry <= 0
+                            ? $"abgelaufen ({Math.Abs(cert.DaysUntilExpiry)} T)"
+                            : $"{cert.DaysUntilExpiry} Tage";
+                        <tr>
+                            <td>@cert.Subject</td>
+                            <td><code class="small">@thumb</code></td>
+                            <td>@(cert.ExpiresAt == default ? "–" : cert.ExpiresAt.ToString("dd.MM.yyyy"))</td>
+                            <td>@rest</td>
+                            <td><span class="badge @certBadge">@cert.Status</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@* --- BizTalk --- *@
+@if (Model.BizTalk != null)
+{
+    var bt = Model.BizTalk;
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-gear-wide-connected me-2"></i>BizTalk</h5>
+        </div>
+        <div class="card-body">
+            @if (!bt.ApiReachable)
+            {
+                <div class="alert alert-danger mb-0">Management-API nicht erreichbar: @bt.ApiError</div>
+            }
+            else
+            {
+                <p class="text-muted mb-3">
+                    Anwendungen: @bt.ApplicationsTotal · Orchestrierungen: @bt.OrchestrationsTotal ·
+                    Sendeports: @bt.SendPortsTotal · Empfangsorte: @bt.ReceiveLocationsTotal ·
+                    Suspendiert: <strong>@bt.SuspendedTotal</strong>
+                </p>
+                @if (bt.Problems.Count > 0)
+                {
+                    <table class="table table-sm table-hover mb-3">
+                        <thead class="table-light"><tr><th>Typ</th><th>Name</th><th>Status</th><th>Schweregrad</th></tr></thead>
+                        <tbody>
+                            @foreach (var p in bt.Problems)
+                            {
+                                <tr>
+                                    <td>@p.ArtifactType</td>
+                                    <td>@p.Name</td>
+                                    <td>@p.Status</td>
+                                    <td><span class="badge @(p.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(p.IsCritical ? "Critical" : "Warning")</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <p class="text-success mb-3"><i class="bi bi-check-circle me-1"></i>Alle überwachten Artefakte ok.</p>
+                }
+                @if (bt.SuspendedGroups.Count > 0)
+                {
+                    <h6>Suspendierte Instanzen nach Anwendung</h6>
+                    <ul class="mb-0">
+                        @foreach (var g in bt.SuspendedGroups)
+                        {
+                            <li>@g.Scope: @g.Count</li>
+                        }
+                    </ul>
+                }
+            }
+        </div>
+    </div>
+}
+
+@* --- File / Log Monitoring --- *@
+@if (Model.FileMonitoring != null)
+{
+    var fm = Model.FileMonitoring;
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-folder-check me-2"></i>Datei-/Protokollüberwachung</h5>
+        </div>
+        <div class="card-body">
+            @if (fm.OutsideBusinessHours)
+            {
+                <p class="text-muted mb-0"><i class="bi bi-moon-stars me-1"></i>Außerhalb der Betriebszeiten — keine Prüfung in diesem Zyklus.</p>
+            }
+            else
+            {
+                <p class="text-muted mb-3">
+                    Verzeichnisse geprüft: @fm.DirectoriesChecked · Logdateien gescannt: @fm.LogFilesScanned ·
+                    Hängende Dateien: <strong>@fm.StuckFiles.Count</strong> · Log-Treffer: <strong>@fm.LogMatches.Count</strong>
+                </p>
+                @if (fm.AnyError && !string.IsNullOrEmpty(fm.Error))
+                {
+                    <div class="alert alert-danger">Zugriffsfehler: @fm.Error</div>
+                }
+                @if (fm.StuckFiles.Count > 0)
+                {
+                    <h6>Hängengebliebene Dateien</h6>
+                    <table class="table table-sm table-hover mb-3">
+                        <thead class="table-light"><tr><th>Verzeichnis</th><th>Datei</th><th>Alter</th><th>Grund</th><th>Schweregrad</th><th>Lösung</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in fm.StuckFiles)
+                            {
+                                var ageLabel = s.AgeMinutes >= 120 ? $"{s.AgeMinutes / 60.0:N1} h" : $"{s.AgeMinutes:N0} min";
+                                <tr>
+                                    <td>@s.Directory</td>
+                                    <td title="@s.FilePath">@System.IO.Path.GetFileName(s.FilePath)</td>
+                                    <td>@ageLabel</td>
+                                    <td>@(string.Equals(s.Reason, "cutoff", StringComparison.OrdinalIgnoreCase) ? "Nach Cutoff" : "Zu alt")</td>
+                                    <td><span class="badge @(s.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(s.IsCritical ? "Critical" : "Warning")</span></td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(s.WikiUrl))
+                                        {
+                                            <a href="@s.WikiUrl" target="_blank" rel="noopener">Anleitung <i class="bi bi-box-arrow-up-right"></i></a>
+                                        }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                @if (fm.LogMatches.Count > 0)
+                {
+                    <h6>Log-Fehler</h6>
+                    <table class="table table-sm table-hover mb-3">
+                        <thead class="table-light"><tr><th>Log</th><th>Signatur</th><th>Treffer</th><th>Beispiel</th><th>Lösung</th></tr></thead>
+                        <tbody>
+                            @foreach (var m in fm.LogMatches)
+                            {
+                                <tr>
+                                    <td title="@m.LogPath">@m.LogScan</td>
+                                    <td><span class="badge @(m.IsCritical ? "bg-danger" : "bg-warning text-dark")">@m.Pattern</span></td>
+                                    <td>@m.Count</td>
+                                    <td><code class="small">@m.SampleLine</code></td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(m.WikiUrl))
+                                        {
+                                            <a href="@m.WikiUrl" target="_blank" rel="noopener">Anleitung <i class="bi bi-box-arrow-up-right"></i></a>
+                                        }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                @if (fm.StuckFiles.Count == 0 && fm.LogMatches.Count == 0 && !fm.AnyError)
+                {
+                    <p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i>Keine hängenden Dateien oder Log-Fehler.</p>
+                }
+            }
+        </div>
+    </div>
+}
+
+@* --- History Charts --- *@
+@{
+    var allHistory = (Model.Services ?? [])
+        .Where(s => s.History?.Count > 0)
+        .SelectMany(s => s.History)
+        .OrderBy(h => h.Timestamp)
+        .ToList();
+
+    var metricKeys = allHistory.SelectMany(h => h.Values.Keys).Distinct().OrderBy(k => k).ToList();
+
+    // Key matches history snapshot key: "disk_c:" / "disk_d:" for targeted metrics
+    static string MetricKey(Minicon.SimpleAdmin.Models.Status.Metric m) =>
+        string.IsNullOrEmpty(m.Target) ? m.Name : $"{m.Name}_{m.Target}";
+
+    // Build threshold lookup from current metrics
+    var thresholds = Model.Metrics
+        .Where(m => m.Threshold != null)
+        .GroupBy(MetricKey)
+        .ToDictionary(g => g.Key, g => g.First().Threshold!);
+
+    // Display name lookup
+    var displayNames = Model.Metrics
+        .GroupBy(MetricKey)
+        .ToDictionary(g => g.Key, g => g.First().DisplayName);
+}
+
+@if (allHistory.Count > 0)
+{
+    foreach (var metricKey in metricKeys)
+    {
+        var entries = allHistory
+            .Where(h => h.Values.ContainsKey(metricKey))
+            .TakeLast(100)
+            .ToList();
+
+        if (entries.Count == 0) continue;
+
+        var displayName = displayNames.ContainsKey(metricKey) ? displayNames[metricKey] : metricKey;
+        var hasThreshold = thresholds.ContainsKey(metricKey);
+        var warnVal = hasThreshold ? thresholds[metricKey].Warning : (double?)null;
+        var critVal = hasThreshold ? thresholds[metricKey].Critical : (double?)null;
+        var op = hasThreshold ? thresholds[metricKey].Operator : ">";
+        var maxVal = Math.Max(entries.Max(e => e.Values[metricKey]), critVal ?? 100);
+
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>@displayName</h5>
+                <small class="text-muted">Letzte @entries.Count Einträge</small>
+            </div>
+            <div class="card-body">
+                @if (hasThreshold)
+                {
+                    <div class="mb-2 small text-muted">
+                        <span class="badge bg-success">OK</span>
+                        <span class="badge bg-warning text-dark">Warning @op @warnVal</span>
+                        <span class="badge bg-danger">Critical @op @critVal</span>
+                    </div>
+                }
+                <div class="d-flex align-items-end" style="height: 200px; gap: 1px; overflow-x: auto;">
+                    @foreach (var entry in entries)
+                    {
+                        var val = entry.Values[metricKey];
+                        var pct = maxVal > 0 ? (val / maxVal * 100) : 0;
+                        var barColor = "#198754"; // green (ok)
+
+                        if (hasThreshold)
+                        {
+                            var isWarn = op switch
+                            {
+                                ">" => val > warnVal,
+                                ">=" => val >= warnVal,
+                                "<" => val < warnVal,
+                                "<=" => val <= warnVal,
+                                _ => val > warnVal
+                            };
+                            var isCrit = op switch
+                            {
+                                ">" => val > critVal,
+                                ">=" => val >= critVal,
+                                "<" => val < critVal,
+                                "<=" => val <= critVal,
+                                _ => val > critVal
+                            };
+
+                            if (isCrit) barColor = "#dc3545"; // red
+                            else if (isWarn) barColor = "#ffc107"; // yellow
+                        }
+
+                        <div style="flex: 1; min-width: 4px; max-width: 12px; height: @(pct.ToString("F0"))%; background: @barColor; border-radius: 2px 2px 0 0;"
+                             title="@entry.Timestamp.ToString("dd.MM. HH:mm"): @val.ToString("F1")"></div>
+                    }
+                </div>
+                <div class="d-flex justify-content-between mt-1 small text-muted">
+                    <span>@entries.First().Timestamp.ToString("dd.MM. HH:mm")</span>
+                    <span>@entries.Last().Timestamp.ToString("dd.MM. HH:mm")</span>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@* --- Event ignorieren (Modal) --- *@
+<div class="modal fade" id="eventIgnoreModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Event ignorieren</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">
+                    Server <strong>@Model.ServerId</strong> · Quelle <strong id="eventIgnoreSourceLabel"></strong> ·
+                    Event-ID <strong id="eventIgnoreIdLabel"></strong>
+                </p>
+                <div class="mb-3">
+                    <label for="eventIgnoreDuration" class="form-label">Ignorieren für</label>
+                    <select class="form-select" id="eventIgnoreDuration" onchange="toggleEventIgnoreDate()">
+                        <option value="1">1 Tag</option>
+                        <option value="7" selected>7 Tage</option>
+                        <option value="30">30 Tage</option>
+                        <option value="90">90 Tage</option>
+                        <option value="date">Bis Datum …</option>
+                        <option value="forever">Für immer</option>
+                    </select>
+                </div>
+                <div class="mb-3 d-none" id="eventIgnoreDateGroup">
+                    <label for="eventIgnoreDate" class="form-label">Bis</label>
+                    <input type="datetime-local" class="form-control" id="eventIgnoreDate" />
+                </div>
+                <div class="mb-1">
+                    <label for="eventIgnoreReason" class="form-label">Grund</label>
+                    <input type="text" class="form-control" id="eventIgnoreReason" placeholder="z. B. bekannter Fehler, Ticket 4711" />
+                </div>
+                <div class="form-text">
+                    Wird als Ignorier-Regel unter <em>Einstellungen → Feature-Toggles → Event Log</em> gespeichert
+                    und dort auch wieder gelöscht.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary" onclick="submitEventIgnore()">Ignorieren</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let eventIgnoreModal;
+        let eventIgnoreSource = '';
+        let eventIgnoreId = 0;
+
+        function openEventIgnore(button) {
+            eventIgnoreSource = button.dataset.source;
+            eventIgnoreId = parseInt(button.dataset.eventId) || 0;
+            document.getElementById('eventIgnoreSourceLabel').textContent = eventIgnoreSource;
+            document.getElementById('eventIgnoreIdLabel').textContent = eventIgnoreId;
+            eventIgnoreModal = eventIgnoreModal || new bootstrap.Modal(document.getElementById('eventIgnoreModal'));
+            eventIgnoreModal.show();
+        }
+
+        function toggleEventIgnoreDate() {
+            const isDate = document.getElementById('eventIgnoreDuration').value === 'date';
+            document.getElementById('eventIgnoreDateGroup').classList.toggle('d-none', !isDate);
+        }
+
+        async function submitEventIgnore() {
+            const choice = document.getElementById('eventIgnoreDuration').value;
+            let expiresAt = null;
+            if (choice === 'date') {
+                const value = document.getElementById('eventIgnoreDate').value;
+                if (!value) { alert('Bitte ein Datum wählen'); return; }
+                expiresAt = new Date(value).toISOString();
+            } else if (choice !== 'forever') {
+                expiresAt = new Date(Date.now() + parseInt(choice) * 86400000).toISOString();
+            }
+
+            const response = await fetch('@Url.Content("~/api/eventlogignore")', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    serverId: '@Model.ServerId',
+                    source: eventIgnoreSource,
+                    eventId: eventIgnoreId,
+                    expiresAt: expiresAt,
+                    reason: document.getElementById('eventIgnoreReason').value
+                })
+            });
+            if (response.ok) {
+                eventIgnoreModal.hide();
+                location.reload();
+            } else {
+                const err = await response.json().catch(() => ({}));
+                alert('Fehler: ' + (err.message || response.status));
+            }
+        }
+    </script>
+}

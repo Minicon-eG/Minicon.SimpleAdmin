@@ -1,0 +1,25 @@
+# Build output
+bin/
+obj/
+*.user
+
+# NuGet packages built locally
+*.nupkg
+*.snupkg
+
+# Local NuGet feed
+local-feed/
+
+# IDE
+.vs/
+.idea/
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime state (not versioned)
+/status/
+/wwwroot/status/
+acknowledges.json

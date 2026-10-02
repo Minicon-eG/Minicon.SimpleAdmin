@@ -1,0 +1,227 @@
+@using Minicon.SimpleAdmin.WebUI.ViewModels
+@model ServerChecksViewModel
+@{
+    var fm = Model?.FileMonitoring ?? new FileMonitoringChecksViewModel();
+
+    async Task DirRow(string idx, WatchedDirectoryRowViewModel? d)
+    {
+        var p = $"Checks.FileMonitoring.Directories[{idx}]";
+        var sev = d?.CutoffSeverity ?? "Critical";
+        <div class="fm-dir-item border rounded p-2 mb-2" data-dir-index="@idx">
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <label class="form-label small mb-0">Name</label>
+                    <input type="text" name="@(p).Name" value="@(d?.Name)" class="form-control form-control-sm" placeholder="Eingang" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label small mb-0">Pfad (UNC möglich)</label>
+                    <input type="text" name="@(p).Path" value="@(d?.Path)" class="form-control form-control-sm" placeholder="\\srv\d$\Daten\schnittstelle\kasse\eingang" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-0">Einschließen (z. B. *.xml)</label>
+                    <input type="text" name="@(p).IncludePatterns" value="@(d?.IncludePatterns)" class="form-control form-control-sm" placeholder="*.xml, *.dat" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-0">Ausschließen</label>
+                    <input type="text" name="@(p).ExcludePatterns" value="@(d?.ExcludePatterns)" class="form-control form-control-sm" placeholder="*.tmp" />
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <div class="form-check">
+                        <input type="hidden" name="@(p).Recursive" value="false" />
+                        <input type="checkbox" name="@(p).Recursive" value="true" class="form-check-input" id="@(p)_rec" @(d?.Recursive == true ? "checked" : "") />
+                        <label class="form-check-label small" for="@(p)_rec">Unterordner einbeziehen</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Alter Warnung (min)</label>
+                    <input type="number" name="@(p).AgeMinutesWarning" value="@(d?.AgeMinutesWarning)" class="form-control form-control-sm" placeholder="(Standard)" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Alter Kritisch (min)</label>
+                    <input type="number" name="@(p).AgeMinutesCritical" value="@(d?.AgeMinutesCritical)" class="form-control form-control-sm" placeholder="(Standard)" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Cutoff-Zeit (HH:mm)</label>
+                    <input type="text" name="@(p).CutoffTime" value="@(d?.CutoffTime)" class="form-control form-control-sm" placeholder="21:45" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Cutoff-Schweregrad</label>
+                    <select name="@(p).CutoffSeverity" class="form-select form-select-sm">
+                        <option value="Critical" selected="@(string.Equals(sev, "Critical", StringComparison.OrdinalIgnoreCase))">Critical</option>
+                        <option value="Warning" selected="@(string.Equals(sev, "Warning", StringComparison.OrdinalIgnoreCase))">Warning</option>
+                    </select>
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label small mb-0">Wiki-/Lösungs-Link</label>
+                    <input type="text" name="@(p).WikiUrl" value="@(d?.WikiUrl)" class="form-control form-control-sm" placeholder="https://wiki.intern/schnittstelle/haengende-datei" />
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label small mb-0">Nachbearbeitung (eine Zeile pro Schritt)</label>
+                    <textarea name="@(p).RemediationSteps" class="form-control form-control-sm" rows="2" placeholder="Datei vom Eingang in den Kassenordner verschieben&#10;Mit Logdatei abgleichen&#10;Bei anhaltendem Fehler die Fachverfahrensbetreuung informieren">@(d?.RemediationSteps)</textarea>
+                </div>
+            </div>
+            <div class="text-end mt-1">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFmDir(this)">
+                    <i class="bi bi-trash"></i> Verzeichnis entfernen
+                </button>
+            </div>
+        </div>
+    }
+
+    async Task LogRow(string idx, LogScanRowViewModel? s)
+    {
+        var p = $"Checks.FileMonitoring.LogScans[{idx}]";
+        <div class="fm-log-item border rounded p-2 mb-2" data-log-index="@idx">
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <label class="form-label small mb-0">Name</label>
+                    <input type="text" name="@(p).Name" value="@(s?.Name)" class="form-control form-control-sm" placeholder="Schnittstellen-Log" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label small mb-0">Pfad / Glob (UNC möglich)</label>
+                    <input type="text" name="@(p).Path" value="@(s?.Path)" class="form-control form-control-sm" placeholder="\\srv\d$\Daten\schnittstelle\kasse\log\*.log" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Max. Dateialter (min)</label>
+                    <input type="number" name="@(p).MaxFileAgeMinutes" value="@(s?.MaxFileAgeMinutes)" class="form-control form-control-sm" placeholder="(alle)" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Max. Zeilen (Tail)</label>
+                    <input type="number" name="@(p).MaxLines" value="@(s?.MaxLines ?? 5000)" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-0">Wiki-/Lösungs-Link (Standard)</label>
+                    <input type="text" name="@(p).WikiUrl" value="@(s?.WikiUrl)" class="form-control form-control-sm" placeholder="https://wiki.intern/schnittstelle/log-fehler" />
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label small mb-0">Signaturen — eine pro Zeile: <code>Anzeigename :: Severity :: Regex</code></label>
+                    <textarea name="@(p).Patterns" class="form-control form-control-sm font-monospace" rows="3" placeholder="Hängende Nachricht :: Critical :: Nachricht.*haengt|stuck&#10;Verbindungsfehler :: Warning :: connection (refused|timed out)">@(s?.Patterns)</textarea>
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label small mb-0">Nachbearbeitung (eine Zeile pro Schritt)</label>
+                    <textarea name="@(p).RemediationSteps" class="form-control form-control-sm" rows="2">@(s?.RemediationSteps)</textarea>
+                </div>
+            </div>
+            <div class="text-end mt-1">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFmLog(this)">
+                    <i class="bi bi-trash"></i> Log-Scan entfernen
+                </button>
+            </div>
+        </div>
+    }
+}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-folder-check me-2"></i>Datei-/Protokollüberwachung</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
+                data-bs-target="#fileMonHelp" aria-expanded="false">
+            <i class="bi bi-question-circle me-1"></i>Hilfe
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="collapse mb-3" id="fileMonHelp">
+            <div class="card card-body bg-light">
+                <h6><i class="bi bi-info-circle me-1"></i>Was wird überwacht?</h6>
+                <p class="mb-2">
+                    <strong>Verzeichnisse</strong> werden auf <em>hängengebliebene Dateien</em> geprüft: Eine Datei gilt als
+                    hängend, wenn sie älter als die konfigurierte Schwelle ist <em>oder</em> nach der Cutoff-Zeit
+                    (z. B. <code>21:45</code>) noch im Ordner liegt.
+                </p>
+                <p class="mb-2">
+                    <strong>Log-Scans</strong> durchsuchen Logdateien zeilenweise nach Fehlersignaturen (Regex). Treffer werden
+                    pro Signatur aggregiert gemeldet.
+                </p>
+                <p class="mb-0">
+                    Jeder Fund kann einen <strong>Wiki-Link</strong> und <strong>Schritt-für-Schritt-Hinweise</strong> tragen,
+                    die im Dashboard und in der Sammelmail erscheinen. Der zentrale Worker erreicht die Standort-Shares über
+                    UNC; das Dienstkonto benötigt Leserechte auf die Freigaben. Globaler Schalter unter
+                    <em>Einstellungen → Features</em>.
+                </p>
+            </div>
+        </div>
+
+        <div class="form-check form-switch mb-3">
+            <input type="checkbox" name="Checks.FileMonitoring.Enabled" value="true"
+                   class="form-check-input" id="fileMonEnabled" @(fm.Enabled ? "checked" : "") />
+            <label class="form-check-label" for="fileMonEnabled"><strong>Datei-/Protokollüberwachung aktivieren</strong></label>
+        </div>
+
+        <div id="fileMonConfig" style="@(fm.Enabled ? "" : "display:none;")">
+            <div class="mb-3">
+                <label class="form-label small mb-0" for="fileMonSchedule">Betriebszeiten (optional, z. B. <code>Mon-Fri 06:00-22:00</code>)</label>
+                <input type="text" name="Checks.FileMonitoring.Schedule" value="@fm.Schedule"
+                       class="form-control form-control-sm" id="fileMonSchedule" placeholder="Mon-Fri 06:00-22:00" />
+                <div class="form-text">Leer = immer aktiv. Außerhalb des Fensters wird in dem Zyklus nicht geprüft.</div>
+            </div>
+
+            <h6 class="mt-3"><i class="bi bi-folder2-open me-1"></i>Überwachte Verzeichnisse</h6>
+            <div id="fmDirList">
+                @for (var i = 0; i < fm.Directories.Count; i++)
+                {
+                    await DirRow(i.ToString(), fm.Directories[i]);
+                }
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary mb-3" onclick="addFmDir()">
+                <i class="bi bi-plus-circle me-1"></i>Verzeichnis hinzufügen
+            </button>
+
+            <h6 class="mt-2"><i class="bi bi-file-earmark-text me-1"></i>Log-Scans</h6>
+            <div id="fmLogList">
+                @for (var i = 0; i < fm.LogScans.Count; i++)
+                {
+                    await LogRow(i.ToString(), fm.LogScans[i]);
+                }
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addFmLog()">
+                <i class="bi bi-plus-circle me-1"></i>Log-Scan hinzufügen
+            </button>
+        </div>
+    </div>
+</div>
+
+<template id="fmDirRowTemplate">
+    @{ await DirRow("__INDEX__", null); }
+</template>
+<template id="fmLogRowTemplate">
+    @{ await LogRow("__INDEX__", null); }
+</template>
+
+<script>
+    document.getElementById('fileMonEnabled')?.addEventListener('change', function () {
+        document.getElementById('fileMonConfig').style.display = this.checked ? '' : 'none';
+    });
+
+    function addFmDir() {
+        var list = document.getElementById('fmDirList');
+        var idx = list.querySelectorAll('.fm-dir-item').length;
+        var html = document.getElementById('fmDirRowTemplate').innerHTML.replaceAll('__INDEX__', idx);
+        list.insertAdjacentHTML('beforeend', html);
+    }
+
+    function removeFmDir(btn) {
+        btn.closest('.fm-dir-item').remove();
+        reindexFm('fmDirList', '.fm-dir-item', 'Directories');
+    }
+
+    function addFmLog() {
+        var list = document.getElementById('fmLogList');
+        var idx = list.querySelectorAll('.fm-log-item').length;
+        var html = document.getElementById('fmLogRowTemplate').innerHTML.replaceAll('__INDEX__', idx);
+        list.insertAdjacentHTML('beforeend', html);
+    }
+
+    function removeFmLog(btn) {
+        btn.closest('.fm-log-item').remove();
+        reindexFm('fmLogList', '.fm-log-item', 'LogScans');
+    }
+
+    function reindexFm(listId, itemSel, collection) {
+        var re = new RegExp('Checks\\.FileMonitoring\\.' + collection + '\\[\\d+\\]', 'g');
+        document.getElementById(listId).querySelectorAll(itemSel).forEach(function (item, i) {
+            item.querySelectorAll('[name]').forEach(function (el) {
+                el.name = el.name.replace(re, 'Checks.FileMonitoring.' + collection + '[' + i + ']');
+            });
+        });
+    }
+</script>

@@ -1,0 +1,184 @@
+@model Minicon.SimpleAdmin.WebUI.Controllers.SettingsViewModel
+@{
+    ViewData["Title"] = "Einstellungen";
+}
+
+<div class="container-fluid">
+    <h1 class="mb-4">
+        <i class="bi bi-gear me-2"></i>Einstellungen
+    </h1>
+
+    <!-- Quick Navigation -->
+    <div class="row mb-4">
+        <div class="col-lg-4 col-md-6 mb-3">
+            <a asp-action="Features" class="card text-decoration-none h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-toggles text-primary fs-2 me-3"></i>
+                    <div>
+                        <h5 class="card-title mb-1">Feature-Toggles</h5>
+                        <p class="card-text text-muted small mb-0">Monitoring-Features aktivieren/deaktivieren</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-lg-4 col-md-6 mb-3">
+            <a asp-action="TimeProfiles" class="card text-decoration-none h-100">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-clock-history text-info fs-2 me-3"></i>
+                    <div>
+                        <h5 class="card-title mb-1">Zeitprofile</h5>
+                        <p class="card-text text-muted small mb-0">Schwellwerte nach Tageszeit anpassen</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <hr class="my-4" />
+
+    <h4 class="mb-3">Allgemeine Einstellungen</h4>
+
+    <form asp-action="Index" method="post">
+        @Html.AntiForgeryToken()
+
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-clock-history me-2"></i>History-Einstellungen
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Maximale Einträge</label>
+                            <input type="number" name="History.MaxEntries" value="@Model.History.MaxEntries"
+                                   class="form-control" min="10" max="10000" />
+                            <div class="form-text">
+                                Maximale Anzahl von History-Einträgen pro Service (FIFO-Rotation).
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Minimale aufeinanderfolgende Checks</label>
+                            <input type="number" name="History.MinConsecutiveChecks" value="@Model.History.MinConsecutiveChecks"
+                                   class="form-control" min="1" max="100" />
+                            <div class="form-text">
+                                Anzahl der erforderlichen aufeinanderfolgenden Checks bevor ein Statuswechsel bestätigt wird (Status-Smoothing zur Vermeidung von Fehlalarmen).
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-box-arrow-right me-2"></i>Output-Einstellungen
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">OK-Marker</label>
+                            <input type="text" name="Output.OkMarker" value="@Model.Output.OkMarker"
+                                   class="form-control" placeholder="##OK##" />
+                            <div class="form-text">
+                                Text-Marker der in der Ausgabe erscheint, wenn der Status OK ist.
+                            </div>
+                        </div>
+                        <hr />
+                        <h6 class="text-muted mb-3">
+                            <i class="bi bi-hdd-network me-1"></i>Zentrales Status-System
+                        </h6>
+                        <div class="mb-3">
+                            <label class="form-label">Zentraler Output-Pfad</label>
+                            <input type="text" name="Output.CentralOutputPath" value="@Model.Output.CentralOutputPath"
+                                   class="form-control" placeholder="\\fileserver\simpleadmin\status" />
+                            <div class="form-text">
+                                Pfad wohin Status-JSON-Dateien kopiert werden (UNC oder lokal). 
+                                Leer = keine zentrale Kopie.
+                            </div>
+                        </div>
+                        <div class="form-check form-switch mb-1">
+                            <input type="checkbox" name="Output.PullStatusOverHttp" value="true"
+                                   class="form-check-input" id="pullStatusOverHttp" @(Model.Output.PullStatusOverHttp ? "checked" : "") />
+                            <input type="hidden" name="Output.PullStatusOverHttp" value="false" />
+                            <label class="form-check-label" for="pullStatusOverHttp">Status aller Server per HTTP abrufen</label>
+                        </div>
+                        <div class="form-text mb-3">
+                            Die WebUI holt <code>{baseUrl}/status/{name}.status.json</code> jedes aktiven Servers aus der
+                            config.json — eine zentrale WebUI zeigt so alle Server ohne gemeinsamen Ordner.
+                            Nicht erreichbare Server erscheinen als „erreichbarkeit / Unbekannt“.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="bi bi-diagram-3 me-2"></i>Zentrale HTML-Generierung
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info small mb-3">
+                            <i class="bi bi-info-circle me-1"></i>
+                            <strong>Nur auf EINER Instanz aktivieren!</strong> Diese Instanz liest alle Status-JSONs 
+                            und generiert die zentrale Übersichtsseite.
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" name="Output.CentralGenerator.Enabled" value="true"
+                                   class="form-check-input" id="centralGeneratorEnabled"
+                                   @(Model.Output.CentralGenerator?.Enabled == true ? "checked" : "") />
+                            <input type="hidden" name="Output.CentralGenerator.Enabled" value="false" />
+                            <label class="form-check-label" for="centralGeneratorEnabled">
+                                <strong>Zentrale Generierung aktivieren</strong>
+                            </label>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Status-Quellpfad</label>
+                            <input type="text" name="Output.CentralGenerator.CentralStatusPath" 
+                                   value="@Model.Output.CentralGenerator?.CentralStatusPath"
+                                   class="form-control" placeholder="\\fileserver\simpleadmin\status" />
+                            <div class="form-text">
+                                Pfad von dem Status-JSONs aller Server gelesen werden.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">HTML-Ausgabepfad (optional)</label>
+                            <input type="text" name="Output.CentralGenerator.OutputPath" 
+                                   value="@Model.Output.CentralGenerator?.OutputPath"
+                                   class="form-control" placeholder="\\fileserver\simpleadmin\html" />
+                            <div class="form-text">
+                                Pfad für generierte HTML-Dateien. Leer = lokales wwwroot.
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Datei-Pattern</label>
+                                    <input type="text" name="Output.CentralGenerator.FilePattern" 
+                                           value="@(Model.Output.CentralGenerator?.FilePattern ?? "*.status.json")"
+                                           class="form-control" placeholder="*.status.json" />
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Stale-Schwelle (Minuten)</label>
+                                    <input type="number" name="Output.CentralGenerator.StaleThresholdMinutes" 
+                                           value="@(Model.Output.CentralGenerator?.StaleThresholdMinutes ?? 5)"
+                                           class="form-control" min="1" max="60" />
+                                    <div class="form-text">
+                                        Status älter als X Minuten → "Unknown"
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg me-1"></i>Einstellungen speichern
+            </button>
+            <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary">
+                <i class="bi bi-x-lg me-1"></i>Abbrechen
+            </a>
+        </div>
+    </form>
+</div>

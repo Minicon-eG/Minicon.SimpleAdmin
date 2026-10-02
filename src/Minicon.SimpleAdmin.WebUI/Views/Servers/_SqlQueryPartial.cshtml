@@ -1,0 +1,75 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.SqlQueryViewModel
+@{
+    var ci = Model.CheckIndex;
+    var qi = Model.Index;
+}
+<div class="card mb-2 sql-query-item" data-query-index="@qi">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+            <span class="fw-semibold small">Abfrage @(qi + 1)</span>
+            <button type="button" class="btn btn-sm btn-outline-danger py-0" onclick="removeSqlQuery(this)">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+        <div class="row g-2 mb-2">
+            <div class="col-md-4">
+                <label class="form-label small mb-1">Name</label>
+                <input type="text" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].Name" value="@Model.Name"
+                       class="form-control form-control-sm" placeholder="z.B. Offene Jobs" />
+            </div>
+        </div>
+        <div class="mb-2">
+            <label class="form-label small mb-1">SQL <span class="text-danger">*</span></label>
+            <div class="input-group input-group-sm">
+                <textarea name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].Sql"
+                          class="form-control form-control-sm font-monospace sql-query-text" rows="3"
+                          placeholder="SELECT COUNT(*) FROM ...">@Model.Sql</textarea>
+                <button type="button" class="btn btn-outline-info align-self-stretch"
+                        onclick="executeSqlQuery(this)"
+                        title="Abfrage ausführen">
+                    <i class="bi bi-play-fill me-1"></i>Ausführen
+                </button>
+            </div>
+            <div class="sql-query-result mt-1 small"></div>
+        </div>
+        <div class="row g-2 mb-2 align-items-center">
+            <div class="col-auto">
+                <div class="form-check form-switch">
+                    <input type="checkbox" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].HasRowCount" value="true"
+                           class="form-check-input" id="hasRowCount_@(ci)_@(qi)"
+                           @(Model.HasRowCount ? "checked" : "")
+                           onchange="this.closest('.sql-query-item').querySelector('.row-count-config').style.display = this.checked ? '' : 'none'" />
+                    <input type="hidden" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].HasRowCount" value="false" />
+                    <label class="form-check-label small" for="hasRowCount_@(ci)_@(qi)">Zeilenanzahl prüfen</label>
+                </div>
+            </div>
+            <div class="row-count-config col" style="@(Model.HasRowCount ? "" : "display:none;")">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text">Zeilen</span>
+                    <select name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].RowCountOperator"
+                            class="form-select form-select-sm" style="max-width:80px;">
+                        @foreach (var op in new[] { "==", "!=", ">", ">=", "<", "<=" })
+                        {
+                            var rcSel = Model.RowCountOperator == op ? "selected" : null;
+                            <option value="@op" selected="@rcSel">@op</option>
+                        }
+                    </select>
+                    <input type="number" name="Checks.SqlQueryChecks.Checks[@ci].Queries[@qi].RowCountExpected"
+                           value="@Model.RowCountExpected"
+                           class="form-control form-control-sm" style="max-width:80px;" min="0" />
+                </div>
+            </div>
+        </div>
+
+        <div class="sql-column-assertions">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small text-muted">Spalten-Assertions</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary py-0"
+                        onclick="addSqlColumnAssertion(this)">
+                    <i class="bi bi-plus me-1"></i>Spalte
+                </button>
+            </div>
+            <div class="sql-assertions-list"></div>
+        </div>
+    </div>
+</div>

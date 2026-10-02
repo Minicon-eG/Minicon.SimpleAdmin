@@ -1,0 +1,269 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ServerChecksViewModel
+@{
+    var delivery = Model?.EmailDelivery ?? new Minicon.SimpleAdmin.WebUI.ViewModels.EmailDeliveryViewModel();
+}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-envelope-check me-2"></i>E-Mail-Zustellung (Checker)</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
+                data-bs-target="#emailDeliveryHelp" aria-expanded="false">
+            <i class="bi bi-question-circle me-1"></i>Hilfe
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="collapse mb-3" id="emailDeliveryHelp">
+            <div class="card card-body bg-light">
+                <h6><i class="bi bi-info-circle me-1"></i>E-Mail-Zustellung (Checker-Rolle)</h6>
+                <p class="mb-2">
+                    Diese Instanz verbindet sich mit einem gemeinsamen IMAP-Postfach und prüft,
+                    ob Probe-E-Mails von allen konfigurierten Sendern pünktlich angekommen sind.
+                </p>
+                <p class="mb-2">
+                    <strong>Freshness-Prinzip:</strong> Pro Check wird die neueste E-Mail mit dem konfigurierten
+                    Betreff-Filter gesucht. Das Alter dieser E-Mail wird gegen Warning- und Critical-Schwellwerte geprüft.
+                </p>
+                <h6 class="mt-2">Löschen nach Prüfung</h6>
+                <p class="mb-0">
+                    Mit "Löschen nach Prüfung" werden gematchte E-Mails nach dem Check aus dem Postfach entfernt.
+                    Empfohlen, damit das Postfach nicht volläuft.
+                </p>
+            </div>
+        </div>
+
+        <div class="form-check form-switch mb-1">
+            <input type="checkbox" name="Checks.EmailDelivery.Enabled" value="true"
+                   class="form-check-input" id="emailDeliveryEnabled"
+                   @(delivery.Enabled ? "checked" : "") />
+            <label class="form-check-label" for="emailDeliveryEnabled">
+                <strong>E-Mail-Zustellungs-Check aktivieren</strong>
+            </label>
+            <div class="form-text">Dieser Server prüft das gemeinsame IMAP-Postfach auf eingehende Probe-E-Mails.</div>
+        </div>
+        <div id="emailDeliveryChecksRequiredError" class="text-danger small mb-2" style="display:none;">
+            <i class="bi bi-exclamation-circle me-1"></i>Check erforderlich — bitte mindestens einen Zustellungs-Check konfigurieren oder den Toggle deaktivieren.
+        </div>
+
+        <div id="emailDeliveryConfig" style="@(delivery.Enabled ? "" : "display:none;")">
+
+            <!-- IMAP connection settings -->
+            <div class="card mb-3 border-secondary-subtle">
+                <div class="card-header py-2 bg-secondary-subtle">
+                    <i class="bi bi-server me-2"></i>IMAP-Verbindung (gemeinsam für alle Checks)
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-5">
+                            <label class="form-label small mb-1">IMAP-Host <span class="text-danger">*</span></label>
+                            <input type="text" name="Checks.EmailDelivery.ImapHost"
+                                   value="@delivery.ImapHost" class="form-control form-control-sm imap-host"
+                                   placeholder="mail.example.com" id="imapHost" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Port</label>
+                            <input type="number" name="Checks.EmailDelivery.ImapPort"
+                                   value="@delivery.ImapPort" class="form-control form-control-sm imap-port"
+                                   min="1" max="65535" id="imapPort" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1" for="imapSslMode">SSL/TLS</label>
+                            <select name="Checks.EmailDelivery.ImapSslMode"
+                                    class="form-select form-select-sm imap-ssl-mode" id="imapSslMode">
+                                <option value="false" selected="@(delivery.ImapSslMode == "false")">Aus</option>
+                                <option value="true" selected="@(delivery.ImapSslMode == "true")">Ein</option>
+                                <option value="auto" selected="@(delivery.ImapSslMode == "auto")">Automatisch</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Ordner</label>
+                            <input type="text" name="Checks.EmailDelivery.ImapFolder"
+                                   value="@delivery.ImapFolder" class="form-control form-control-sm imap-folder"
+                                   placeholder="INBOX" id="imapFolder" />
+                        </div>
+                    </div>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Timeout (Sek.)</label>
+                            <input type="number" name="Checks.EmailDelivery.ImapTimeoutSeconds"
+                                   value="@delivery.ImapTimeoutSeconds" class="form-control form-control-sm"
+                                   placeholder="30" min="5" max="300" id="imapTimeout"
+                                   title="Verbindungs-Timeout in Sekunden. Leer = 30 s Standard." />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Benutzername</label>
+                            <input type="text" name="Checks.EmailDelivery.ImapUsername"
+                                   value="@delivery.ImapUsername" class="form-control form-control-sm imap-username"
+                                   placeholder="monitor@example.com" id="imapUsername" autocomplete="off" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Passwort</label>
+                            <div class="input-group input-group-sm">
+                                <input type="password" name="Checks.EmailDelivery.ImapPassword"
+                                       value="@delivery.ImapPassword" class="form-control form-control-sm imap-password"
+                                       placeholder="" id="imapPassword" autocomplete="new-password" />
+                                <button type="button" class="btn btn-outline-secondary"
+                                        onclick="toggleEmailPassword(this)" title="Anzeigen/Verbergen">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">&nbsp;</label>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-info" onclick="testImap()">
+                                    <i class="bi bi-envelope-open me-1"></i>IMAP testen
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="imapTestResult" class="mt-1 small"></div>
+                </div>
+            </div>
+
+            <!-- Delivery checks list -->
+            <h6 class="mb-2"><i class="bi bi-list-check me-2"></i>Zustellungs-Checks</h6>
+            <div class="table-responsive mb-2">
+                <div class="d-flex fw-semibold small text-muted px-2 mb-1" style="gap:.5rem;">
+                    <div style="flex:1.5">Name</div>
+                    <div style="flex:2.5">Beschreibung</div>
+                    <div style="flex:2.5">Betreff-Filter</div>
+                    <div style="flex:1">Warn.(Min.)</div>
+                    <div style="flex:1">Krit.(Min.)</div>
+                    <div style="flex:.8">Löschen</div>
+                    <div style="flex:.5"></div>
+                </div>
+            </div>
+            <div id="emailDeliveryChecksList">
+                @for (var ci = 0; ci < delivery.Checks.Count; ci++)
+                {
+                    @await Html.PartialAsync("_EmailDeliveryCheckEditorPartial", delivery.Checks[ci])
+                }
+            </div>
+
+            <div id="noEmailDeliveryChecks" class="text-muted small @(delivery.Checks.Count > 0 ? "d-none" : "")">
+                <i class="bi bi-info-circle me-1"></i>Keine Zustellungs-Checks konfiguriert.
+            </div>
+
+            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addEmailDeliveryCheck()">
+                <i class="bi bi-plus-circle me-1"></i>Check hinzufügen
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('emailDeliveryEnabled')?.addEventListener('change', function () {
+        document.getElementById('emailDeliveryConfig').style.display = this.checked ? '' : 'none';
+        if (!this.checked) document.getElementById('emailDeliveryChecksRequiredError').style.display = 'none';
+    });
+
+    document.getElementById('emailDeliveryEnabled')?.closest('form')?.addEventListener('submit', function (event) {
+        var toggle = document.getElementById('emailDeliveryEnabled');
+        if (toggle?.checked && document.querySelectorAll('.email-delivery-check-item').length === 0) {
+            document.getElementById('emailDeliveryChecksRequiredError').style.display = '';
+            event.preventDefault();
+        }
+    }, true);
+
+    var _emailDeliveryCheckIndex = @delivery.Checks.Count;
+
+    function toggleEmailPassword(btn) {
+        var input = btn.previousElementSibling;
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.innerHTML = '<i class="bi bi-eye-slash"></i>';
+        } else {
+            input.type = 'password';
+            btn.innerHTML = '<i class="bi bi-eye"></i>';
+        }
+    }
+
+    function addEmailDeliveryCheck() {
+        fetch('@Url.Action("AddEmailDeliveryCheck", "Servers")', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+            },
+            body: 'checkIndex=' + _emailDeliveryCheckIndex
+        })
+        .then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+        })
+        .then(html => {
+            document.getElementById('emailDeliveryChecksList').insertAdjacentHTML('beforeend', html);
+            document.getElementById('noEmailDeliveryChecks').classList.add('d-none');
+            document.getElementById('emailDeliveryChecksRequiredError').style.display = 'none';
+            _emailDeliveryCheckIndex++;
+        })
+        .catch(function(err) {
+            document.getElementById('emailDeliveryChecksRequiredError').textContent =
+                'Fehler beim Laden der Check-Vorlage: ' + err.message + '. Bitte Seite neu laden.';
+            document.getElementById('emailDeliveryChecksRequiredError').style.display = '';
+        });
+    }
+
+    function removeEmailDeliveryCheck(btn) {
+        btn.closest('.email-delivery-check-item').remove();
+        reindexDeliveryChecks();
+        if (document.querySelectorAll('.email-delivery-check-item').length === 0) {
+            document.getElementById('noEmailDeliveryChecks').classList.remove('d-none');
+        }
+    }
+
+    function reindexDeliveryChecks() {
+        document.querySelectorAll('.email-delivery-check-item').forEach(function (item, ci) {
+            item.querySelectorAll('[name]').forEach(function (el) {
+                el.name = el.name.replace(/EmailDelivery\.Checks\[\d+\]/, 'EmailDelivery.Checks[' + ci + ']');
+            });
+            item.querySelectorAll('[id]').forEach(function (el) {
+                el.id = el.id.replace(/delAfterCheck_\d+/, 'delAfterCheck_' + ci);
+            });
+            item.querySelectorAll('[for]').forEach(function (el) {
+                el.htmlFor = el.htmlFor.replace(/delAfterCheck_\d+/, 'delAfterCheck_' + ci);
+            });
+            item.setAttribute('data-check-index', ci);
+        });
+        _emailDeliveryCheckIndex = document.querySelectorAll('.email-delivery-check-item').length;
+    }
+
+    function testImap() {
+        var host = document.getElementById('imapHost')?.value ?? '';
+        var port = parseInt(document.getElementById('imapPort')?.value ?? '993', 10);
+        var sslMode = document.getElementById('imapSslMode')?.value ?? 'true';
+        var username = document.getElementById('imapUsername')?.value ?? '';
+        var password = document.getElementById('imapPassword')?.value ?? '';
+        var folder = document.getElementById('imapFolder')?.value || 'INBOX';
+        var resultDiv = document.getElementById('imapTestResult');
+        var btn = document.querySelector('[onclick="testImap()"]');
+
+        if (!host) { resultDiv.innerHTML = '<span class="text-warning">IMAP-Host erforderlich.</span>'; return; }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Teste...';
+        resultDiv.innerHTML = '';
+
+        fetch('@Url.Content("~/api/emailtest/imap")', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host, port, sslMode, username, password, folder })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                var msg = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Verbunden — '
+                    + data.messageCount + ' Nachricht(en)';
+                if (data.newestMessageDate)
+                    msg += ', neueste: ' + new Date(data.newestMessageDate).toLocaleString('de-DE');
+                msg += '</span>';
+                resultDiv.innerHTML = msg;
+            } else {
+                resultDiv.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>'
+                    + (data.error || 'Verbindung fehlgeschlagen') + '</span>';
+            }
+        })
+        .catch(() => { resultDiv.innerHTML = '<span class="text-danger">Anfrage fehlgeschlagen — Bitte Netzwerkverbindung prüfen.</span>'; })
+        .finally(() => { btn.disabled = false; btn.innerHTML = '<i class="bi bi-envelope-open me-1"></i>IMAP testen'; });
+    }
+</script>

@@ -1,0 +1,346 @@
+/* Corporate Design Colors */
+:root {
+    --brand-primary: #003064;
+    --brand-accent: #009ee0;
+    --brand-gray: #acacac;
+    --brand-danger: #e2001a;
+    --brand-primary-light: #004080;
+    --brand-accent-dark: #0080b8;
+
+    /* Bootstrap overrides */
+    --bs-primary: var(--brand-primary);
+    --bs-primary-rgb: 0, 48, 100;
+    --bs-info: var(--brand-accent);
+    --bs-info-rgb: 0, 158, 224;
+    --bs-danger: var(--brand-danger);
+    --bs-danger-rgb: 226, 0, 26;
+    --bs-link-color: var(--brand-accent);
+    --bs-link-hover-color: var(--brand-accent-dark);
+}
+
+html {
+    font-size: 14px;
+}
+
+@media (min-width: 768px) {
+    html {
+        font-size: 16px;
+    }
+}
+
+html {
+    position: relative;
+    min-height: 100%;
+}
+
+body {
+    margin-bottom: 60px;
+}
+
+/* Navbar with brand primary */
+.navbar.bg-primary,
+.bg-primary {
+    background-color: var(--brand-primary) !important;
+}
+
+.navbar-dark .navbar-brand,
+.navbar-dark .nav-link {
+    color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.navbar-dark .nav-link:hover,
+.navbar-dark .nav-link:focus {
+    color: var(--brand-accent) !important;
+}
+
+.navbar-dark .nav-link.active {
+    color: #fff !important;
+    background-color: rgba(0, 158, 224, 0.2);
+    border-radius: 4px;
+}
+
+/* Primary buttons */
+.btn-primary {
+    background-color: var(--brand-primary);
+    border-color: var(--brand-primary);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+    background-color: var(--brand-primary-light);
+    border-color: var(--brand-primary-light);
+}
+
+.btn-primary:active,
+.btn-primary.active {
+    background-color: var(--brand-primary) !important;
+    border-color: var(--brand-primary) !important;
+}
+
+.btn-outline-primary {
+    color: var(--brand-primary);
+    border-color: var(--brand-primary);
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus {
+    background-color: var(--brand-primary);
+    border-color: var(--brand-primary);
+    color: #fff;
+}
+
+/* Info/Accent buttons - Sonnenblau */
+.btn-info {
+    background-color: var(--brand-accent);
+    border-color: var(--brand-accent);
+    color: #fff;
+}
+
+.btn-info:hover,
+.btn-info:focus {
+    background-color: var(--brand-accent-dark);
+    border-color: var(--brand-accent-dark);
+    color: #fff;
+}
+
+.btn-outline-info {
+    color: var(--brand-accent);
+    border-color: var(--brand-accent);
+}
+
+.btn-outline-info:hover,
+.btn-outline-info:focus {
+    background-color: var(--brand-accent);
+    border-color: var(--brand-accent);
+    color: #fff;
+}
+
+/* Danger buttons - brand danger */
+.btn-danger {
+    background-color: var(--brand-danger);
+    border-color: var(--brand-danger);
+}
+
+.btn-danger:hover,
+.btn-danger:focus {
+    background-color: #c50017;
+    border-color: #c50017;
+}
+
+.btn-outline-danger {
+    color: var(--brand-danger);
+    border-color: var(--brand-danger);
+}
+
+.btn-outline-danger:hover,
+.btn-outline-danger:focus {
+    background-color: var(--brand-danger);
+    border-color: var(--brand-danger);
+    color: #fff;
+}
+
+/* Badges */
+.badge.bg-primary {
+    background-color: var(--brand-primary) !important;
+}
+
+.badge.bg-info {
+    background-color: var(--brand-accent) !important;
+    color: #fff !important;
+}
+
+.badge.bg-danger {
+    background-color: var(--brand-danger) !important;
+}
+
+/* Links */
+a {
+    color: var(--brand-accent);
+}
+
+a:hover {
+    color: var(--brand-accent-dark);
+}
+
+/* Form focus states */
+.btn:focus,
+.btn:active:focus,
+.btn-link.nav-link:focus,
+.form-control:focus,
+.form-check-input:focus {
+    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem var(--brand-accent);
+}
+
+.form-control:focus {
+    border-color: var(--brand-accent);
+}
+
+.form-select:focus {
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 0.25rem rgba(0, 158, 224, 0.25);
+}
+
+.form-check-input:checked {
+    background-color: var(--brand-primary);
+    border-color: var(--brand-primary);
+}
+
+/* Form floating labels */
+.form-floating > .form-control-plaintext::placeholder,
+.form-floating > .form-control::placeholder {
+    color: var(--bs-secondary-color);
+    text-align: end;
+}
+
+.form-floating > .form-control-plaintext:focus::placeholder,
+.form-floating > .form-control:focus::placeholder {
+    text-align: start;
+}
+
+/* Card headers with brand colors */
+.card-header.bg-primary {
+    background-color: var(--brand-primary) !important;
+}
+
+/* Tables */
+.table-primary {
+    --bs-table-bg: rgba(0, 48, 100, 0.1);
+    --bs-table-border-color: rgba(0, 48, 100, 0.2);
+}
+
+/* Progress bars */
+.progress-bar {
+    background-color: var(--brand-accent);
+}
+
+.progress-bar.bg-primary {
+    background-color: var(--brand-primary) !important;
+}
+
+.progress-bar.bg-info {
+    background-color: var(--brand-accent) !important;
+}
+
+.progress-bar.bg-danger {
+    background-color: var(--brand-danger) !important;
+}
+
+/* Alerts */
+.alert-primary {
+    background-color: rgba(0, 48, 100, 0.1);
+    border-color: rgba(0, 48, 100, 0.2);
+    color: var(--brand-primary);
+}
+
+.alert-info {
+    background-color: rgba(0, 158, 224, 0.1);
+    border-color: rgba(0, 158, 224, 0.2);
+    color: var(--brand-primary);
+}
+
+.alert-danger {
+    background-color: rgba(226, 0, 26, 0.1);
+    border-color: rgba(226, 0, 26, 0.2);
+    color: var(--brand-danger);
+}
+
+/* Pagination */
+.page-link {
+    color: var(--brand-accent);
+}
+
+.page-link:hover {
+    color: var(--brand-accent-dark);
+}
+
+.page-item.active .page-link {
+    background-color: var(--brand-primary);
+    border-color: var(--brand-primary);
+}
+
+/* Nav tabs and pills */
+.nav-link {
+    color: var(--brand-accent);
+}
+
+.nav-link:hover,
+.nav-link:focus {
+    color: var(--brand-accent-dark);
+}
+
+.nav-pills .nav-link.active {
+    background-color: var(--brand-primary);
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--brand-primary);
+    border-bottom-color: var(--brand-primary);
+}
+
+/* List group */
+.list-group-item.active {
+    background-color: var(--brand-primary);
+    border-color: var(--brand-primary);
+}
+
+/* Dropdown */
+.dropdown-item.active,
+.dropdown-item:active {
+    background-color: var(--brand-primary);
+}
+
+/* Text colors */
+.text-primary {
+    color: var(--brand-primary) !important;
+}
+
+.text-info {
+    color: var(--brand-accent) !important;
+}
+
+.text-danger {
+    color: var(--brand-danger) !important;
+}
+
+/* Border colors */
+.border-primary {
+    border-color: var(--brand-primary) !important;
+}
+
+.border-info {
+    border-color: var(--brand-accent) !important;
+}
+
+.border-danger {
+    border-color: var(--brand-danger) !important;
+}
+
+/* Environment colors for drag & drop UI */
+.env-header-production {
+    background-color: var(--brand-danger) !important;
+}
+
+.env-header-ref {
+    background-color: #fd7e14 !important;
+}
+
+.env-header-development {
+    background-color: #198754 !important;
+}
+
+/* Server items in drop zones */
+.drop-zone .server-item {
+    background: var(--brand-accent);
+    color: white;
+    border-color: var(--brand-accent);
+}
+
+.drop-zone .server-item:hover {
+    background: var(--brand-accent-dark);
+}
+
+/* Footer styling */
+footer {
+    background-color: #f8f9fa;
+    border-top: 2px solid var(--brand-primary) !important;
+}

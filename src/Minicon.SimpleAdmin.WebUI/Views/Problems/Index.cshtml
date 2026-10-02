@@ -1,0 +1,295 @@
+@model IEnumerable<(string ServerId, Minicon.SimpleAdmin.Models.State.ActiveProblem Problem)>
+
+@{
+    ViewData["Title"] = "Probleme";
+}
+
+<div class="row">
+    <div class="col">
+        <h1><i class="bi bi-exclamation-triangle me-2"></i>Aktive Probleme</h1>
+        <p class="text-muted">Übersicht über alle aktiven Probleme</p>
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-outline-secondary" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
+        </button>
+    </div>
+</div>
+
+@{
+    var criticalCount = Model.Count(p => p.Problem.Severity == Minicon.SimpleAdmin.Models.State.ProblemSeverity.Critical);
+    var warningCount = Model.Count(p => p.Problem.Severity == Minicon.SimpleAdmin.Models.State.ProblemSeverity.Warning);
+}
+
+@if (criticalCount > 0 || warningCount > 0)
+{
+    <div class="row mb-3">
+        @if (criticalCount > 0)
+        {
+            <div class="col-auto">
+                <div class="card text-white bg-danger" style="min-width: 120px;">
+                    <div class="card-body text-center">
+                        <h2 class="mb-0">@criticalCount</h2>
+                        <small>Critical</small>
+                    </div>
+                </div>
+            </div>
+        }
+        @if (warningCount > 0)
+        {
+            <div class="col-auto">
+                <div class="card text-white bg-warning" style="min-width: 120px;">
+                    <div class="card-body text-center">
+                        <h2 class="mb-0">@warningCount</h2>
+                        <small>Warning</small>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>Server</th>
+                <th>Problem</th>
+                <th>Schweregrad</th>
+                <th>Status</th>
+                <th>Erstmals</th>
+                <th>Zuletzt</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var problem in Model)
+            {
+                var severityClass = problem.Problem.Severity switch
+                {
+                    Minicon.SimpleAdmin.Models.State.ProblemSeverity.Critical => "table-danger",
+                    Minicon.SimpleAdmin.Models.State.ProblemSeverity.Warning => "table-warning",
+                    _ => ""
+                };
+                <tr class="@severityClass">
+                    <td>
+                        <strong>@problem.ServerId</strong>
+                    </td>
+                    <td>
+                        <strong>@problem.Problem.Type: @problem.Problem.Source</strong>
+                        @if (!string.IsNullOrEmpty(problem.Problem.Message))
+                        {
+                            <br />
+                            <small class="text-muted">@problem.Problem.Message</small>
+                        }
+                        @if (!string.IsNullOrEmpty(problem.Problem.WikiUrl) || problem.Problem.RemediationSteps.Count > 0)
+                        {
+                            <br />
+                            @if (!string.IsNullOrEmpty(problem.Problem.WikiUrl))
+                            {
+                                <a href="@problem.Problem.WikiUrl" target="_blank" rel="noopener" class="small">
+                                    <i class="bi bi-book me-1"></i>Lösungsanleitung
+                                </a>
+                            }
+                            @if (problem.Problem.RemediationSteps.Count > 0)
+                            {
+                                <ol class="small text-muted mb-0 mt-1">
+                                    @foreach (var step in problem.Problem.RemediationSteps)
+                                    {
+                                        <li>@step</li>
+                                    }
+                                </ol>
+                            }
+                        }
+                    </td>
+                    <td>
+                        @{
+                            var badgeClass = problem.Problem.Severity switch
+                            {
+                                Minicon.SimpleAdmin.Models.State.ProblemSeverity.Critical => "bg-danger",
+                                Minicon.SimpleAdmin.Models.State.ProblemSeverity.Warning => "bg-warning text-dark",
+                                _ => "bg-secondary"
+                            };
+                        }
+                        <span class="badge @badgeClass">@problem.Problem.Severity</span>
+                    </td>
+                    <td>
+                        @if (problem.Problem.Acknowledged)
+                        {
+                            <span class="badge bg-info">Acknowledged</span>
+                            <div class="small text-muted mt-1">
+                                @(problem.Problem.AcknowledgeExpiresAt.HasValue
+                                    ? "bis " + problem.Problem.AcknowledgeExpiresAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                    : "unbegrenzt")
+                                @if (!string.IsNullOrEmpty(problem.Problem.AcknowledgedBy))
+                                {
+                                    <span> · @problem.Problem.AcknowledgedBy</span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Unacknowledged</span>
+                        }
+                    </td>
+                    <td>
+                        <small>@problem.Problem.FirstOccurrence.ToString("yyyy-MM-dd HH:mm")</small>
+                    </td>
+                    <td>
+                        <small>@problem.Problem.LastOccurrence.ToString("yyyy-MM-dd HH:mm")</small>
+                    </td>
+                    <td>
+                        @if (!problem.Problem.Acknowledged)
+                        {
+                            <button class="btn btn-sm btn-outline-primary" onclick="acknowledgeProblem('@problem.Problem.Id', '@problem.ServerId')">
+                                <i class="bi bi-check-circle me-1"></i>Acknowledge
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-danger" onclick="cancelAcknowledge('@problem.Problem.AcknowledgeId')"
+                                    title="Quittierung aufheben — das Problem wird wieder gemeldet">
+                                <i class="bi bi-x-circle me-1"></i>Aufheben
+                            </button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle me-2"></i>Keine aktiven Probleme vorhanden. Alle Systeme sind funktionsfähig.
+    </div>
+}
+
+<!-- Acknowledge Modal -->
+<div class="modal fade" id="acknowledgeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Problem bestätigen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="acknowledgeProblemId" />
+                <input type="hidden" id="acknowledgeServerId" />
+                <div class="mb-3">
+                    <label for="acknowledgeDuration" class="form-label">Dauer</label>
+                    <select class="form-select" id="acknowledgeDuration" onchange="toggleAcknowledgeDate()">
+                        <option value="30">30 Minuten</option>
+                        <option value="60" selected>1 Stunde</option>
+                        <option value="240">4 Stunden</option>
+                        <option value="480">8 Stunden</option>
+                        <option value="1440">24 Stunden</option>
+                        <option value="10080">7 Tage</option>
+                        <option value="43200">30 Tage</option>
+                        <option value="date">Bis Datum …</option>
+                        <option value="0">Unbegrenzt (bis aufgehoben)</option>
+                    </select>
+                </div>
+                <div class="mb-3 d-none" id="acknowledgeDateGroup">
+                    <label for="acknowledgeDate" class="form-label">Bis</label>
+                    <input type="datetime-local" class="form-control" id="acknowledgeDate" />
+                </div>
+                <div class="mb-3">
+                    <label for="acknowledgeComment" class="form-label">Kommentar</label>
+                    <textarea class="form-control" id="acknowledgeComment" rows="3" placeholder="Grund für die Bestätigung..."></textarea>
+                </div>
+                <div class="form-text">
+                    Die Quittierung gilt bis zum Ablauf bzw. bis sie unter „Probleme“ aufgehoben wird.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary" onclick="submitAcknowledge()">Bestätigen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let acknowledgeModal;
+        const acknowledgeApiUrl = '@Url.Content("~/api/acknowledges")';
+
+        document.addEventListener('DOMContentLoaded', function() {
+            acknowledgeModal = new bootstrap.Modal(document.getElementById('acknowledgeModal'));
+
+            // Deep-link support (notifier mail): open the acknowledge dialog pre-filled
+            // from ?ackServer=<serverId>&ackProblem=<problemId>.
+            const params = new URLSearchParams(window.location.search);
+            const ackServer = params.get('ackServer');
+            const ackProblem = params.get('ackProblem');
+            if (ackServer && ackProblem) {
+                acknowledgeProblem(ackProblem, ackServer);
+            }
+        });
+
+        function acknowledgeProblem(problemId, serverId) {
+            document.getElementById('acknowledgeProblemId').value = problemId;
+            document.getElementById('acknowledgeServerId').value = serverId;
+            acknowledgeModal.show();
+        }
+
+        function toggleAcknowledgeDate() {
+            const isDate = document.getElementById('acknowledgeDuration').value === 'date';
+            document.getElementById('acknowledgeDateGroup').classList.toggle('d-none', !isDate);
+        }
+
+        async function cancelAcknowledge(acknowledgeId) {
+            if (!acknowledgeId || !confirm('Quittierung aufheben? Das Problem wird danach wieder gemeldet.')) return;
+            const response = await fetch(acknowledgeApiUrl + '/' + encodeURIComponent(acknowledgeId), { method: 'DELETE' });
+            if (response.ok) location.reload();
+            else alert('Fehler beim Aufheben der Quittierung');
+        }
+
+        async function submitAcknowledge() {
+            const problemId = document.getElementById('acknowledgeProblemId').value;
+            const serverId = document.getElementById('acknowledgeServerId').value;
+            const choice = document.getElementById('acknowledgeDuration').value;
+            let duration = 0;
+            let expiresAt = null;
+            if (choice === 'date') {
+                const value = document.getElementById('acknowledgeDate').value;
+                if (!value) { alert('Bitte ein Datum wählen'); return; }
+                expiresAt = new Date(value).toISOString();
+            } else {
+                duration = parseInt(choice);
+            }
+            const comment = document.getElementById('acknowledgeComment').value;
+
+            try {
+                const response = await fetch(acknowledgeApiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        serverId: serverId,
+                        problemId: problemId,
+                        acknowledgedBy: 'WebUI User',
+                        comment: comment,
+                        durationMinutes: duration,
+                        expiresAt: expiresAt,
+                        suppressAlerts: true
+                    })
+                });
+
+                if (response.ok) {
+                    acknowledgeModal.hide();
+                    location.reload();
+                } else {
+                    const err = await response.json().catch(() => ({}));
+                    alert('Fehler beim Bestätigen des Problems' + (err.message ? ': ' + err.message : ''));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Fehler beim Bestätigen des Problems');
+            }
+        }
+    </script>
+}

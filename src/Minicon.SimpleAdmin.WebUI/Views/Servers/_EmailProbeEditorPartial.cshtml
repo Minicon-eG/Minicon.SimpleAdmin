@@ -1,0 +1,120 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.EmailProbeEditorViewModel
+@{
+    var i = Model?.Index ?? 0;
+}
+
+<div class="card mb-3 email-probe-item" data-probe-index="@i">
+    <div class="card-header d-flex justify-content-between align-items-center bg-light py-2">
+        <span><i class="bi bi-envelope-plus me-2 text-primary"></i><span class="email-probe-name fw-semibold">@(Model?.Name ?? "Neu")</span></span>
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeEmailProbe(this)">
+            <i class="bi bi-trash"></i> Entfernen
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="row g-2 mb-3">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Name (Slug) <span class="text-danger">*</span></label>
+                <input type="text" name="Checks.EmailProbes.Probes[@i].Name"
+                       value="@Model?.Name" class="form-control form-control-sm font-monospace"
+                       placeholder="seg1-relay"
+                       oninput="this.closest('.email-probe-item').querySelector('.email-probe-name').textContent = this.value || 'Neu'" />
+                <div class="form-text">Nur Buchstaben, Zahlen, -, _</div>
+            </div>
+            <div class="col-md-9">
+                <label class="form-label small mb-1">Beschreibung</label>
+                <input type="text" name="Checks.EmailProbes.Probes[@i].Description"
+                       value="@Model?.Description" class="form-control form-control-sm"
+                       placeholder="Segment 1 SMTP-Relay Test" />
+            </div>
+        </div>
+
+        <div class="row g-2 mb-3">
+            <div class="col-md-4">
+                <label class="form-label small mb-1">SMTP-Host <span class="text-danger">*</span></label>
+                <input type="text" name="Checks.EmailProbes.Probes[@i].SmtpHost"
+                       value="@Model?.SmtpHost" class="form-control form-control-sm probe-smtp-host"
+                       placeholder="mailrelay.seg1.example.com" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Port</label>
+                <input type="number" name="Checks.EmailProbes.Probes[@i].SmtpPort"
+                       value="@(Model?.SmtpPort ?? 25)" class="form-control form-control-sm probe-smtp-port"
+                       min="1" max="65535" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1" for="smtpSslMode_@i">SSL/TLS</label>
+                <select name="Checks.EmailProbes.Probes[@i].SmtpSslMode"
+                        class="form-select form-select-sm probe-smtp-ssl-mode" id="smtpSslMode_@i">
+                    <option value="false" selected="@(Model?.SmtpSslMode == "false")">Aus</option>
+                    <option value="true" selected="@(Model?.SmtpSslMode == "true")">Ein</option>
+                    <option value="auto" selected="@(Model?.SmtpSslMode == "auto")">Automatisch</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-1">Absender (From) <span class="text-danger">*</span></label>
+                <input type="text" name="Checks.EmailProbes.Probes[@i].SmtpFrom"
+                       value="@Model?.SmtpFrom" class="form-control form-control-sm probe-smtp-from"
+                       placeholder="monitor@server.example.com" />
+            </div>
+        </div>
+
+        <div class="row g-2 mb-3">
+            <div class="col-md-4">
+                <label class="form-label small mb-1">Empfänger (To) <span class="text-danger">*</span></label>
+                <input type="text" name="Checks.EmailProbes.Probes[@i].SmtpTo"
+                       value="@Model?.SmtpTo" class="form-control form-control-sm probe-smtp-to"
+                       placeholder="monitoring-mailbox@example.com" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-1">Benutzername</label>
+                <input type="text" name="Checks.EmailProbes.Probes[@i].SmtpUsername"
+                       value="@Model?.SmtpUsername" class="form-control form-control-sm probe-smtp-username"
+                       placeholder="(optional)" autocomplete="off" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-1">Passwort</label>
+                <div class="input-group input-group-sm">
+                    <input type="password" name="Checks.EmailProbes.Probes[@i].SmtpPassword"
+                           value="@Model?.SmtpPassword" class="form-control form-control-sm probe-smtp-password"
+                           placeholder="(optional)" autocomplete="new-password" />
+                    <button type="button" class="btn btn-outline-secondary"
+                            onclick="toggleEmailPassword(this)" title="Anzeigen/Verbergen">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small mb-1">E-Mail-Betreff <span class="text-danger">*</span></label>
+                <input type="text" name="Checks.EmailProbes.Probes[@i].Subject"
+                       value="@Model?.Subject" class="form-control form-control-sm probe-smtp-subject"
+                       placeholder="[SA-Probe] seg1-relay" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Intervall (Min.)</label>
+                <input type="number" name="Checks.EmailProbes.Probes[@i].SendIntervalMinutes"
+                       value="@(Model?.SendIntervalMinutes ?? 15)" class="form-control form-control-sm"
+                       min="1" max="1440" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Timeout (Sek.)</label>
+                <input type="number" name="Checks.EmailProbes.Probes[@i].SmtpTimeoutSeconds"
+                       value="@Model?.SmtpTimeoutSeconds" class="form-control form-control-sm"
+                       placeholder="30" min="5" max="300"
+                       title="Verbindungs-Timeout in Sekunden. Leer = 30 s Standard." />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-1">&nbsp;</label>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-info" onclick="testSmtp(this)">
+                        <i class="bi bi-envelope-check me-1"></i>SMTP testen
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="probe-smtp-result mt-1 small"></div>
+        <div class="form-text mt-1">Betreff muss dem SubjectFilter im Checker entsprechen.</div>
+    </div>
+</div>

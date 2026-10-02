@@ -1,0 +1,96 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ServerChecksViewModel
+@{
+    var bt = Model.BizTalk;
+    string[] modes = new[] { "all", "list", "none" };
+}
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="bi bi-gear-wide-connected me-2"></i><strong>BizTalk-Überwachung</strong>
+    </div>
+    <div class="card-body">
+        <div class="form-check form-switch mb-3">
+            <input type="checkbox" name="Checks.BizTalk.Enabled" value="true" class="form-check-input" id="biztalkEnabled" @(bt.Enabled ? "checked" : "") />
+            <input type="hidden" name="Checks.BizTalk.Enabled" value="false" />
+            <label class="form-check-label" for="biztalkEnabled">Aktiviert</label>
+        </div>
+        <p class="text-muted small mb-3">
+            Liest den BizTalk-Zustand über die Management-API (integrierte Windows-Authentifizierung über das
+            Dienstkonto). Globaler Toggle + Suspended-Schwellwerte unter Einstellungen → Feature-Toggles.
+        </p>
+        <div class="row g-2 mb-3">
+            <div class="col-md-8">
+                <label class="form-label small">Management-API Basis-URL</label>
+                <input type="text" name="Checks.BizTalk.BaseUrl" value="@bt.BaseUrl"
+                       class="form-control form-control-sm font-monospace"
+                       placeholder="http://localhost/BizTalkManagementService" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Timeout (Sek.)</label>
+                <input type="number" name="Checks.BizTalk.TimeoutSeconds" value="@bt.TimeoutSeconds"
+                       class="form-control form-control-sm" min="1" placeholder="30" />
+            </div>
+        </div>
+        <hr />
+        <h6 class="small text-muted">Überwachte Artefakte (Modus je Art)</h6>
+        <div class="row g-2 mb-2">
+            <div class="col-md-3">
+                <label class="form-label small">Anwendungen</label>
+                <select name="Checks.BizTalk.ApplicationsMonitor" class="form-select form-select-sm">
+                    @foreach (var m in modes) { <option value="@m" selected="@(string.Equals(bt.ApplicationsMonitor, m, StringComparison.OrdinalIgnoreCase))">@m</option> }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Orchestrierungen</label>
+                <select name="Checks.BizTalk.OrchestrationsMonitor" class="form-select form-select-sm">
+                    @foreach (var m in modes) { <option value="@m" selected="@(string.Equals(bt.OrchestrationsMonitor, m, StringComparison.OrdinalIgnoreCase))">@m</option> }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Sendeports</label>
+                <select name="Checks.BizTalk.SendPortsMonitor" class="form-select form-select-sm">
+                    @foreach (var m in modes) { <option value="@m" selected="@(string.Equals(bt.SendPortsMonitor, m, StringComparison.OrdinalIgnoreCase))">@m</option> }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Empfangsorte</label>
+                <select name="Checks.BizTalk.ReceiveLocationsMonitor" class="form-select form-select-sm">
+                    @foreach (var m in modes) { <option value="@m" selected="@(string.Equals(bt.ReceiveLocationsMonitor, m, StringComparison.OrdinalIgnoreCase))">@m</option> }
+                </select>
+            </div>
+        </div>
+        <div class="row g-2 mb-3">
+            <div class="col-md-6">
+                <label class="form-label small">Anwendungen ausschließen (eine pro Zeile)</label>
+                <textarea name="Checks.BizTalk.ApplicationsExclude" rows="2"
+                          class="form-control form-control-sm font-monospace"
+                          placeholder="BizTalk.System">@bt.ApplicationsExclude</textarea>
+                <div class="form-text">Bei Modus „all". System-Anwendungen werden ohnehin übersprungen.</div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small">Deaktivierter Empfangsort =</label>
+                <select name="Checks.BizTalk.ReceiveLocationsDisabledSeverity" class="form-select form-select-sm">
+                    <option value="Warning" selected="@(string.Equals(bt.ReceiveLocationsDisabledSeverity, "Warning", StringComparison.OrdinalIgnoreCase))">Warning</option>
+                    <option value="Critical" selected="@(string.Equals(bt.ReceiveLocationsDisabledSeverity, "Critical", StringComparison.OrdinalIgnoreCase))">Critical</option>
+                </select>
+            </div>
+        </div>
+        <hr />
+        <div class="form-check form-switch mb-2">
+            <input type="checkbox" name="Checks.BizTalk.SuspendedEnabled" value="true" class="form-check-input" id="biztalkSuspended" @(bt.SuspendedEnabled ? "checked" : "") />
+            <input type="hidden" name="Checks.BizTalk.SuspendedEnabled" value="false" />
+            <label class="form-check-label" for="biztalkSuspended">Suspendierte Instanzen überwachen</label>
+        </div>
+        <div class="row g-2">
+            <div class="col-md-6">
+                <label class="form-label small">Warning ab (leer = globaler Standard)</label>
+                <input type="number" name="Checks.BizTalk.SuspendedWarning" value="@bt.SuspendedWarning"
+                       class="form-control form-control-sm" min="1" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small">Critical ab (leer = globaler Standard)</label>
+                <input type="number" name="Checks.BizTalk.SuspendedCritical" value="@bt.SuspendedCritical"
+                       class="form-control form-control-sm" min="1" />
+            </div>
+        </div>
+    </div>
+</div>

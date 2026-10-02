@@ -1,0 +1,142 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ServerViewModel
+
+<div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+<!-- Basic Server Info -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-info-circle me-2"></i>Grundeinstellungen
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label asp-for="Name" class="form-label"></label>
+                <input asp-for="Name" class="form-control" placeholder="z.B. server01" />
+                <span asp-validation-for="Name" class="text-danger"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="BaseUrl" class="form-label"></label>
+                <input asp-for="BaseUrl" class="form-control" placeholder="http://servername" />
+                <span asp-validation-for="BaseUrl" class="text-danger"></span>
+            </div>
+            <div class="col-12">
+                <label asp-for="Description" class="form-label"></label>
+                <input asp-for="Description" class="form-control" placeholder="Optionale Beschreibung" />
+                <span asp-validation-for="Description" class="text-danger"></span>
+            </div>
+            <div class="col-12">
+                <div class="form-check">
+                    <input asp-for="Active" class="form-check-input" type="checkbox" />
+                    <label asp-for="Active" class="form-check-label"></label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Service Types -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-gear me-2"></i>Service-Typen</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addServiceType()">
+            <i class="bi bi-plus-circle me-1"></i>Service-Typ hinzufügen
+        </button>
+    </div>
+    <div class="card-body">
+        <div id="serviceTypes">
+            @if (Model.ServiceTypes != null)
+            {
+                for (var i = 0; i < Model.ServiceTypes.Count; i++)
+                {
+                    @await Html.PartialAsync("_ServiceTypePartial", Model.ServiceTypes[i])
+                }
+            }
+        </div>
+        <div id="noServiceTypes" class="text-muted @(Model.ServiceTypes?.Any() == true ? "d-none" : "")">
+            <i class="bi bi-info-circle me-1"></i>Keine Service-Typen definiert. Klicken Sie auf "Service-Typ hinzufügen".
+        </div>
+        <div id="noServiceTypeWarning" class="alert alert-warning mt-3 mb-0" style="display:none;">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Hinweis:</strong> Mindestens ein Service-Typ ist erforderlich, damit der Worker diesen Server verarbeiten kann.
+            Ohne Service-Typ wird der Worker mit einem Fehler abbrechen, auch wenn Checks aktiviert sind.
+        </div>
+    </div>
+</div>
+
+<!-- Server-Checks -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-check2-all me-2"></i>Server-Checks
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-4">
+            Aktivieren Sie hier zusätzliche Checks für diesen Server. Die globalen Feature-Toggles müssen unter Einstellungen → Features ebenfalls aktiviert sein.
+        </p>
+
+        <!-- Windows Service Checks -->
+        @await Html.PartialAsync("_ServiceChecksPartial", Model.Checks)
+
+        <!-- SQL Query Checks -->
+        @await Html.PartialAsync("_SqlQueryChecksPartial", Model.Checks)
+
+        <!-- EventLog Checks -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-journal-text me-2"></i>Event Log Monitoring</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
+                        data-bs-target="#eventLogHelp" aria-expanded="false">
+                    <i class="bi bi-question-circle me-1"></i>Hilfe
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="collapse mb-3" id="eventLogHelp">
+                    <div class="card card-body bg-light">
+                        <h6><i class="bi bi-info-circle me-1"></i>So funktioniert die Event Log Überwachung</h6>
+                        <p class="mb-2">
+                            SimpleAdmin prüft den Windows Event Log auf kritische Einträge und Fehler innerhalb eines
+                            konfigurierbaren Zeitfensters (Standard: letzte 60 Minuten).
+                        </p>
+                        <h6 class="mt-3">Was wird geprüft?</h6>
+                        <ul class="mb-2">
+                            <li><strong>Kritische Ereignisse</strong> (Level 1): Systemfehler und Abstürze</li>
+                            <li><strong>Fehler</strong> (Level 2): Anwendungs- und Dienstfehler</li>
+                            <li><strong>Warnungen</strong> (Level 3): Potenzielle Probleme</li>
+                        </ul>
+                        <h6 class="mt-3">Schwellwerte</h6>
+                        <p class="mb-0">
+                            Anzahl der Ereignisse für Warning- bzw. Critical-Status wird global konfiguriert unter
+                            <a href="/Settings/Features">Einstellungen → Features → Event Log</a>.
+                        </p>
+                    </div>
+                </div>
+                <div class="form-check form-switch">
+                    <input type="checkbox" name="Checks.EventLogEnabled" value="true"
+                           class="form-check-input" id="eventLogEnabled"
+                           @(Model.Checks.EventLogEnabled ? "checked" : "") />
+                    <label class="form-check-label" for="eventLogEnabled">
+                        <strong>Event Log Überwachung aktiviert</strong>
+                    </label>
+                </div>
+                <div class="form-text">Überwacht Windows Event Logs auf Fehler und kritische Meldungen.</div>
+            </div>
+        </div>
+
+        <!-- AppPool Checks -->
+        @await Html.PartialAsync("_AppPoolChecksPartial", Model.Checks)
+
+        <!-- Email Probes (Sender role) -->
+        @await Html.PartialAsync("_EmailProbesPartial", Model.Checks)
+
+        <!-- Email Delivery (Checker role) -->
+        @await Html.PartialAsync("_EmailDeliveryPartial", Model.Checks)
+
+        <!-- Certificate Checks -->
+        @await Html.PartialAsync("_CertificateChecksPartial", Model.Checks)
+
+        <!-- BizTalk Checks -->
+        @await Html.PartialAsync("_BizTalkChecksPartial", Model.Checks)
+
+        <!-- File / Log Monitoring -->
+        @await Html.PartialAsync("_FileMonitoringChecksPartial", Model.Checks)
+    </div>
+</div>

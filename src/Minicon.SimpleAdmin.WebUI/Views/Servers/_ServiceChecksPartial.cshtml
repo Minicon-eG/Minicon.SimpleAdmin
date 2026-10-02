@@ -1,0 +1,213 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ServerChecksViewModel
+@{
+    var services = Model?.Services ?? new List<Minicon.SimpleAdmin.WebUI.ViewModels.ServiceCheckViewModel>();
+}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-start">
+        <span><i class="bi bi-window me-2"></i>Windows Service-Überwachung</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addServiceCheck()">
+            <i class="bi bi-plus-circle me-1"></i>Service hinzufügen
+        </button>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Überwacht Windows-Dienste auf diesem Server. Der globale Feature-Toggle
+            <strong>Services</strong> muss unter Einstellungen → Features aktiviert sein.
+        </p>
+
+        <div class="form-check form-switch mb-3">
+            <input type="checkbox" name="Checks.ServicesEnabled" value="true"
+                   class="form-check-input" id="servicesEnabled"
+                   @(Model?.ServicesEnabled == true ? "checked" : "")
+                   onchange="document.getElementById('serviceChecksBody').style.display = this.checked ? '' : 'none'" />
+            <input type="hidden" name="Checks.ServicesEnabled" value="false" />
+            <label class="form-check-label" for="servicesEnabled">
+                <strong>Windows Service-Überwachung aktiviert</strong>
+            </label>
+        </div>
+
+        <div id="serviceChecksBody" style="@(Model?.ServicesEnabled == true ? "" : "display:none;")">
+        <div id="serviceChecks">
+            @for (var i = 0; i < services.Count; i++)
+            {
+                var svc = services[i];
+                <div class="card mb-2 service-check-item" data-index="@i">
+                    <div class="card-body py-2">
+                        <div class="row g-2 align-items-start">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1">Service-Name <span class="text-danger">*</span></label>
+                                <input type="text" name="Checks.Services[@i].Name" value="@svc.Name"
+                                       class="form-control form-control-sm font-monospace"
+                                       placeholder="z.B. SQLWriter oder SQL*" />
+                                <div class="form-text">Wildcards erlaubt, z.B. <code>SQL*</code> oder <code>*BizTalk*</code></div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Anzeigename</label>
+                                <input type="text" name="Checks.Services[@i].DisplayName" value="@svc.DisplayName"
+                                       class="form-control form-control-sm"
+                                       placeholder="z.B. SQL Server VSS Writer" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">Startart <span class="text-danger">*</span></label>
+                                <div class="d-flex gap-3 mt-1">
+                                    <div class="form-check">
+                                        <input type="checkbox" name="Checks.Services[@i].MonitorAutomatic" value="true"
+                                               class="form-check-input svc-startup-type" id="svcAuto_@i"
+                                               @(svc.MonitorAutomatic ? "checked" : "") />
+                                        <input type="hidden" name="Checks.Services[@i].MonitorAutomatic" value="false" />
+                                        <label class="form-check-label small" for="svcAuto_@i">Automatisch</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" name="Checks.Services[@i].MonitorManual" value="true"
+                                               class="form-check-input svc-startup-type" id="svcManual_@i"
+                                               @(svc.MonitorManual ? "checked" : "") />
+                                        <input type="hidden" name="Checks.Services[@i].MonitorManual" value="false" />
+                                        <label class="form-check-label small" for="svcManual_@i">Manuell</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 text-end">
+                                <label class="form-label small mb-1 d-block">&nbsp;</label>
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                        onclick="removeServiceCheck(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div id="noServiceChecks" class="text-muted small @(services.Count > 0 ? "d-none" : "")">
+            <i class="bi bi-info-circle me-1"></i>Keine Service-Checks konfiguriert.
+        </div>
+
+        <div class="mt-2 small text-muted">
+            <strong>Startart:</strong> Es wird nur überwacht, wenn der Dienst in Windows als <em>Automatisch</em>
+            bzw. <em>Manuell</em> konfiguriert ist. Mindestens eine Startart muss ausgewählt sein.
+            Deaktivierte Dienste (Starttyp <em>Disabled</em>) werden immer übersprungen.
+            <strong>Wildcards:</strong> Der Service-Name unterstützt <code>*</code> (beliebig viele Zeichen) und <code>?</code> (ein Zeichen), z.B. <code>SQL*</code>.
+        </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var _serviceCheckIndex = @services.Count;
+
+    function reindexServiceChecks() {
+        document.querySelectorAll('.service-check-item').forEach(function(item, idx) {
+            item.querySelectorAll('[name]').forEach(function(el) {
+                el.name = el.name.replace(/\[\d+\]/, '[' + idx + ']');
+            });
+            item.querySelectorAll('[id]').forEach(function(el) {
+                el.id = el.id.replace(/_\d+$/, '_' + idx);
+            });
+            item.querySelectorAll('[for]').forEach(function(el) {
+                el.htmlFor = el.htmlFor.replace(/_\d+$/, '_' + idx);
+            });
+        });
+        _serviceCheckIndex = document.querySelectorAll('.service-check-item').length;
+    }
+
+    function addServiceCheck() {
+        var i = _serviceCheckIndex++;
+        var html = `
+            <div class="card mb-2 service-check-item" data-index="${i}">
+                <div class="card-body py-2">
+                    <div class="row g-2 align-items-start">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Service-Name <span class="text-danger">*</span></label>
+                            <input type="text" name="Checks.Services[${i}].Name" value=""
+                                   class="form-control form-control-sm font-monospace"
+                                   placeholder="z.B. SQLWriter oder SQL*" />
+                            <div class="form-text">Wildcards erlaubt, z.B. <code>SQL*</code> oder <code>*BizTalk*</code></div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Anzeigename</label>
+                            <input type="text" name="Checks.Services[${i}].DisplayName" value=""
+                                   class="form-control form-control-sm"
+                                   placeholder="z.B. SQL Server VSS Writer" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Startart <span class="text-danger">*</span></label>
+                            <div class="d-flex gap-3 mt-1">
+                                <div class="form-check">
+                                    <input type="checkbox" name="Checks.Services[${i}].MonitorAutomatic" value="true"
+                                           class="form-check-input svc-startup-type" id="svcAuto_${i}" checked />
+                                    <input type="hidden" name="Checks.Services[${i}].MonitorAutomatic" value="false" />
+                                    <label class="form-check-label small" for="svcAuto_${i}">Automatisch</label>
+                                </div>
+                                <div class="form-check">
+                                    <input type="checkbox" name="Checks.Services[${i}].MonitorManual" value="true"
+                                           class="form-check-input svc-startup-type" id="svcManual_${i}" />
+                                    <input type="hidden" name="Checks.Services[${i}].MonitorManual" value="false" />
+                                    <label class="form-check-label small" for="svcManual_${i}">Manuell</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 text-end">
+                            <label class="form-label small mb-1 d-block">&nbsp;</label>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    onclick="removeServiceCheck(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        document.getElementById('serviceChecks').insertAdjacentHTML('beforeend', html);
+        document.getElementById('noServiceChecks').classList.add('d-none');
+    }
+
+    function removeServiceCheck(btn) {
+        btn.closest('.service-check-item').remove();
+        reindexServiceChecks();
+        if (document.querySelectorAll('.service-check-item').length === 0) {
+            document.getElementById('noServiceChecks').classList.remove('d-none');
+        }
+    }
+
+    document.querySelector('form')?.addEventListener('submit', function(e) {
+        document.querySelectorAll('.service-check-required-error').forEach(function(el) { el.remove(); });
+        if (!document.getElementById('servicesEnabled')?.checked) return;
+
+        var hasService = [...document.querySelectorAll('.service-check-item input[name$=".Name"]')]
+            .some(function(t) { return t.value.trim().length > 0; });
+        if (!hasService) {
+            var err = document.createElement('div');
+            err.className = 'text-danger small mt-2 service-check-required-error';
+            err.textContent = 'Mindestens ein Windows-Dienst muss konfiguriert sein.';
+            document.getElementById('serviceChecks').before(err);
+            e.preventDefault();
+            err.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        // Each entry must have at least one startup type selected
+        var invalid = false;
+        document.querySelectorAll('.service-check-item').forEach(function(item) {
+            var nameInput = item.querySelector('input[name$=".Name"]');
+            if (!nameInput || !nameInput.value.trim()) return;
+            var autoChecked = item.querySelector('input[name$=".MonitorAutomatic"][type="checkbox"]')?.checked;
+            var manualChecked = item.querySelector('input[name$=".MonitorManual"][type="checkbox"]')?.checked;
+            if (!autoChecked && !manualChecked) {
+                invalid = true;
+                var errId = 'svcStartupErr_' + item.dataset.index;
+                if (!item.querySelector('.service-check-required-error')) {
+                    var errEl = document.createElement('div');
+                    errEl.className = 'text-danger small mt-1 service-check-required-error';
+                    errEl.id = errId;
+                    errEl.textContent = 'Mindestens eine Startart (Automatisch oder Manuell) muss ausgewählt sein.';
+                    item.querySelector('.card-body').appendChild(errEl);
+                }
+            }
+        });
+        if (invalid) {
+            e.preventDefault();
+            document.querySelector('.service-check-required-error').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+</script>

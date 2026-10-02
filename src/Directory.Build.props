@@ -1,0 +1,38 @@
+<Project>
+
+  <!-- Debug-Symbole: PDB direkt in die DLL einbetten und den kompletten
+       Quellcode mit in die PDB packen. Dadurch traegt jedes veroeffentlichte
+       Paket (nupkg) alles, was zum Debuggen und Quell-Navigieren noetig ist -
+       ohne Symbol-Server. -->
+  <PropertyGroup>
+    <DebugType>embedded</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <EmbedAllSources>true</EmbedAllSources>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <!-- Package metadata shared by all packages (public repository). -->
+    <RepositoryUrl>https://github.com/Minicon-eG/Minicon.SimpleAdmin</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/Minicon-eG/Minicon.SimpleAdmin</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Kein separates Symbol-Paket noetig - die PDB steckt in der DLL. -->
+    <IncludeSymbols>false</IncludeSymbols>
+    <!-- Deterministische Build-Pfade im CI-Lauf (GitHub Actions). -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- README shown on nuget.org for every package. -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <!-- Expose internal members of every Minicon.SimpleAdmin.* library to the test
+       project. The test project itself also picks this up, which is harmless. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Minicon.SimpleAdmin.Tests'">
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Minicon.SimpleAdmin.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

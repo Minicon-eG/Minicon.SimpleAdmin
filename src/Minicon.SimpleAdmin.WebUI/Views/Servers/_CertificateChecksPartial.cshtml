@@ -1,0 +1,182 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ServerChecksViewModel
+@{
+    var certs = Model?.Certificates?.Checks ?? new List<Minicon.SimpleAdmin.WebUI.ViewModels.CertificateCheckEditorViewModel>();
+    var enabled = Model?.Certificates?.Enabled == true;
+    var sources = new[]
+    {
+        "store://LocalMachine/My",
+        "store://LocalMachine/WebHosting",
+        "store://LocalMachine/Root",
+        "store://CurrentUser/My"
+    };
+}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-start">
+        <span><i class="bi bi-shield-lock me-2"></i>Zertifikat-Überwachung</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addCertCheck()">
+            <i class="bi bi-plus-circle me-1"></i>Zertifikat-Check hinzufügen
+        </button>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Liest Zertifikate aus dem lokalen Windows-Zertifikatsspeicher und meldet,
+            wenn das Ablaufdatum näher rückt. Der globale Toggle <strong>Zertifikate</strong>
+            unter Einstellungen → Features muss aktiv sein.
+        </p>
+
+        <div class="form-check form-switch mb-3">
+            <input type="checkbox" name="Checks.Certificates.Enabled" value="true"
+                   class="form-check-input" id="certsEnabled"
+                   @(enabled ? "checked" : "")
+                   onchange="document.getElementById('certChecksBody').style.display = this.checked ? '' : 'none'" />
+            <input type="hidden" name="Checks.Certificates.Enabled" value="false" />
+            <label class="form-check-label" for="certsEnabled">
+                <strong>Zertifikat-Überwachung aktiviert</strong>
+            </label>
+        </div>
+
+        <div id="certChecksBody" style="@(enabled ? "" : "display:none;")">
+            <div id="certChecks">
+                @for (var i = 0; i < certs.Count; i++)
+                {
+                    var c = certs[i];
+                    <div class="card mb-2 cert-check-item" data-index="@i">
+                        <div class="card-body py-2">
+                            <div class="row g-2 align-items-start">
+                                <div class="col-md-3">
+                                    <label class="form-label small mb-1">Quelle <span class="text-danger">*</span></label>
+                                    <select name="Checks.Certificates.Checks[@i].Source" class="form-select form-select-sm font-monospace">
+                                        @foreach (var src in sources)
+                                        {
+                                            <option value="@src" selected="@(string.Equals(c.Source, src, StringComparison.OrdinalIgnoreCase))">@src</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small mb-1">Subject enthält</label>
+                                    <input type="text" name="Checks.Certificates.Checks[@i].SubjectContains" value="@c.SubjectContains"
+                                           class="form-control form-control-sm"
+                                           placeholder="z.B. server01.example.org" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Thumbprint</label>
+                                    <input type="text" name="Checks.Certificates.Checks[@i].Thumbprint" value="@c.Thumbprint"
+                                           class="form-control form-control-sm font-monospace"
+                                           placeholder="optional" />
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label small mb-1">Warn (T)</label>
+                                    <input type="number" name="Checks.Certificates.Checks[@i].WarningDays" value="@c.WarningDays"
+                                           class="form-control form-control-sm" min="1" placeholder="30" />
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label small mb-1">Crit (T)</label>
+                                    <input type="number" name="Checks.Certificates.Checks[@i].CriticalDays" value="@c.CriticalDays"
+                                           class="form-control form-control-sm" min="1" placeholder="14" />
+                                </div>
+                                <div class="col-md-2 text-end">
+                                    <label class="form-label small mb-1 d-block">&nbsp;</label>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeCertCheck(this)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small mb-1">Issuer enthält</label>
+                                    <input type="text" name="Checks.Certificates.Checks[@i].IssuerContains" value="@c.IssuerContains"
+                                           class="form-control form-control-sm" placeholder="optional" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small mb-1">Friendly Name enthält</label>
+                                    <input type="text" name="Checks.Certificates.Checks[@i].FriendlyNameContains" value="@c.FriendlyNameContains"
+                                           class="form-control form-control-sm" placeholder="optional" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div id="noCertChecks" class="text-muted small @(certs.Count > 0 ? "d-none" : "")">
+                <i class="bi bi-info-circle me-1"></i>Keine Zertifikat-Checks konfiguriert.
+            </div>
+
+            <div class="mt-2 small text-muted">
+                Pro Eintrag werden <strong>alle</strong> Zertifikate aus der Quelle eingelesen und nach den
+                gesetzten Filtern (Subject/Issuer/Thumbprint/Friendly Name) gefiltert. Lässt man die Filter leer, werden
+                <strong>alle</strong> Zertifikate des Stores geprüft. Leere Warn/Crit-Felder benutzen die globalen Defaults.
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var _certCheckIndex = @certs.Count;
+    var _certSources = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(sources));
+
+    function reindexCertChecks() {
+        document.querySelectorAll('.cert-check-item').forEach(function(item, idx) {
+            item.querySelectorAll('[name]').forEach(function(el) {
+                el.name = el.name.replace(/\[\d+\]/, '[' + idx + ']');
+            });
+            item.dataset.index = idx;
+        });
+        _certCheckIndex = document.querySelectorAll('.cert-check-item').length;
+    }
+
+    function addCertCheck() {
+        var i = _certCheckIndex++;
+        var options = _certSources.map(function(s) { return '<option value="' + s + '">' + s + '</option>'; }).join('');
+        var html = `
+            <div class="card mb-2 cert-check-item" data-index="${i}">
+                <div class="card-body py-2">
+                    <div class="row g-2 align-items-start">
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Quelle</label>
+                            <select name="Checks.Certificates.Checks[${i}].Source" class="form-select form-select-sm font-monospace">${options}</select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Subject enthält</label>
+                            <input type="text" name="Checks.Certificates.Checks[${i}].SubjectContains" class="form-control form-control-sm" placeholder="z.B. server01.example.org" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Thumbprint</label>
+                            <input type="text" name="Checks.Certificates.Checks[${i}].Thumbprint" class="form-control form-control-sm font-monospace" placeholder="optional" />
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small mb-1">Warn (T)</label>
+                            <input type="number" name="Checks.Certificates.Checks[${i}].WarningDays" class="form-control form-control-sm" min="1" placeholder="30" />
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small mb-1">Crit (T)</label>
+                            <input type="number" name="Checks.Certificates.Checks[${i}].CriticalDays" class="form-control form-control-sm" min="1" placeholder="14" />
+                        </div>
+                        <div class="col-md-2 text-end">
+                            <label class="form-label small mb-1 d-block">&nbsp;</label>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeCertCheck(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Issuer enthält</label>
+                            <input type="text" name="Checks.Certificates.Checks[${i}].IssuerContains" class="form-control form-control-sm" placeholder="optional" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Friendly Name enthält</label>
+                            <input type="text" name="Checks.Certificates.Checks[${i}].FriendlyNameContains" class="form-control form-control-sm" placeholder="optional" />
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        document.getElementById('certChecks').insertAdjacentHTML('beforeend', html);
+        document.getElementById('noCertChecks').classList.add('d-none');
+    }
+
+    function removeCertCheck(btn) {
+        btn.closest('.cert-check-item').remove();
+        reindexCertChecks();
+        if (document.querySelectorAll('.cert-check-item').length === 0) {
+            document.getElementById('noCertChecks').classList.remove('d-none');
+        }
+    }
+</script>

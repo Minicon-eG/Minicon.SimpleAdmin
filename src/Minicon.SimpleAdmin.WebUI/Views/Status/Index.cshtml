@@ -1,0 +1,241 @@
+@model IEnumerable<Minicon.SimpleAdmin.WebUI.ViewModels.ServerStatusView>
+
+@{
+    ViewData["Title"] = "Status";
+}
+
+<div class="row">
+    <div class="col">
+        <h1><i class="bi bi-display me-2"></i>System Status</h1>
+        <p class="text-muted">Übersicht über den Status aller überwachten Server</p>
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-outline-secondary" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
+        </button>
+    </div>
+</div>
+
+<div class="row mb-4">
+    @{
+        var allServices = Model.SelectMany(s => s.Services).ToList();
+        var healthyCount = allServices.Count(s => s.Status == Minicon.SimpleAdmin.Models.Status.ServiceStatus.Healthy);
+        var warningCount = allServices.Count(s => s.Status == Minicon.SimpleAdmin.Models.Status.ServiceStatus.Degraded);
+        var criticalCount = allServices.Count(s => s.Status == Minicon.SimpleAdmin.Models.Status.ServiceStatus.Unhealthy);
+        var unknownCount = allServices.Count(s => s.Status == Minicon.SimpleAdmin.Models.Status.ServiceStatus.Unknown);
+        var acknowledgedCount = allServices.Count(s => s.Status == Minicon.SimpleAdmin.Models.Status.ServiceStatus.Acknowledged);
+    }
+    <div class="col-auto">
+        <div class="card text-white bg-success status-filter" data-status="Healthy" role="button" style="min-width: 120px; cursor: pointer;">
+            <div class="card-body text-center">
+                <h2 class="mb-0">@healthyCount</h2>
+                <small>Healthy</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-auto">
+        <div class="card text-white bg-warning status-filter" data-status="Degraded" role="button" style="min-width: 120px; cursor: pointer;">
+            <div class="card-body text-center">
+                <h2 class="mb-0">@warningCount</h2>
+                <small>Warning</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-auto">
+        <div class="card text-white bg-danger status-filter" data-status="Unhealthy" role="button" style="min-width: 120px; cursor: pointer;">
+            <div class="card-body text-center">
+                <h2 class="mb-0">@criticalCount</h2>
+                <small>Critical</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-auto">
+        <div class="card text-white bg-secondary status-filter" data-status="Unknown" role="button" style="min-width: 120px; cursor: pointer;">
+            <div class="card-body text-center">
+                <h2 class="mb-0">@unknownCount</h2>
+                <small>Unknown</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-auto">
+        <div class="card text-white bg-info status-filter" data-status="Acknowledged" role="button" style="min-width: 120px; cursor: pointer;">
+            <div class="card-body text-center">
+                <h2 class="mb-0">@acknowledgedCount</h2>
+                <small>Acknowledged</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    @foreach (var server in Model)
+    {
+        @foreach (var service in server.Services.OrderBy(s => s.Service))
+        {
+            var statusClass = service.Status switch
+            {
+                Minicon.SimpleAdmin.Models.Status.ServiceStatus.Healthy => "border-success",
+                Minicon.SimpleAdmin.Models.Status.ServiceStatus.Degraded => "border-warning",
+                Minicon.SimpleAdmin.Models.Status.ServiceStatus.Unhealthy => "border-danger",
+                Minicon.SimpleAdmin.Models.Status.ServiceStatus.Acknowledged => "border-info",
+                _ => "border-secondary"
+            };
+
+            var staticHtmlUrl = server.BaseUrl != null
+                ? $"{server.BaseUrl.TrimEnd('/')}/{server.ServerId}.{service.Service}.html"
+                : null;
+            var detailsUrl = Url.Action("Details", new { id = server.ServerId });
+
+            <div class="col-md-6 col-lg-4 server-card" data-status="@service.Status">
+                <a href="@detailsUrl" class="text-decoration-none text-reset">
+                <div class="card h-100 @statusClass" style="cursor: pointer;">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            @server.ServerId
+                            <small class="text-muted fw-normal">· @service.Service</small>
+                        </h5>
+                        @{
+                            var badgeClass = service.Status switch
+                            {
+                                Minicon.SimpleAdmin.Models.Status.ServiceStatus.Healthy => "bg-success",
+                                Minicon.SimpleAdmin.Models.Status.ServiceStatus.Degraded => "bg-warning text-dark",
+                                Minicon.SimpleAdmin.Models.Status.ServiceStatus.Unhealthy => "bg-danger",
+                                Minicon.SimpleAdmin.Models.Status.ServiceStatus.Acknowledged => "bg-info text-dark",
+                                _ => "bg-secondary"
+                            };
+                        }
+                        <span class="badge @badgeClass">@service.Status</span>
+                    </div>
+                    <div class="card-body">
+                        @{
+                            var cpu = service.Metrics.FirstOrDefault(m => m.Name == "cpu");
+                            var memory = service.Metrics.FirstOrDefault(m => m.Name == "memory");
+                        }
+                        @if (cpu != null)
+                        {
+                            <div class="mb-2">
+                                <strong>CPU:</strong> @cpu.Value.ToString("F1")%
+                                <span class="badge bg-@(cpu.Status == Minicon.SimpleAdmin.Models.Status.MetricStatus.Ok ? "success" : cpu.Status == Minicon.SimpleAdmin.Models.Status.MetricStatus.Warning ? "warning" : "danger")">
+                                    @cpu.Status
+                                </span>
+                            </div>
+                        }
+                        @if (memory != null)
+                        {
+                            <div class="mb-2">
+                                <strong>Memory:</strong> @memory.Value.ToString("F1")%
+                                <span class="badge bg-@(memory.Status == Minicon.SimpleAdmin.Models.Status.MetricStatus.Ok ? "success" : memory.Status == Minicon.SimpleAdmin.Models.Status.MetricStatus.Warning ? "warning" : "danger")">
+                                    @memory.Status
+                                </span>
+                            </div>
+                        }
+                    </div>
+
+                    @* --- Monitoring-Badges (AppPools, Windows Services, SQL Checks, EventLog) --- *@
+                    @{
+                        var stoppedPools = server.AppPools?.Values
+                            .Count(p => p.Status != Minicon.SimpleAdmin.Models.State.AppPoolStatus.Running) ?? 0;
+                        var totalPools = server.AppPools?.Count ?? 0;
+
+                        var stoppedServices = server.WindowsServices?.Values
+                            .Count(s => s.Status != "Running") ?? 0;
+                        var totalServices = server.WindowsServices?.Count ?? 0;
+
+                        var sqlCritical = server.SqlQueryChecks.Values
+                            .Count(c => c.Status == Minicon.SimpleAdmin.Models.State.MetricStatus.Critical);
+                        var sqlTotal = server.SqlQueryChecks.Count;
+                    }
+
+                    @if (totalPools > 0 || totalServices > 0 || sqlTotal > 0 || server.EventLogs != null)
+                    {
+                        <div class="p-2 pt-0" style="font-size: 0.85em;">
+                            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                @if (totalPools > 0)
+                                {
+                                    var poolBadge = stoppedPools > 0 ? "bg-danger" : "bg-success";
+                                    <span class="badge @poolBadge" title="Application Pools: @(totalPools - stoppedPools)/@totalPools running">
+                                        <i class="bi bi-layers me-1"></i>@(totalPools - stoppedPools)/@totalPools Pools
+                                    </span>
+                                }
+                                @if (totalServices > 0)
+                                {
+                                    var svcBadge = stoppedServices > 0 ? "bg-danger" : "bg-success";
+                                    <span class="badge @svcBadge" title="Windows Services: @(totalServices - stoppedServices)/@totalServices running">
+                                        <i class="bi bi-window me-1"></i>@(totalServices - stoppedServices)/@totalServices Svcs
+                                    </span>
+                                }
+                                @if (sqlTotal > 0)
+                                {
+                                    var sqlBadge = sqlCritical > 0 ? "bg-danger" : "bg-success";
+                                    <span class="badge @sqlBadge" title="SQL Query Checks: @(sqlTotal - sqlCritical)/@sqlTotal ok">
+                                        <i class="bi bi-database me-1"></i>@(sqlTotal - sqlCritical)/@sqlTotal SQL
+                                    </span>
+                                }
+                                @if (server.EventLogs != null)
+                                {
+                                    var elBadge = server.EventLogs.Status switch
+                                    {
+                                        Minicon.SimpleAdmin.Models.State.MetricStatus.Critical => "bg-danger",
+                                        Minicon.SimpleAdmin.Models.State.MetricStatus.Warning  => "bg-warning text-dark",
+                                        _ => "bg-success"
+                                    };
+                                    <span class="badge @elBadge" title="@($"Event Log: {server.EventLogs.EventCount} event(s)")">
+                                        <i class="bi bi-journal-text me-1"></i>@server.EventLogs.EventCount Events
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Letzte Prüfung: @service.LastUpdate.ToString("yyyy-MM-dd HH:mm:ss") UTC</small>
+                        @if (staticHtmlUrl != null)
+                        {
+                            <a href="@staticHtmlUrl" target="_blank" class="btn btn-sm btn-outline-secondary" onclick="event.stopPropagation();">
+                                <i class="bi bi-box-arrow-up-right me-1"></i>HTML
+                            </a>
+                        }
+                    </div>
+                </div>
+                </a>
+            </div>
+        }
+    }
+</div>
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>Keine Server-Statusdaten verfügbar. Stellen Sie sicher, dass SimpleAdmin ausgeführt wird und die Statusdaten gespeichert wurden.
+    </div>
+}
+
+@section Scripts {
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var activeFilter = null;
+        var filterCards = document.querySelectorAll('.status-filter');
+        var serverCards = document.querySelectorAll('.server-card');
+
+        filterCards.forEach(function (card) {
+            card.addEventListener('click', function () {
+                var status = this.dataset.status;
+
+                if (activeFilter === status) {
+                    activeFilter = null;
+                    filterCards.forEach(function (c) { c.style.opacity = '1'; });
+                    serverCards.forEach(function (c) { c.style.display = ''; });
+                } else {
+                    activeFilter = status;
+                    filterCards.forEach(function (c) {
+                        c.style.opacity = c.dataset.status === status ? '1' : '0.4';
+                    });
+                    serverCards.forEach(function (c) {
+                        c.style.display = c.dataset.status === status ? '' : 'none';
+                    });
+                }
+            });
+        });
+    });
+</script>
+}

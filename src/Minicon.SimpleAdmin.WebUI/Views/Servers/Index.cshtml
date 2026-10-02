@@ -1,0 +1,355 @@
+@using Minicon.SimpleAdmin.Models.Config
+@model IReadOnlyList<Server>
+@{
+    ViewData["Title"] = "Server";
+}
+
+<style>
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+    .sortable:hover {
+        background-color: #e9ecef;
+    }
+    .sortable i.bi-arrow-down-up {
+        opacity: 0.3;
+    }
+    .sortable.asc i.bi-arrow-down-up::before {
+        content: "\F128"; /* bi-arrow-up */
+    }
+    .sortable.desc i.bi-arrow-down-up::before {
+        content: "\F127"; /* bi-arrow-down */
+    }
+    .sortable.asc i, .sortable.desc i {
+        opacity: 1;
+    }
+    .filter-row {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    .no-results {
+        text-align: center;
+        padding: 2rem;
+        color: #6c757d;
+    }
+</style>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>
+            <i class="bi bi-hdd-stack me-2"></i>Server (<span id="visibleCount">@Model.Count</span>/@Model.Count)
+        </h1>
+        <a asp-action="Create" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i>Neuer Server
+        </a>
+    </div>
+
+    @if (Model.Count == 0)
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            Keine Server vorhanden. Erstellen Sie einen neuen Server.
+        </div>
+    }
+    else
+    {
+        <!-- Filter Row -->
+        <div class="filter-row">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-4">
+                    <label class="form-label small mb-1">Suche</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="searchInput" class="form-control" placeholder="Name oder Beschreibung..." />
+                        <button class="btn btn-outline-secondary" type="button" id="clearSearch" title="Suche löschen">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Status</label>
+                    <select id="statusFilter" class="form-select">
+                        <option value="all">Alle</option>
+                        <option value="active">Nur aktive</option>
+                        <option value="inactive">Nur inaktive</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">Service-Typ</label>
+                    <select id="serviceTypeFilter" class="form-select">
+                        <option value="all">Alle</option>
+                        @{
+                            var allServiceTypes = Model.SelectMany(s => s.ServiceTypes).Select(st => st.Type).Distinct().OrderBy(t => t);
+                            foreach (var st in allServiceTypes)
+                            {
+                                <option value="@st">@st</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">&nbsp;</label>
+                    <div>
+                        <button class="btn btn-outline-secondary" id="resetFilters">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Filter zurücksetzen
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover" id="serverTable">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 50px;" class="sortable" data-sort="status">
+                            Status <i class="bi bi-arrow-down-up ms-1"></i>
+                        </th>
+                        <th class="sortable" data-sort="name">
+                            Name <i class="bi bi-arrow-down-up ms-1"></i>
+                        </th>
+                        <th class="sortable" data-sort="description">
+                            Beschreibung <i class="bi bi-arrow-down-up ms-1"></i>
+                        </th>
+                        <th>Base URL</th>
+                        <th>Service-Typen</th>
+                        <th style="width: 200px;">Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var server in Model)
+                    {
+                        <tr class="server-row @(!server.Active ? "table-secondary" : "")"
+                            data-name="@server.Name.ToLower()"
+                            data-description="@(server.Description?.ToLower() ?? "")"
+                            data-status="@(server.Active ? "active" : "inactive")"
+                            data-service-types="@string.Join(",", server.ServiceTypes.Select(st => st.Type))">
+                            <td class="text-center" data-sort-value="@(server.Active ? "1" : "0")">
+                                @if (server.Active)
+                                {
+                                    <span class="badge bg-success" title="Aktiv">
+                                        <i class="bi bi-check-circle"></i>
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary" title="Inaktiv">
+                                        <i class="bi bi-pause-circle"></i>
+                                    </span>
+                                }
+                            </td>
+                            <td data-sort-value="@server.Name.ToLower()">
+                                <strong>@server.Name</strong>
+                            </td>
+                            <td data-sort-value="@(server.Description?.ToLower() ?? "")">@(server.Description ?? "-")</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(server.BaseUrl))
+                                {
+                                    <a href="@server.BaseUrl" target="_blank" class="text-decoration-none">
+                                        @server.BaseUrl <i class="bi bi-box-arrow-up-right small"></i>
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td>
+                                @if (server.ServiceTypes.Any())
+                                {
+                                    foreach (var st in server.ServiceTypes)
+                                    {
+                                        <span class="badge bg-info me-1">@st.Type</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted">Keine</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Edit" asp-route-id="@server.Name" class="btn btn-outline-primary" title="Bearbeiten">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <form asp-action="ToggleActive" asp-route-id="@server.Name" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        @if (server.Active)
+                                        {
+                                            <button type="submit" class="btn btn-outline-warning" title="Deaktivieren">
+                                                <i class="bi bi-pause"></i>
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button type="submit" class="btn btn-outline-success" title="Aktivieren">
+                                                <i class="bi bi-play"></i>
+                                            </button>
+                                        }
+                                    </form>
+                                    <form asp-action="Delete" asp-route-id="@server.Name" method="post" class="d-inline delete-form">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-outline-danger" title="Löschen"
+                                                data-confirm-message="Server '@server.Name' wirklich löschen?">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <div id="noResults" class="no-results" style="display: none;">
+                <i class="bi bi-search me-2"></i>Keine Server gefunden.
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('searchInput');
+            const statusFilter = document.getElementById('statusFilter');
+            const serviceTypeFilter = document.getElementById('serviceTypeFilter');
+            const clearSearchBtn = document.getElementById('clearSearch');
+            const resetFiltersBtn = document.getElementById('resetFilters');
+            const visibleCountSpan = document.getElementById('visibleCount');
+            const noResultsDiv = document.getElementById('noResults');
+            const table = document.getElementById('serverTable');
+            const tbody = table?.querySelector('tbody');
+
+            let currentSort = { column: null, direction: 'asc' };
+
+            // Filter function
+            function applyFilters() {
+                const searchTerm = searchInput.value.toLowerCase();
+                const statusValue = statusFilter.value;
+                const serviceTypeValue = serviceTypeFilter.value;
+
+                let visibleCount = 0;
+                const rows = document.querySelectorAll('.server-row');
+
+                rows.forEach(row => {
+                    const name = row.dataset.name;
+                    const description = row.dataset.description;
+                    const status = row.dataset.status;
+                    const serviceTypes = row.dataset.serviceTypes;
+
+                    let visible = true;
+
+                    // Search filter
+                    if (searchTerm && !name.includes(searchTerm) && !description.includes(searchTerm)) {
+                        visible = false;
+                    }
+
+                    // Status filter
+                    if (statusValue !== 'all' && status !== statusValue) {
+                        visible = false;
+                    }
+
+                    // Service type filter
+                    if (serviceTypeValue !== 'all' && !serviceTypes.split(',').includes(serviceTypeValue)) {
+                        visible = false;
+                    }
+
+                    row.style.display = visible ? '' : 'none';
+                    if (visible) visibleCount++;
+                });
+
+                visibleCountSpan.textContent = visibleCount;
+                noResultsDiv.style.display = visibleCount === 0 ? '' : 'none';
+                if (table) table.style.display = visibleCount === 0 ? 'none' : '';
+            }
+
+            // Sort function
+            function sortTable(column) {
+                if (!tbody) return;
+
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                const headers = document.querySelectorAll('th.sortable');
+
+                // Toggle direction or set new column
+                if (currentSort.column === column) {
+                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.column = column;
+                    currentSort.direction = 'asc';
+                }
+
+                // Update header classes
+                headers.forEach(h => {
+                    h.classList.remove('asc', 'desc');
+                    if (h.dataset.sort === column) {
+                        h.classList.add(currentSort.direction);
+                    }
+                });
+
+                // Get column index
+                const headerArray = Array.from(headers);
+                const columnIndex = headerArray.findIndex(h => h.dataset.sort === column);
+
+                // Sort rows
+                rows.sort((a, b) => {
+                    const aCell = a.cells[columnIndex];
+                    const bCell = b.cells[columnIndex];
+                    const aVal = aCell.dataset.sortValue || aCell.textContent.trim().toLowerCase();
+                    const bVal = bCell.dataset.sortValue || bCell.textContent.trim().toLowerCase();
+
+                    let result = aVal.localeCompare(bVal);
+                    return currentSort.direction === 'desc' ? -result : result;
+                });
+
+                // Reorder rows
+                rows.forEach(row => tbody.appendChild(row));
+            }
+
+            // Event listeners
+            if (searchInput) {
+                searchInput.addEventListener('input', applyFilters);
+            }
+            if (statusFilter) {
+                statusFilter.addEventListener('change', applyFilters);
+            }
+            if (serviceTypeFilter) {
+                serviceTypeFilter.addEventListener('change', applyFilters);
+            }
+            if (clearSearchBtn) {
+                clearSearchBtn.addEventListener('click', function() {
+                    searchInput.value = '';
+                    applyFilters();
+                });
+            }
+            if (resetFiltersBtn) {
+                resetFiltersBtn.addEventListener('click', function() {
+                    searchInput.value = '';
+                    statusFilter.value = 'all';
+                    serviceTypeFilter.value = 'all';
+                    applyFilters();
+                });
+            }
+
+            // Sortable headers
+            document.querySelectorAll('th.sortable').forEach(header => {
+                header.addEventListener('click', function() {
+                    sortTable(this.dataset.sort);
+                });
+            });
+
+            // Delete confirmation
+            document.querySelectorAll('.delete-form').forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    const btn = this.querySelector('button[data-confirm-message]');
+                    const msg = btn ? btn.dataset.confirmMessage : 'Wirklich löschen?';
+                    if (!confirm(msg)) {
+                        e.preventDefault();
+                    }
+                });
+            });
+        });
+    </script>
+}

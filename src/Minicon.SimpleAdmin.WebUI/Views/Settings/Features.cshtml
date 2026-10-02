@@ -1,0 +1,737 @@
+﻿@model Minicon.SimpleAdmin.WebUI.Controllers.FeaturesViewModel
+@{
+    ViewData["Title"] = "Feature-Toggles";
+}
+
+<div class="container-fluid">
+    <h1 class="mb-4">
+        <i class="bi bi-toggles me-2"></i>Feature-Toggles
+    </h1>
+
+    <p class="text-muted mb-4">
+        Aktivieren oder deaktivieren Sie globale Monitoring-Features. Diese Einstellungen gelten für alle Server,
+        sofern nicht auf Server-Ebene überschrieben.
+    </p>
+
+    <form asp-action="Features" method="post">
+        @Html.AntiForgeryToken()
+
+        <div class="row">
+            <!-- System Metrics -->
+            <div class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-speedometer2 me-2"></i>System-Metriken
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" name="Features.SystemMetrics.Enabled" value="true"
+                                   class="form-check-input feature-toggle" id="systemMetricsEnabled"
+                                   @(Model.Features.SystemMetrics.Enabled ? "checked" : "") />
+                            <label class="form-check-label" for="systemMetricsEnabled">
+                                <strong class="toggle-status">@(Model.Features.SystemMetrics.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-0">
+                            CPU, Memory und Disk-Überwachung. Standard-Feature für alle Server.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Windows Services -->
+            <div class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-gear-wide-connected me-2"></i>Windows-Dienste
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" name="Features.Services.Enabled" value="true"
+                                   class="form-check-input feature-toggle" id="servicesEnabled"
+                                   @(Model.Features.Services.Enabled ? "checked" : "") />
+                            <label class="form-check-label" for="servicesEnabled">
+                                <strong class="toggle-status">@(Model.Features.Services.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-0">
+                            Überwachung von Windows-Diensten (Running/Stopped-Status).
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AppPools -->
+            <div class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-layers me-2"></i>IIS AppPools
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" name="Features.AppPools.Enabled" value="true"
+                                   class="form-check-input feature-toggle" id="appPoolsEnabled"
+                                   @(Model.Features.AppPools.Enabled ? "checked" : "") />
+                            <label class="form-check-label" for="appPoolsEnabled">
+                                <strong class="toggle-status">@(Model.Features.AppPools.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-2">
+                            IIS Application Pool Überwachung (Status, Memory, Uptime).
+                        </p>
+                        <hr />
+                        <h6>Standard-Schwellwerte:</h6>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small">Memory Warning (MB)</label>
+                                <input type="number" name="Features.AppPools.Defaults.MemoryWarningMB"
+                                       value="@Model.Features.AppPools.Defaults.MemoryWarningMB"
+                                       class="form-control form-control-sm" min="100" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small">Memory Critical (MB)</label>
+                                <input type="number" name="Features.AppPools.Defaults.MemoryCriticalMB"
+                                       value="@Model.Features.AppPools.Defaults.MemoryCriticalMB"
+                                       class="form-control form-control-sm" min="100" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small">Uptime Warning (Stunden)</label>
+                                <input type="number" name="Features.AppPools.Defaults.UptimeWarningHours"
+                                       value="@Model.Features.AppPools.Defaults.UptimeWarningHours"
+                                       class="form-control form-control-sm" min="0" />
+                                <div class="form-text">Nach dieser Zeit wird ein Recycle empfohlen. <strong>0 = deaktiviert.</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Log -->
+            <div class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-journal-text me-2"></i>Event Log
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" name="Features.EventLog.Enabled" value="true"
+                                   class="form-check-input feature-toggle" id="eventLogEnabled"
+                                   @(Model.Features.EventLog.Enabled ? "checked" : "") />
+                            <label class="form-check-label" for="eventLogEnabled">
+                                <strong class="toggle-status">@(Model.Features.EventLog.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-2">
+                            Überwacht Windows Event Logs auf Fehler und kritische Meldungen.
+                            Standard-Logs: Application, System.
+                        </p>
+                        <hr class="my-2" />
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Zeitfenster (Minuten)</label>
+                            <input type="number" name="Features.EventLog.Defaults.TimeWindowMinutes"
+                                   value="@Model.Features.EventLog.Defaults.TimeWindowMinutes"
+                                   class="form-control form-control-sm" min="1" max="1440" />
+                            <div class="form-text">Ereignisse der letzten N Minuten werden geprüft.</div>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label small mb-1">Warning ab</label>
+                                <input type="number" name="Features.EventLog.Defaults.WarningCount"
+                                       value="@Model.Features.EventLog.Defaults.WarningCount"
+                                       class="form-control form-control-sm" min="1" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small mb-1">Critical ab</label>
+                                <input type="number" name="Features.EventLog.Defaults.CriticalCount"
+                                       value="@Model.Features.EventLog.Defaults.CriticalCount"
+                                       class="form-control form-control-sm" min="1" />
+                            </div>
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label small mb-1">Ereignis-Level</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (var level in new[] { "Critical", "Error", "Warning", "Information" })
+                                {
+                                    var levelId = $"eventLogLevel_{level}";
+                                    var isChecked = Model.Features.EventLog.Defaults.Levels.Contains(level);
+                                    <div class="form-check form-check-inline">
+                                        <input type="checkbox" name="Features.EventLog.Defaults.Levels"
+                                               value="@level" class="form-check-input" id="@levelId"
+                                               @(isChecked ? "checked" : "") />
+                                        <label class="form-check-label small" for="@levelId">@level</label>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Log: zentrale Ignorier-Regeln -->
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-journal-x me-2"></i>Event-Log: Ignorier-Regeln
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-2">
+                            Ereignisse, die einer Regel entsprechen, zählen nicht in die Warning-/Critical-Schwellwerte
+                            (bekanntes Rauschen dauerhaft ausblenden). Eine Regel greift, wenn <strong>alle</strong> gesetzten
+                            Kriterien zutreffen. <strong>Server</strong> leer = gilt für alle Server; sonst Namen
+                            kommagetrennt, Wildcards erlaubt (z.&nbsp;B. <code>web0*</code>). Regeln mit Ablaufdatum
+                            greifen danach nicht mehr — das Ereignis taucht wieder auf (erzwungene Wiedervorlage).
+                            Ignorierte Ereignisse werden gezählt und ausgewiesen, nicht verborgen.
+                        </p>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-2" id="ignoreRulesTable">
+                                <thead>
+                                    <tr class="small text-muted">
+                                        <th style="min-width:170px;">Quelle (Wildcard)</th>
+                                        <th style="min-width:110px;">Event-IDs</th>
+                                        <th style="min-width:170px;">Message enthält</th>
+                                        <th style="min-width:110px;">Log</th>
+                                        <th style="min-width:150px;">Server</th>
+                                        <th style="min-width:190px;">Grund</th>
+                                        <th style="min-width:160px;">Läuft ab (optional)</th>
+                                        <th style="width:40px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ignoreRulesBody">
+                                    @for (var ri = 0; ri < Model.Features.EventLog.IgnoreRules.Count; ri++)
+                                    {
+                                        var r = Model.Features.EventLog.IgnoreRules[ri];
+                                        <tr class="ignore-rule-row">
+                                            <td><input type="text" name="Features.EventLog.IgnoreRules[@ri].Source" value="@r.Source"
+                                                       class="form-control form-control-sm font-monospace" placeholder="Microsoft-Windows-DistributedCOM" /></td>
+                                            <td><input type="text" name="Features.EventLog.IgnoreRules[@ri].EventIdsText" value="@r.EventIdsText"
+                                                       class="form-control form-control-sm font-monospace" placeholder="10016" /></td>
+                                            <td><input type="text" name="Features.EventLog.IgnoreRules[@ri].MessageContains" value="@r.MessageContains"
+                                                       class="form-control form-control-sm" placeholder="(optional)" /></td>
+                                            <td><input type="text" name="Features.EventLog.IgnoreRules[@ri].LogName" value="@r.LogName"
+                                                       class="form-control form-control-sm" placeholder="alle" /></td>
+                                            <td><input type="text" name="Features.EventLog.IgnoreRules[@ri].ServersText" value="@r.ServersText"
+                                                       class="form-control form-control-sm font-monospace" placeholder="alle" /></td>
+                                            <td><input type="text" name="Features.EventLog.IgnoreRules[@ri].Reason" value="@r.Reason"
+                                                       class="form-control form-control-sm" placeholder="Warum wird das ignoriert?" /></td>
+                                            <td><input type="datetime-local" name="Features.EventLog.IgnoreRules[@ri].ExpiresAt"
+                                                       value="@(r.ExpiresAt?.ToString("yyyy-MM-ddTHH:mm"))"
+                                                       class="form-control form-control-sm" /></td>
+                                            <td class="text-end">
+                                                <button type="button" class="btn btn-sm btn-outline-danger btn-remove-rule" title="Regel entfernen">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnAddIgnoreRule">
+                            <i class="bi bi-plus-lg me-1"></i>Regel hinzufügen
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <template id="ignoreRuleTemplate">
+                <tr class="ignore-rule-row">
+                    <td><input type="text" name="Features.EventLog.IgnoreRules[__IDX__].Source"
+                               class="form-control form-control-sm font-monospace" placeholder="Microsoft-Windows-DistributedCOM" /></td>
+                    <td><input type="text" name="Features.EventLog.IgnoreRules[__IDX__].EventIdsText"
+                               class="form-control form-control-sm font-monospace" placeholder="10016" /></td>
+                    <td><input type="text" name="Features.EventLog.IgnoreRules[__IDX__].MessageContains"
+                               class="form-control form-control-sm" placeholder="(optional)" /></td>
+                    <td><input type="text" name="Features.EventLog.IgnoreRules[__IDX__].LogName"
+                               class="form-control form-control-sm" placeholder="alle" /></td>
+                    <td><input type="text" name="Features.EventLog.IgnoreRules[__IDX__].ServersText"
+                               class="form-control form-control-sm font-monospace" placeholder="alle" /></td>
+                    <td><input type="text" name="Features.EventLog.IgnoreRules[__IDX__].Reason"
+                               class="form-control form-control-sm" placeholder="Warum wird das ignoriert?" /></td>
+                    <td><input type="datetime-local" name="Features.EventLog.IgnoreRules[__IDX__].ExpiresAt"
+                               class="form-control form-control-sm" /></td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-sm btn-outline-danger btn-remove-rule" title="Regel entfernen">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            </template>
+
+            <!-- Certificates -->
+            <div class="col-lg-12 col-xl-8 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-shield-lock me-2"></i>Zertifikate
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" name="Features.Certificates.Enabled" value="true"
+                                   class="form-check-input feature-toggle" id="certificatesEnabled"
+                                   @(Model.Features.Certificates.Enabled ? "checked" : "") />
+                            <input type="hidden" name="Features.Certificates.Enabled" value="false" />
+                            <label class="form-check-label" for="certificatesEnabled">
+                                <strong class="toggle-status">@(Model.Features.Certificates.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-3">
+                            Liest Zertifikate aus dem lokalen Windows-Zertifikatsspeicher (z.&nbsp;B.
+                            <code>LocalMachine\My</code>) und meldet ablaufende Zertifikate.
+                            Pro Server konfigurierbar unter Server → Bearbeiten.
+                        </p>
+                        <hr />
+                        <h6>Standard-Schwellwerte</h6>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label small">Warning (Tage vor Ablauf)</label>
+                                <input type="number" name="Features.Certificates.Defaults.WarningDays"
+                                       value="@Model.Features.Certificates.Defaults.WarningDays"
+                                       class="form-control form-control-sm" min="1" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small">Critical (Tage vor Ablauf)</label>
+                                <input type="number" name="Features.Certificates.Defaults.CriticalDays"
+                                       value="@Model.Features.Certificates.Defaults.CriticalDays"
+                                       class="form-control form-control-sm" min="1" />
+                            </div>
+                        </div>
+
+                        <hr />
+                        <p class="text-muted small mb-0">
+                            <i class="bi bi-bell me-1"></i>E-Mail-Benachrichtigungen für ablaufende Zertifikate laufen
+                            jetzt zentral über die Karte <strong>Benachrichtigungen</strong> auf dieser Seite (Notifier) —
+                            inkl. Quittier-Link. Eine separate Mail-Konfiguration ist hier nicht mehr nötig.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+<!-- BizTalk -->
+            <div class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-gear-wide-connected me-2"></i>BizTalk
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" name="Features.BizTalk.Enabled" value="true"
+                                   class="form-check-input feature-toggle" id="bizTalkEnabled"
+                                   @(Model.Features.BizTalk.Enabled ? "checked" : "") />
+                            <input type="hidden" name="Features.BizTalk.Enabled" value="false" />
+                            <label class="form-check-label" for="bizTalkEnabled">
+                                <strong class="toggle-status">@(Model.Features.BizTalk.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-3">
+                            Überwacht BizTalk über die Management-API: Anwendungen, Orchestrierungen, Sendeports,
+                            Empfangsorte und suspendierte Instanzen. Endpoint und überwachte Artefakte pro Server
+                            unter <em>Server → Bearbeiten</em>.
+                        </p>
+                        <hr />
+                        <h6>Standard-Schwellwerte (suspendierte Instanzen)</h6>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small">Warning ab</label>
+                                <input type="number" name="Features.BizTalk.Defaults.SuspendedWarning"
+                                       value="@Model.Features.BizTalk.Defaults.SuspendedWarning"
+                                       class="form-control form-control-sm" min="1" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small">Critical ab</label>
+                                <input type="number" name="Features.BizTalk.Defaults.SuspendedCritical"
+                                       value="@Model.Features.BizTalk.Defaults.SuspendedCritical"
+                                       class="form-control form-control-sm" min="1" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+<!-- File / Log Monitoring -->
+            <div class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-folder-check me-2"></i>Datei-/Protokollüberwachung
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" name="Features.FileMonitoring.Enabled" value="true"
+                                   class="form-check-input feature-toggle" id="fileMonitoringEnabled"
+                                   @(Model.Features.FileMonitoring.Enabled ? "checked" : "") />
+                            <input type="hidden" name="Features.FileMonitoring.Enabled" value="false" />
+                            <label class="form-check-label" for="fileMonitoringEnabled">
+                                <strong class="toggle-status">@(Model.Features.FileMonitoring.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-3">
+                            Überwacht Fileshares auf hängengebliebene Dateien (Alter/Cutoff) und durchsucht Logdateien
+                            nach Fehlersignaturen. Verzeichnisse, Log-Scans und Wiki-Links pro Server unter
+                            <em>Server → Bearbeiten</em>.
+                        </p>
+                        <hr />
+                        <h6>Standard-Schwellwerte (Dateialter)</h6>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small">Warning ab (min)</label>
+                                <input type="number" name="Features.FileMonitoring.Defaults.StuckFileAgeMinutesWarning"
+                                       value="@Model.Features.FileMonitoring.Defaults.StuckFileAgeMinutesWarning"
+                                       class="form-control form-control-sm" min="1" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small">Critical ab (min)</label>
+                                <input type="number" name="Features.FileMonitoring.Defaults.StuckFileAgeMinutesCritical"
+                                       value="@Model.Features.FileMonitoring.Defaults.StuckFileAgeMinutesCritical"
+                                       class="form-control form-control-sm" min="1" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small">Max. gemeldete Funde pro Zyklus</label>
+                                <input type="number" name="Features.FileMonitoring.Defaults.MaxReportedItems"
+                                       value="@Model.Features.FileMonitoring.Defaults.MaxReportedItems"
+                                       class="form-control form-control-sm" min="1" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notifications (central notifier) -->
+            <div class="col-lg-12 col-xl-8 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-bell me-2"></i>Benachrichtigungen (Notifier)
+                    </div>
+                    <div class="card-body">
+                        @{ var n = Model.Features.Notifications; }
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" name="Features.Notifications.Enabled" value="true"
+                                   class="form-check-input feature-toggle" id="notificationsEnabled"
+                                   @(n.Enabled ? "checked" : "") />
+                            <input type="hidden" name="Features.Notifications.Enabled" value="false" />
+                            <label class="form-check-label" for="notificationsEnabled">
+                                <strong class="toggle-status">@(n.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-3">
+                            Zentrale Instanz (Worker mit <code>--notify</code>): aggregiert den Status aller Server per
+                            HTTP und versendet Sammel-E-Mails für nicht quittierte Probleme — mit Direkt-Quittier-Link.
+                            Für Hochverfügbarkeit auf zwei Servern parallel betreibbar (versetzte Laufzeiten).
+                        </p>
+                        <hr />
+                        <h6>Auslösung</h6>
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-3">
+                                <label class="form-label small">Mindest-Schweregrad</label>
+                                <select asp-for="Features.Notifications.MinSeverity" class="form-select form-select-sm">
+                                    <option value="Warning">Warning</option>
+                                    <option value="Critical">Critical</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">Reminder-Intervall (h)</label>
+                                <input type="number" name="Features.Notifications.ReNotifyIntervalHours"
+                                       value="@n.ReNotifyIntervalHours" class="form-control form-control-sm" min="1" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">Retry nach (Min)</label>
+                                <input type="number" name="Features.Notifications.RetryAfterMinutes"
+                                       value="@n.RetryAfterMinutes" class="form-control form-control-sm" min="1" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">Stale-Schwelle (Min)</label>
+                                <input type="number" name="Features.Notifications.StaleThresholdMinutes"
+                                       value="@n.StaleThresholdMinutes" class="form-control form-control-sm" min="1" />
+                            </div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-4 mb-3">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" name="Features.Notifications.NotifyOnStaleServer" value="true"
+                                       class="form-check-input" id="notifyStale" @(n.NotifyOnStaleServer ? "checked" : "") />
+                                <input type="hidden" name="Features.Notifications.NotifyOnStaleServer" value="false" />
+                                <label class="form-check-label small" for="notifyStale">Offline-/veraltete Server melden</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input type="checkbox" name="Features.Notifications.SendResolvedNotice" value="true"
+                                       class="form-check-input" id="notifyResolved" @(n.SendResolvedNotice ? "checked" : "") />
+                                <input type="hidden" name="Features.Notifications.SendResolvedNotice" value="false" />
+                                <label class="form-check-label small" for="notifyResolved">Entwarnung senden</label>
+                            </div>
+                        </div>
+                        <hr />
+                        <h6>E-Mail-Versand</h6>
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-4">
+                                <label class="form-label small">SMTP-Quelle (Server:Probe)</label>
+                                <input type="text" name="Features.Notifications.SmtpRef" value="@n.SmtpRef"
+                                       class="form-control form-control-sm font-monospace" placeholder="server01:seg1-relay" />
+                                <div class="form-text">Wiederverwendet eine E-Mail-Probe-Config. Leer = erste verfügbare.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">Empfänger (Kommagetrennt)</label>
+                                <input type="text" name="Features.Notifications.Recipients" value="@n.Recipients"
+                                       class="form-control form-control-sm" placeholder="ops@example.com, oncall@example.com" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">Betreff-Präfix</label>
+                                <input type="text" name="Features.Notifications.SubjectPrefix" value="@n.SubjectPrefix"
+                                       class="form-control form-control-sm" />
+                            </div>
+                        </div>
+                        <div class="form-check form-switch mb-1">
+                            @* Invers an PlainTextOnly gebunden: Haken = HTML an (PlainTextOnly=false) *@
+                            <input type="checkbox" name="Features.Notifications.PlainTextOnly" value="false"
+                                   class="form-check-input" id="notifyHtmlMails" @(n.PlainTextOnly ? "" : "checked") />
+                            <input type="hidden" name="Features.Notifications.PlainTextOnly" value="true" />
+                            <label class="form-check-label small" for="notifyHtmlMails">
+                                HTML-Mails versenden (multipart mit Text-Alternative)
+                            </label>
+                        </div>
+                        <div class="form-text mb-2">
+                            Standard: reine Text-Mails — manche Mail-Filter verwerfen multipart/HTML-Mails
+                            stillschweigend nach der SMTP-Annahme. HTML erst aktivieren, wenn die Zustellung
+                            der Text-Mails nachweislich funktioniert.
+                        </div>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="btnNotificationTest">
+                                <i class="bi bi-envelope-check me-1"></i>Test-Mail senden
+                            </button>
+                            <span id="notificationTestResult" class="small"></span>
+                        </div>
+                        <div class="form-text mb-2">
+                            Sendet eine Test-Benachrichtigung über die oben eingetragene SMTP-Quelle an die
+                            eingetragenen Empfänger — mit den aktuellen Feldwerten, auch vor dem Speichern.
+                        </div>
+                        <hr />
+                        <h6>Statusbericht</h6>
+                        @{ var sr = n.StatusReport ?? new Minicon.SimpleAdmin.Models.Config.StatusReportConfig(); }
+                        <div class="form-check form-switch mb-2">
+                            <input type="checkbox" name="Features.Notifications.StatusReport.Enabled" value="true"
+                                   class="form-check-input" id="statusReportEnabled" @(sr.Enabled ? "checked" : "") />
+                            <input type="hidden" name="Features.Notifications.StatusReport.Enabled" value="false" />
+                            <label class="form-check-label small" for="statusReportEnabled">
+                                Statusbericht zu festen Uhrzeiten senden (zusätzlich zu den Problem-Mails)
+                            </label>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-4">
+                                <label class="form-label small">Uhrzeiten (lokal)</label>
+                                <input type="text" name="Features.Notifications.StatusReport.Times"
+                                       value="@string.Join(", ", sr.Times)" class="form-control form-control-sm font-monospace"
+                                       placeholder="07:00, 13:00" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">Nachholen bis (Min)</label>
+                                <input type="number" name="Features.Notifications.StatusReport.CatchUpMinutes"
+                                       value="@sr.CatchUpMinutes" class="form-control form-control-sm" min="1" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">Format</label>
+                                <select name="Features.Notifications.StatusReport.PlainTextOnly" class="form-select form-select-sm">
+                                    <option value="" selected="@(sr.PlainTextOnly == null)">wie Problem-Mails</option>
+                                    <option value="false" selected="@(sr.PlainTextOnly == false)">HTML + Text</option>
+                                    <option value="true" selected="@(sr.PlainTextOnly == true)">nur Text</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-text mb-2">
+                            Übersicht aller Server mit Warnung oder Fehler (inkl. nicht erreichbarer Server) —
+                            oder „Alles OK“. Bei zwei Notifier-Servern wird pro Uhrzeit nur ein Bericht versendet.
+                        </div>
+                        <hr />
+                        <h6>Notifier-Server</h6>
+                        <p class="text-muted small mb-2">
+                            Welche Server senden die Benachrichtigungen? Mehrfachauswahl für Hochverfügbarkeit
+                            (zwei Server auf unterschiedlichen Hosts). Alle URLs — Status, Peers, Acknowledges,
+                            Quittier-Link — werden automatisch aus den Server-BaseUrls abgeleitet.
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label small mb-1">Sendende Server</label>
+                            @if (Model.AvailableServers.Count == 0)
+                            {
+                                <div class="form-text text-warning">Keine aktiven Server konfiguriert.</div>
+                            }
+                            else
+                            {
+                                <div class="d-flex flex-wrap gap-3">
+                                    @foreach (var srv in Model.AvailableServers)
+                                    {
+                                        var srvId = $"notifierServer_{srv}";
+                                        var isSel = n.NotifierServers.Contains(srv, StringComparer.OrdinalIgnoreCase);
+                                        <div class="form-check">
+                                            <input type="checkbox" name="Features.Notifications.NotifierServers"
+                                                   value="@srv" class="form-check-input" id="@srvId"
+                                                   @(isSel ? "checked" : "") />
+                                            <label class="form-check-label small font-monospace" for="@srvId">@srv</label>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div class="mb-0" style="max-width:380px;">
+                            <label class="form-label small">Zentrale WebUI (für Quittier-Link &amp; Acknowledges)</label>
+                            <select asp-for="Features.Notifications.WebUiServer" class="form-select form-select-sm">
+                                <option value="">(erster Notifier-Server)</option>
+                                @foreach (var srv in Model.AvailableServers)
+                                {
+                                    <option value="@srv">@srv</option>
+                                }
+                            </select>
+                            <div class="form-text">Deren baseUrl liefert die Quittier-Links und die acknowledges.json-URL.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Acknowledge -->
+            <div class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-check2-circle me-2"></i>Acknowledge
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" name="Features.Acknowledge.Enabled" value="true"
+                                   class="form-check-input feature-toggle" id="acknowledgeEnabled"
+                                   @(Model.Features.Acknowledge.Enabled ? "checked" : "") />
+                            <label class="form-check-label" for="acknowledgeEnabled">
+                                <strong class="toggle-status">@(Model.Features.Acknowledge.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-0">
+                            Ermöglicht das Bestätigen von Problemen, um Alarme temporär zu unterdrücken.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SQL Query Checks -->
+            <div class="col-lg-6 col-xl-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-database me-2"></i>SQL Query Checks
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" name="Features.SqlQueries.Enabled" value="true"
+                                   class="form-check-input feature-toggle" id="sqlQueriesGlobalEnabled"
+                                   @(Model.Features.SqlQueries.Enabled ? "checked" : "") />
+                            <input type="hidden" name="Features.SqlQueries.Enabled" value="false" />
+                            <label class="form-check-label" for="sqlQueriesGlobalEnabled">
+                                <strong class="toggle-status">@(Model.Features.SqlQueries.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-3">
+                            Führt konfigurierte SQL-Abfragen auf SQL Server-Datenbanken aus und überprüft Zeilenanzahl
+                            und Spaltenwerte. Pro Server konfigurierbar.
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label small">Standard-Timeout (Sekunden)</label>
+                            <input type="number" name="Features.SqlQueries.DefaultTimeoutSeconds"
+                                   value="@Model.Features.SqlQueries.DefaultTimeoutSeconds"
+                                   class="form-control form-control-sm" min="1" max="300" style="max-width:120px;" />
+                            <div class="form-text">Verbindungs- und Abfrage-Timeout, sofern nicht pro Check überschrieben.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg me-1"></i>Feature-Einstellungen speichern
+            </button>
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Zurück zu Einstellungen
+            </a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+<script>
+    // Toggle-Status dynamisch aktualisieren
+    document.querySelectorAll('.feature-toggle').forEach(function(toggle) {
+        toggle.addEventListener('change', function() {
+            var label = this.closest('.form-check').querySelector('.toggle-status');
+            if (label) {
+                label.textContent = this.checked ? 'Aktiv' : 'Deaktiviert';
+            }
+        });
+    });
+
+    // Event-Log-Ignorier-Regeln: Zeilen hinzufügen/entfernen mit Neu-Indexierung
+    (function () {
+        var body = document.getElementById('ignoreRulesBody');
+        var template = document.getElementById('ignoreRuleTemplate');
+        if (!body || !template) return;
+
+        function reindexRules() {
+            body.querySelectorAll('tr.ignore-rule-row').forEach(function (row, idx) {
+                row.querySelectorAll('[name]').forEach(function (input) {
+                    input.name = input.name.replace(/IgnoreRules\[\d+\]/, 'IgnoreRules[' + idx + ']');
+                });
+            });
+        }
+
+        document.getElementById('btnAddIgnoreRule')?.addEventListener('click', function () {
+            var idx = body.querySelectorAll('tr.ignore-rule-row').length;
+            var html = template.innerHTML.replace(/__IDX__/g, idx);
+            var tr = document.createElement('tbody');
+            tr.innerHTML = html;
+            body.appendChild(tr.firstElementChild);
+        });
+
+        body.addEventListener('click', function (e) {
+            var btn = e.target.closest('.btn-remove-rule');
+            if (!btn) return;
+            btn.closest('tr.ignore-rule-row')?.remove();
+            reindexRules();
+        });
+    })();
+
+    // Notifier: Test-Mail über die konfigurierte SMTP-Quelle senden
+    document.getElementById('btnNotificationTest')?.addEventListener('click', async function () {
+        var btn = this;
+        var result = document.getElementById('notificationTestResult');
+        var getVal = function (name) {
+            var el = document.querySelector('[name="' + name + '"]');
+            return el ? el.value : null;
+        };
+
+        btn.disabled = true;
+        result.className = 'small text-muted';
+        result.textContent = 'Sende Test-Mail…';
+
+        try {
+            // PathBase-bewusste URL (IIS-Unteranwendung, z.B. /SimpleAdmin)
+            var response = await fetch('@Url.Content("~/api/notificationtest/send")', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    smtpRef: getVal('Features.Notifications.SmtpRef'),
+                    recipients: getVal('Features.Notifications.Recipients'),
+                    subjectPrefix: getVal('Features.Notifications.SubjectPrefix')
+                })
+            });
+            if (!response.ok) {
+                result.className = 'small text-danger';
+                result.textContent = '✗ HTTP ' + response.status + ' ' + response.statusText +
+                    ' — Endpunkt nicht erreichbar (Deployment/Version prüfen).';
+                return;
+            }
+            var data = await response.json();
+            if (data.success) {
+                result.className = 'small text-success';
+                result.textContent = '✓ Gesendet über ' + data.smtpSource + ' (' + data.host + ') an ' + data.recipients;
+            } else {
+                result.className = 'small text-danger';
+                result.textContent = '✗ ' + data.error;
+            }
+        } catch (e) {
+            result.className = 'small text-danger';
+            result.textContent = '✗ Anfrage fehlgeschlagen: ' + e;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+</script>
+}

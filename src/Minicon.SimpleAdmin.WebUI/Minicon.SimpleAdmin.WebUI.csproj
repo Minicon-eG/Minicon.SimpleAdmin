@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+    <RootNamespace>Minicon.SimpleAdmin.WebUI</RootNamespace>
+    <AssemblyName>Minicon.SimpleAdmin.WebUI</AssemblyName>
+    <PackageId>Minicon.SimpleAdmin.WebUI</PackageId>
+    <Version>2.26.0</Version>
+    <Authors>Minicon Contributors</Authors>
+    <Description>Razor Class Library providing the full SimpleAdmin admin UI (controllers, views, REST API and services) for the Minicon SimpleAdmin monitoring platform. A host application only needs to call AddSimpleAdminWebUI / UseSimpleAdminWebUI.</Description>
+    <PackageTags>monitoring;simpleadmin;webui;mvc;razor-class-library</PackageTags>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Minicon.SimpleAdmin.Shared/Minicon.SimpleAdmin.Shared.csproj" />
+    <ProjectReference Include="../Minicon.SimpleAdmin.Services/Minicon.SimpleAdmin.Services.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
+    <PackageReference Include="MailKit" Version="4.16.0" />
+  </ItemGroup>
+
+</Project>

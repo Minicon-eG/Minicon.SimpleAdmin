@@ -1,0 +1,3219 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimpleAdmin - Vollständige Konfigurationsdokumentation</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        .container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+            gap: 2rem;
+        }
+        /* TOC Sidebar */
+        .toc-sidebar {
+            width: 300px;
+            min-width: 300px;
+            background: white;
+            padding: 2rem 1rem 1.5rem 1rem;
+            position: fixed;
+            left: 0;
+            top: 130px;
+            height: calc(100vh - 130px);
+            overflow-y: auto;
+            border-right: 2px solid #ecf0f1;
+            z-index: 998;
+        }
+        .container {
+            margin-left: 300px;
+        }
+        .toc-sidebar h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 0.5rem;
+        }
+        .toc-sidebar ul {
+            list-style: none;
+        }
+        .toc-sidebar > ul > li {
+            margin-bottom: 0.5rem;
+        }
+        .toc-sidebar a {
+            color: #2c3e50;
+            text-decoration: none;
+            display: block;
+            padding: 0.5rem;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        .toc-sidebar a:hover {
+            background: #ecf0f1;
+            padding-left: 1rem;
+        }
+        .toc-sidebar .toc-level-1 {
+            font-weight: bold;
+            font-size: 1rem;
+        }
+        .toc-sidebar .toc-level-2 {
+            font-size: 0.9rem;
+            padding-left: 1rem;
+        }
+        .toc-sidebar .toc-level-3 {
+            font-size: 0.85rem;
+            padding-left: 2rem;
+            color: #555;
+        }
+
+        /* Main Content */
+        main {
+            flex: 1;
+            padding: 2rem;
+            max-width: calc(100% - 300px);
+        }
+        section {
+            background: white;
+            margin-bottom: 2rem;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #2c3e50;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 3px solid #3498db;
+        }
+        h3 {
+            color: #34495e;
+            font-size: 1.5rem;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            padding-left: 0.5rem;
+            border-left: 4px solid #3498db;
+        }
+        h4 {
+            color: #555;
+            font-size: 1.2rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        h5 {
+            color: #666;
+            font-size: 1rem;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        p {
+            margin-bottom: 1rem;
+        }
+        ul, ol {
+            margin-left: 2rem;
+            margin-bottom: 1rem;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+        code {
+            background: #f8f9fa;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            color: #e74c3c;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-bottom: 1.5rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+        }
+        .warning-box {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+        }
+        .success-box {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+        }
+        .danger-box {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #34495e;
+            color: white;
+            font-weight: bold;
+        }
+        tr:hover {
+            background: #f5f5f5;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-left: 0.5rem;
+        }
+        .badge-required {
+            background: #e74c3c;
+            color: white;
+        }
+        .badge-optional {
+            background: #95a5a6;
+            color: white;
+        }
+        .badge-default {
+            background: #3498db;
+            color: white;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 2rem;
+            padding: 0.75rem 1.5rem;
+            background: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+        .back-link:hover {
+            background: #2980b9;
+        }
+        .json-path {
+            background: #34495e;
+            color: #ecf0f1;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85em;
+            display: inline-block;
+            margin-bottom: 0.5rem;
+        }
+        footer {
+            background: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 2rem;
+            margin-top: 3rem;
+        }
+
+        /* Search functionality */
+        .search-container {
+            position: relative;
+            background: white;
+            padding: 1rem;
+            border-bottom: 2px solid #ecf0f1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .search-box {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.5rem;
+            border: 2px solid #bdc3c7;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="%23333" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>');
+            background-repeat: no-repeat;
+            background-position: 0.75rem center;
+            background-size: 20px 20px;
+        }
+        .search-box:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        .search-results {
+            margin-top: 0.5rem;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+        .highlight {
+            background-color: #fff176;
+            padding: 0.1rem 0.2rem;
+            border-radius: 2px;
+        }
+        .hidden {
+            display: none !important;
+        }
+
+        /* Active TOC highlighting */
+        .toc-sidebar a.active {
+            background: #3498db;
+            color: white;
+            font-weight: bold;
+            padding-left: 1rem;
+        }
+
+        /* Scroll to top button */
+        .scroll-to-top {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 50px;
+            height: 50px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+            opacity: 0;
+            visibility: hidden;
+            z-index: 1000;
+        }
+        .scroll-to-top.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        .scroll-to-top:hover {
+            background: #2980b9;
+            transform: translateY(-3px);
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.5rem;
+            }
+            .container {
+                flex-direction: column;
+                margin-left: 0;
+            }
+            .toc-sidebar {
+                width: 100%;
+                min-width: 100%;
+                position: static;
+                left: auto;
+                height: auto;
+                border-right: none;
+                border-bottom: 2px solid #ecf0f1;
+                max-height: 0;
+                overflow: hidden;
+                transition: max-height 0.3s ease-out;
+                padding: 0 1rem;
+                z-index: 998;
+            }
+            .toc-sidebar.expanded {
+                max-height: 80vh;
+                padding: 1rem;
+            }
+            main {
+                max-width: 100%;
+            }
+            .toc-toggle {
+                display: block;
+                width: 100%;
+                padding: 1rem;
+                background: #34495e;
+                color: white;
+                border: none;
+                font-size: 1rem;
+                font-weight: bold;
+                cursor: pointer;
+                text-align: left;
+                transition: background 0.3s;
+            }
+            .toc-toggle:hover {
+                background: #2c3e50;
+            }
+            .toc-toggle::after {
+                content: '▼';
+                float: right;
+                transition: transform 0.3s;
+            }
+            .toc-toggle.active::after {
+                transform: rotate(180deg);
+            }
+            main {
+                padding: 1rem;
+            }
+            section {
+                padding: 1rem;
+            }
+            table {
+                font-size: 0.85rem;
+            }
+            th, td {
+                padding: 0.5rem;
+            }
+            pre {
+                padding: 1rem;
+                font-size: 0.8em;
+            }
+            .scroll-to-top {
+                bottom: 1rem;
+                right: 1rem;
+                width: 45px;
+                height: 45px;
+            }
+        }
+        @media (min-width: 769px) {
+            .toc-toggle {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>SimpleAdmin - Vollständige Konfigurationsdokumentation</h1>
+        <p>Detaillierte Anleitung zur Konfiguration aller Features</p>
+    </header>
+
+    <!-- Search Container -->
+    <div class="search-container">
+        <input type="text"
+               id="searchBox"
+               class="search-box"
+               placeholder="Dokumentation durchsuchen..."
+               aria-label="Suche">
+        <div id="searchResults" class="search-results"></div>
+    </div>
+
+    <!-- Mobile TOC Toggle -->
+    <button class="toc-toggle" id="tocToggle" aria-label="Inhaltsverzeichnis umschalten">
+        Inhaltsverzeichnis
+    </button>
+
+    <div class="container">
+        <!-- TOC Sidebar -->
+        <aside class="toc-sidebar" id="tocSidebar">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#overview" class="toc-level-1">1. Übersicht</a></li>
+                <li><a href="#json-structure" class="toc-level-1">2. JSON-Struktur</a>
+                    <ul>
+                        <li><a href="#json-root" class="toc-level-2">2.1 Root-Ebene</a></li>
+                        <li><a href="#json-history" class="toc-level-2">2.2 history</a></li>
+                        <li><a href="#json-output" class="toc-level-2">2.3 output</a></li>
+                        <li><a href="#json-servers" class="toc-level-2">2.4 servers</a></li>
+                        <li><a href="#json-servicetypes" class="toc-level-2">2.5 serviceTypes</a></li>
+                    </ul>
+                </li>
+                <li><a href="#monitoring-types" class="toc-level-1">3. Monitoring-Typen</a>
+                    <ul>
+                        <li><a href="#prtg-monitoring" class="toc-level-2">3.1 PRTG Monitoring</a>
+                            <ul>
+                                <li><a href="#prtg-cpu" class="toc-level-3">3.1.1 CPU Überwachung</a></li>
+                                <li><a href="#prtg-memory" class="toc-level-3">3.1.2 Memory Überwachung</a></li>
+                                <li><a href="#prtg-disk" class="toc-level-3">3.1.3 Disk Überwachung</a></li>
+                            </ul>
+                        </li>
+                        <li><a href="#netscaler-monitoring" class="toc-level-2">3.2 NetScaler Health Checks</a>
+                            <ul>
+                                <li><a href="#netscaler-simple" class="toc-level-3">3.2.1 Einfache HTTP Checks</a></li>
+                                <li><a href="#netscaler-advanced" class="toc-level-3">3.2.2 Erweiterte Checks</a></li>
+                                <li><a href="#netscaler-json" class="toc-level-3">3.2.3 JSON Path Validierung</a></li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+                <li><a href="#operators" class="toc-level-1">4. Operator-Referenz</a>
+                    <ul>
+                        <li><a href="#operators-prtg" class="toc-level-2">4.1 PRTG Threshold Operatoren</a></li>
+                        <li><a href="#operators-jsonpath" class="toc-level-2">4.2 JSON Path Operatoren</a></li>
+                    </ul>
+                </li>
+                <li><a href="#ok-marker" class="toc-level-1">5. OK-Marker</a></li>
+                <li><a href="#complete-examples" class="toc-level-1">6. Vollständige Beispiele</a>
+                    <ul>
+                        <li><a href="#example-basic" class="toc-level-2">5.1 Basis-Setup</a></li>
+                        <li><a href="#example-multi" class="toc-level-2">5.2 Multi-Server</a></li>
+                        <li><a href="#example-external" class="toc-level-2">5.3 Externe Services</a></li>
+                        <li><a href="#example-advanced" class="toc-level-2">6.4 Erweitert</a></li>
+                    </ul>
+                </li>
+                <li><a href="#windows-service-monitoring" class="toc-level-1">7. Windows Service-Überwachung</a></li>
+                <li><a href="#eventlog-monitoring" class="toc-level-1">8. Windows EventLog-Überwachung</a></li>
+                <li><a href="#sql-query-checks" class="toc-level-1">9. SQL Query Checks</a>
+                    <ul>
+                        <li><a href="#sql-query-purpose" class="toc-level-2">9.1 Zweck</a></li>
+                        <li><a href="#sql-query-config" class="toc-level-2">9.2 Konfiguration</a></li>
+                        <li><a href="#sql-query-webui" class="toc-level-2">9.3 Konfiguration über WebUI</a></li>
+                        <li><a href="#sql-query-datatypes" class="toc-level-2">9.4 Unterstützte Datentypen</a></li>
+                        <li><a href="#sql-query-alerts" class="toc-level-2">9.5 Alert-Verhalten</a></li>
+                    </ul>
+                </li>
+                <li><a href="#best-practices" class="toc-level-1">10. Best Practices</a></li>
+                <li><a href="#troubleshooting" class="toc-level-1">11. Troubleshooting</a></li>
+                <li><a href="#detail-page-features" class="toc-level-1">12. Detailseite Features</a>
+                    <ul>
+                        <li><a href="#detail-metrics" class="toc-level-2">12.1 Metrik-Anzeige</a></li>
+                        <li><a href="#detail-history" class="toc-level-2">12.2 Logarithmische Verlaufsdarstellung</a></li>
+                        <li><a href="#detail-legend" class="toc-level-2">12.3 Legende</a></li>
+                        <li><a href="#detail-auto-refresh" class="toc-level-2">12.4 Auto-Refresh</a></li>
+                    </ul>
+                </li>
+                <li><a href="#email-monitoring" class="toc-level-1">13. E-Mail-Monitoring</a>
+                    <ul>
+                        <li><a href="#email-topology" class="toc-level-2">13.1 Topologie</a></li>
+                        <li><a href="#email-sender-config" class="toc-level-2">13.2 Sender-Konfiguration</a></li>
+                        <li><a href="#email-checker-config" class="toc-level-2">13.3 Checker-Konfiguration</a></li>
+                        <li><a href="#email-thresholds" class="toc-level-2">13.4 Schwellwerte &amp; Status</a></li>
+                        <li><a href="#email-encryption" class="toc-level-2">13.5 Passwort-Verschlüsselung</a></li>
+                    </ul>
+                </li>
+                <li><a href="#notifications" class="toc-level-1">14. Zentrale Benachrichtigungen (Notifier)</a>
+                    <ul>
+                        <li><a href="#notifications-activation" class="toc-level-2">14.1 Aktivierung</a></li>
+                        <li><a href="#notifications-ha" class="toc-level-2">14.2 Hochverfügbarkeit</a></li>
+                        <li><a href="#notifications-config" class="toc-level-2">14.3 Konfiguration</a></li>
+                        <li><a href="#notifications-ack" class="toc-level-2">14.4 Quittieren aus der E-Mail</a></li>
+                    </ul>
+                </li>
+                <li><a href="#biztalk" class="toc-level-1">15. BizTalk-Überwachung</a></li>
+                <li><a href="#filemonitoring" class="toc-level-1">16. Datei-/Protokollüberwachung</a></li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main>
+            <!-- 1. Übersicht -->
+            <section id="overview">
+                <h2>1. Übersicht</h2>
+                <p>
+                    Der SimpleAdmin ist ein Monitoring-Tool, das System-Metriken überwacht und statische HTML-Seiten
+                    für LoadBalancer (NetScaler) und Monitoring-Systeme (PRTG) generiert.
+                </p>
+                <div class="info-box">
+                    <strong>Konfigurationsdatei:</strong> <code>SimpleAdmin/config/config.json</code><br>
+                    <strong>JSON Schema:</strong> <code>SimpleAdmin/config/config.schema.json</code>
+                </div>
+                <h3>Hauptfunktionen</h3>
+                <ul>
+                    <li><strong>System-Metriken:</strong> CPU, Memory, Disk-Überwachung</li>
+                    <li><strong>PRTG Integration:</strong> Generiert HTML-Seiten für PRTG-Sensoren</li>
+                    <li><strong>NetScaler Integration:</strong> Generiert HTML-Seiten für LoadBalancer Health Checks</li>
+                    <li><strong>Verlaufsdaten:</strong> Speichert historische Metrik-Daten</li>
+                    <li><strong>OK-Marker:</strong> HTML-Kommentar zur automatischen Status-Erkennung</li>
+                </ul>
+
+                <h3>Deployment-Modell</h3>
+                <div class="success-box">
+                    <strong>SimpleAdmin läuft als einmaliger Task</strong>, nicht als kontinuierlicher Hintergrundprozess.
+                </div>
+                <p>
+                    SimpleAdmin wird typischerweise per Cronjob oder Docker-Trigger aufgerufen, führt seine Arbeit aus und beendet sich dann:
+                </p>
+                <ol>
+                    <li><strong>Metriken sammeln:</strong> Liest aktuelle CPU, Memory, Disk-Werte</li>
+                    <li><strong>Status berechnen:</strong> Vergleicht mit Schwellwerten und bestimmt Service-Status</li>
+                    <li><strong>Verlauf aktualisieren:</strong> Speichert Metrik-Historie in JSON-Dateien</li>
+                    <li><strong>HTML generieren:</strong> Erstellt/aktualisiert alle HTML-Seiten im wwwroot-Verzeichnis</li>
+                    <li><strong>Beenden:</strong> Programm terminiert</li>
+                </ol>
+                <p>
+                    <strong>Wichtige Konsequenz:</strong> Parameter wie <code>intervalSeconds</code> und <code>timeoutMs</code>
+                    in den NetScaler Health Checks sind <strong>reine Dokumentation</strong> - sie beschreiben, wie oft der
+                    LoadBalancer die generierten HTML-Seiten abrufen soll, werden aber nicht von SimpleAdmin selbst verwendet.
+                </p>
+
+                <h4>Typische Deployment-Szenarien</h4>
+                <table>
+                    <tr>
+                        <th>Szenario</th>
+                        <th>Beschreibung</th>
+                        <th>Beispiel</th>
+                    </tr>
+                    <tr>
+                        <td>Docker Post-Build</td>
+                        <td>Wird nach jedem Build automatisch ausgeführt</td>
+                        <td><code>docker exec simpleadmin-dev dotnet SimpleAdmin.dll</code></td>
+                    </tr>
+                    <tr>
+                        <td>Cronjob</td>
+                        <td>Läuft alle X Minuten auf dem Server</td>
+                        <td><code>*/5 * * * * /usr/local/bin/simpleadmin</code></td>
+                    </tr>
+                    <tr>
+                        <td>Systemd Timer</td>
+                        <td>Linux Systemd-Timer für regelmäßige Ausführung</td>
+                        <td><code>systemctl start simpleadmin.service</code></td>
+                    </tr>
+                    <tr>
+                        <td>Kubernetes CronJob</td>
+                        <td>Kubernetes CronJob für Container-Umgebungen</td>
+                        <td><code>schedule: "*/5 * * * *"</code></td>
+                    </tr>
+                </table>
+            </section>
+
+            <!-- 2. JSON-Struktur -->
+            <section id="json-structure">
+                <h2>2. JSON-Struktur - Alle Knoten erklärt</h2>
+
+                <!-- 2.1 Root-Ebene -->
+                <h3 id="json-root">2.1 Root-Ebene</h3>
+                <div class="json-path">config.json (Root)</div>
+                <p>Die Hauptkonfigurationsdatei enthält drei Hauptbereiche:</p>
+                <pre>{
+  "history": { ... },    // Verlaufsdaten-Konfiguration
+  "output": { ... },     // HTML-Ausgabe-Einstellungen
+  "servers": [ ... ]     // Liste der zu überwachenden Server
+}</pre>
+
+                <!-- 2.2 history -->
+                <h3 id="json-history">2.2 history - Verlaufsdaten und Status-Glättung</h3>
+                <div class="json-path">config.history</div>
+                <p>Konfiguriert die Speicherung von historischen Metrik-Daten und die Status-Glättung zur Vermeidung von Alert-Fatigue.</p>
+
+                <h4>Knoten: maxEntries</h4>
+                <div class="json-path">config.history.maxEntries</div>
+                <table>
+                    <tr>
+                        <th>Eigenschaft</th>
+                        <th>Wert</th>
+                    </tr>
+                    <tr>
+                        <td>Typ</td>
+                        <td><code>integer</code></td>
+                    </tr>
+                    <tr>
+                        <td>Pflicht</td>
+                        <td><span class="badge badge-optional">Optional</span></td>
+                    </tr>
+                    <tr>
+                        <td>Default</td>
+                        <td><code>500</code></td>
+                    </tr>
+                    <tr>
+                        <td>Beschreibung</td>
+                        <td>Maximale Anzahl der Verlaufseinträge pro Service</td>
+                    </tr>
+                </table>
+                <div class="info-box">
+                    <strong>Empfehlung:</strong> Bei häufigen Updates (z.B. alle 30 Sekunden) entsprechen 500 Einträge etwa 4 Stunden Verlauf.
+                </div>
+
+                <h4>Knoten: minConsecutiveChecks</h4>
+                <div class="json-path">config.history.minConsecutiveChecks</div>
+                <table>
+                    <tr>
+                        <th>Eigenschaft</th>
+                        <th>Wert</th>
+                    </tr>
+                    <tr>
+                        <td>Typ</td>
+                        <td><code>integer</code></td>
+                    </tr>
+                    <tr>
+                        <td>Pflicht</td>
+                        <td><span class="badge badge-optional">Optional</span></td>
+                    </tr>
+                    <tr>
+                        <td>Default</td>
+                        <td><code>5</code></td>
+                    </tr>
+                    <tr>
+                        <td>Beschreibung</td>
+                        <td>Mindestanzahl aufeinanderfolgender Messungen mit gleichem Status, bevor ein Status-Wechsel bestätigt wird</td>
+                    </tr>
+                </table>
+                <div class="success-box">
+                    <strong>Status-Glättung:</strong> Diese Einstellung verhindert "Alert Fatigue" durch kurzfristige CPU-/Memory-Spitzen.
+                    Ein Status-Wechsel (z.B. von "OK" auf "Warning") wird erst bestätigt, wenn alle letzten N Messungen den gleichen Status zeigen.
+                </div>
+                <div class="info-box">
+                    <strong>Durchschnittswert:</strong> Auf der Detailseite wird der Durchschnittswert der letzten N Messungen angezeigt,
+                    wobei N der Wert von <code>minConsecutiveChecks</code> ist. Dies ermöglicht eine stabilere Einschätzung der Systemlast.
+                </div>
+
+                <h5>Beispiel Status-Glättung</h5>
+                <pre>Konfiguration: minConsecutiveChecks: 5, CPU Warning: 70%, Critical: 85%
+
+Historie der letzten 5 CPU-Messungen:
+  [95%, 92%, 88%, 65%, 70%]  →  Status: [Crit, Crit, Crit, Ok, Ok]
+
+Ergebnis: Nur 3/5 Messungen sind "Critical" → Status wird NICHT auf Critical gesetzt
+          Der stabilste Status (häufigster) wird verwendet → "Critical" (3x)
+
+Nächste Messung mit [92%, 88%, 65%, 70%, 68%]:
+  Status: [Crit, Crit, Ok, Ok, Ok]
+  Ergebnis: 3/5 sind "Ok" → Status bleibt bei "Ok"</pre>
+
+                <pre>{
+  "history": {
+    "maxEntries": 1000,           // Speichert die letzten 1000 Messungen
+    "minConsecutiveChecks": 5     // 5 aufeinanderfolgende Messungen für Status-Bestätigung
+  }
+}</pre>
+
+                <!-- 2.3 output -->
+                <h3 id="json-output">2.3 output - HTML-Ausgabe</h3>
+                <div class="json-path">config.output</div>
+                <p>Konfiguriert Einstellungen für die generierten HTML-Seiten.</p>
+
+                <h4>Knoten: okMarker</h4>
+                <div class="json-path">config.output.okMarker</div>
+                <table>
+                    <tr>
+                        <th>Eigenschaft</th>
+                        <th>Wert</th>
+                    </tr>
+                    <tr>
+                        <td>Typ</td>
+                        <td><code>string</code></td>
+                    </tr>
+                    <tr>
+                        <td>Pflicht</td>
+                        <td><span class="badge badge-optional">Optional</span></td>
+                    </tr>
+                    <tr>
+                        <td>Default</td>
+                        <td><code>"##OK##"</code></td>
+                    </tr>
+                    <tr>
+                        <td>Beschreibung</td>
+                        <td>Text-Marker als HTML-Kommentar für gesunde Services</td>
+                    </tr>
+                </table>
+                <p>
+                    Dieser Marker wird als HTML-Kommentar <code>&lt;!-- Status: ##OK## --&gt;</code> in die HTML-Seite
+                    eingefügt, wenn der Service gesund ist. LoadBalancer und PRTG können im Quellcode nach diesem Text suchen.
+                </p>
+                <pre>{
+  "output": {
+    "okMarker": "##OK##"  // Anpassbar, z.B. "STATUS_OK" oder "[HEALTHY]"
+  }
+}</pre>
+
+                <!-- 2.4 servers -->
+                <h3 id="json-servers">2.4 servers - Server-Liste</h3>
+                <div class="json-path">config.servers[]</div>
+                <p>Array von Server-Objekten. Jeder Server kann mehrere Service-Typen überwachen.</p>
+
+                <h4>Knoten: name</h4>
+                <div class="json-path">config.servers[].name</div>
+                <table>
+                    <tr>
+                        <th>Eigenschaft</th>
+                        <th>Wert</th>
+                    </tr>
+                    <tr>
+                        <td>Typ</td>
+                        <td><code>string</code></td>
+                    </tr>
+                    <tr>
+                        <td>Pflicht</td>
+                        <td><span class="badge badge-required">Erforderlich</span></td>
+                    </tr>
+                    <tr>
+                        <td>Beschreibung</td>
+                        <td>Eindeutiger Name des Servers (wird in HTML-Seiten angezeigt)</td>
+                    </tr>
+                </table>
+
+                <h4>Knoten: active</h4>
+                <div class="json-path">config.servers[].active</div>
+                <table>
+                    <tr>
+                        <th>Eigenschaft</th>
+                        <th>Wert</th>
+                    </tr>
+                    <tr>
+                        <td>Typ</td>
+                        <td><code>boolean</code></td>
+                    </tr>
+                    <tr>
+                        <td>Pflicht</td>
+                        <td><span class="badge badge-required">Erforderlich</span></td>
+                    </tr>
+                    <tr>
+                        <td>Beschreibung</td>
+                        <td>Ob dieser Server überwacht werden soll</td>
+                    </tr>
+                </table>
+                <div class="warning-box">
+                    <strong>Hinweis:</strong> Setze <code>active: false</code> um einen Server temporär zu deaktivieren, ohne die Konfiguration zu löschen.
+                </div>
+
+                <h4>Knoten: baseUrl</h4>
+                <div class="json-path">config.servers[].baseUrl</div>
+                <table>
+                    <tr>
+                        <th>Eigenschaft</th>
+                        <th>Wert</th>
+                    </tr>
+                    <tr>
+                        <td>Typ</td>
+                        <td><code>string</code> (URL)</td>
+                    </tr>
+                    <tr>
+                        <td>Pflicht</td>
+                        <td><span class="badge badge-optional">Optional</span></td>
+                    </tr>
+                    <tr>
+                        <td>Beschreibung</td>
+                        <td>Basis-URL für HTTP Health Checks. Nur erforderlich bei NetScaler Health Checks mit relativen Pfaden.</td>
+                    </tr>
+                </table>
+
+                <!-- 2.5 serviceTypes -->
+                <h3 id="json-servicetypes">2.5 serviceTypes - Service-Typen</h3>
+                <div class="json-path">config.servers[].serviceTypes[]</div>
+                <p>Array von Service-Typen, die auf diesem Server überwacht werden.</p>
+
+                <h4>Knoten: type</h4>
+                <div class="json-path">config.servers[].serviceTypes[].type</div>
+                <table>
+                    <tr>
+                        <th>Eigenschaft</th>
+                        <th>Wert</th>
+                    </tr>
+                    <tr>
+                        <td>Typ</td>
+                        <td><code>string</code></td>
+                    </tr>
+                    <tr>
+                        <td>Pflicht</td>
+                        <td><span class="badge badge-required">Erforderlich</span></td>
+                    </tr>
+                    <tr>
+                        <td>Beschreibung</td>
+                        <td>Name des Service-Typs (z.B. "api-gateway", "database", "web-frontend")</td>
+                    </tr>
+                </table>
+
+                <h4>Knoten: prtg</h4>
+                <div class="json-path">config.servers[].serviceTypes[].prtg</div>
+                <p>Konfiguration für PRTG-Monitoring (System-Metriken).</p>
+                <ul>
+                    <li><code>enabled</code> (boolean, erforderlich): PRTG-Monitoring aktivieren/deaktivieren</li>
+                    <li><code>adminPath</code> (string, erforderlich): URL-Pfad für die PRTG-Seite (z.B. "/admin/api-gateway/monitor")</li>
+                    <li><code>checks</code> (array, erforderlich): Liste der zu überwachenden Metriken</li>
+                </ul>
+
+                <h4>Knoten: netscaler</h4>
+                <div class="json-path">config.servers[].serviceTypes[].netscaler</div>
+                <p>Konfiguration für NetScaler LoadBalancer Health Checks.</p>
+                <ul>
+                    <li><code>enabled</code> (boolean, erforderlich): NetScaler Health Checks aktivieren/deaktivieren</li>
+                    <li><code>adminPath</code> (string, erforderlich): URL-Pfad für die LoadBalancer-Seite (z.B. "/admin/api-gateway/loadbalancer")</li>
+                    <li><code>healthChecks</code> (array, erforderlich): Liste der Health Check Definitionen</li>
+                </ul>
+            </section>
+
+            <!-- 3. Monitoring-Typen -->
+            <section id="monitoring-types">
+                <h2>3. Monitoring-Typen im Detail</h2>
+
+                <!-- 3.1 PRTG Monitoring -->
+                <h3 id="prtg-monitoring">3.1 PRTG Monitoring</h3>
+                <p>
+                    PRTG-Monitoring überwacht System-Metriken (CPU, Memory, Disk) und generiert HTML-Seiten,
+                    die PRTG über HTTP-Advanced-Sensoren abrufen kann.
+                </p>
+
+                <!-- 3.1.1 CPU -->
+                <h4 id="prtg-cpu">3.1.1 CPU-Überwachung</h4>
+                <div class="json-path">config.servers[].serviceTypes[].prtg.checks[] (metric: "cpu")</div>
+                <p>Überwacht die CPU-Auslastung des Systems in Prozent.</p>
+
+                <h5>Parameter</h5>
+                <table>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Typ</th>
+                        <th>Pflicht</th>
+                        <th>Beschreibung</th>
+                    </tr>
+                    <tr>
+                        <td><code>metric</code></td>
+                        <td>string</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Muss <code>"cpu"</code> sein</td>
+                    </tr>
+                    <tr>
+                        <td><code>displayName</code></td>
+                        <td>string</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Anzeigename in HTML-Ausgabe</td>
+                    </tr>
+                    <tr>
+                        <td><code>threshold</code></td>
+                        <td>object</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Schwellwert-Konfiguration</td>
+                    </tr>
+                </table>
+
+                <h5>Threshold-Parameter</h5>
+                <table>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Typ</th>
+                        <th>Beschreibung</th>
+                    </tr>
+                    <tr>
+                        <td><code>warning</code></td>
+                        <td>number</td>
+                        <td>Warnschwelle in Prozent (z.B. 70)</td>
+                    </tr>
+                    <tr>
+                        <td><code>critical</code></td>
+                        <td>number</td>
+                        <td>Kritische Schwelle in Prozent (z.B. 85)</td>
+                    </tr>
+                    <tr>
+                        <td><code>operator</code></td>
+                        <td>string</td>
+                        <td>Vergleichsoperator: <code>">"</code> (größer als)</td>
+                    </tr>
+                </table>
+
+                <h5>Beispiel</h5>
+                <pre>{
+  "metric": "cpu",
+  "displayName": "CPU Usage",
+  "threshold": {
+    "warning": 70,      // Warnung bei > 70%
+    "critical": 85,     // Kritisch bei > 85%
+    "operator": ">"
+  }
+}</pre>
+
+                <h5>Interpretation</h5>
+                <ul>
+                    <li><strong>OK:</strong> CPU-Auslastung ≤ 70%</li>
+                    <li><strong>Warning:</strong> CPU-Auslastung > 70% und ≤ 85%</li>
+                    <li><strong>Critical:</strong> CPU-Auslastung > 85%</li>
+                </ul>
+
+                <!-- 3.1.2 Memory -->
+                <h4 id="prtg-memory">3.1.2 Memory-Überwachung</h4>
+                <div class="json-path">config.servers[].serviceTypes[].prtg.checks[] (metric: "memory")</div>
+                <p>Überwacht die Arbeitsspeicher-Auslastung des Systems in Prozent.</p>
+
+                <h5>Parameter</h5>
+                <table>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Typ</th>
+                        <th>Pflicht</th>
+                        <th>Beschreibung</th>
+                    </tr>
+                    <tr>
+                        <td><code>metric</code></td>
+                        <td>string</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Muss <code>"memory"</code> sein</td>
+                    </tr>
+                    <tr>
+                        <td><code>displayName</code></td>
+                        <td>string</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Anzeigename in HTML-Ausgabe</td>
+                    </tr>
+                    <tr>
+                        <td><code>threshold</code></td>
+                        <td>object</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Schwellwert-Konfiguration</td>
+                    </tr>
+                </table>
+
+                <h5>Beispiel</h5>
+                <pre>{
+  "metric": "memory",
+  "displayName": "Memory Usage",
+  "threshold": {
+    "warning": 80,      // Warnung bei > 80%
+    "critical": 90,     // Kritisch bei > 90%
+    "operator": ">"
+  }
+}</pre>
+
+                <h5>Interpretation</h5>
+                <ul>
+                    <li><strong>OK:</strong> Memory-Auslastung ≤ 80%</li>
+                    <li><strong>Warning:</strong> Memory-Auslastung > 80% und ≤ 90%</li>
+                    <li><strong>Critical:</strong> Memory-Auslastung > 90%</li>
+                </ul>
+
+                <!-- 3.1.3 Disk -->
+                <h4 id="prtg-disk">3.1.3 Disk-Überwachung (Freier Speicherplatz)</h4>
+                <div class="json-path">config.servers[].serviceTypes[].prtg.checks[] (metric: "disk")</div>
+                <p>Überwacht den <strong>freien Speicherplatz</strong> eines Laufwerks in Prozent.</p>
+
+                <div class="warning-box">
+                    <strong>Wichtig:</strong> Bei Disk-Überwachung wird der <strong>freie Speicherplatz</strong> gemessen,
+                    nicht die Auslastung! Der Operator ist daher <code>"&lt;="</code> (kleiner oder gleich).
+                </div>
+
+                <h5>Parameter</h5>
+                <table>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Typ</th>
+                        <th>Pflicht</th>
+                        <th>Beschreibung</th>
+                    </tr>
+                    <tr>
+                        <td><code>metric</code></td>
+                        <td>string</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Muss <code>"disk"</code> sein</td>
+                    </tr>
+                    <tr>
+                        <td><code>displayName</code></td>
+                        <td>string</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Anzeigename in HTML-Ausgabe</td>
+                    </tr>
+                    <tr>
+                        <td><code>target</code></td>
+                        <td>string</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Laufwerk/Partition (z.B. "/", "C:", "/data")</td>
+                    </tr>
+                    <tr>
+                        <td><code>threshold</code></td>
+                        <td>object</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Schwellwert-Konfiguration</td>
+                    </tr>
+                </table>
+
+                <h5>Threshold-Parameter (speziell für Disk)</h5>
+                <table>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Typ</th>
+                        <th>Beschreibung</th>
+                    </tr>
+                    <tr>
+                        <td><code>warning</code></td>
+                        <td>number</td>
+                        <td>Warnschwelle für <strong>freien</strong> Speicher in Prozent (z.B. 20)</td>
+                    </tr>
+                    <tr>
+                        <td><code>critical</code></td>
+                        <td>number</td>
+                        <td>Kritische Schwelle für <strong>freien</strong> Speicher in Prozent (z.B. 10)</td>
+                    </tr>
+                    <tr>
+                        <td><code>operator</code></td>
+                        <td>string</td>
+                        <td>Vergleichsoperator: <code>"&lt;="</code> (kleiner oder gleich)</td>
+                    </tr>
+                </table>
+
+                <h5>Beispiel</h5>
+                <pre>{
+  "metric": "disk",
+  "displayName": "Disk Free Space",
+  "target": "/",          // Root-Partition unter Linux
+  "threshold": {
+    "warning": 20,        // Warnung wenn ≤ 20% frei
+    "critical": 10,       // Kritisch wenn ≤ 10% frei
+    "operator": "<="
+  }
+}</pre>
+
+                <h5>Interpretation</h5>
+                <ul>
+                    <li><strong>OK:</strong> Freier Speicher > 20%</li>
+                    <li><strong>Warning:</strong> Freier Speicher ≤ 20% und > 10%</li>
+                    <li><strong>Critical:</strong> Freier Speicher ≤ 10%</li>
+                </ul>
+
+                <h5>Plattform-spezifische Targets</h5>
+                <table>
+                    <tr>
+                        <th>Betriebssystem</th>
+                        <th>Beispiel-Targets</th>
+                    </tr>
+                    <tr>
+                        <td>Linux</td>
+                        <td><code>"/"</code>, <code>"/data"</code>, <code>"/var"</code></td>
+                    </tr>
+                    <tr>
+                        <td>Windows</td>
+                        <td><code>"C:"</code>, <code>"D:"</code></td>
+                    </tr>
+                    <tr>
+                        <td>macOS</td>
+                        <td><code>"/"</code>, <code>"/Volumes/Data"</code></td>
+                    </tr>
+                </table>
+
+                <!-- 3.2 NetScaler Health Checks -->
+                <h3 id="netscaler-monitoring">3.2 NetScaler Health Checks</h3>
+                <p>
+                    NetScaler Health Checks führen HTTP-Requests aus und validieren die Response.
+                    Sie können APIs, Webseiten oder andere HTTP-Endpunkte überwachen.
+                </p>
+
+                <div class="warning-box">
+                    <strong>Wichtig:</strong> SimpleAdmin läuft als einmaliger Task (z.B. über Docker exec oder Cronjob).
+                    Die Parameter <code>intervalSeconds</code> und <code>timeoutMs</code> sind <strong>reine Dokumentation</strong>
+                    für die LoadBalancer-Konfiguration und werden <strong>NICHT von SimpleAdmin verwendet</strong>. Sie dienen als
+                    Empfehlung, wie oft der LoadBalancer die generierten HTML-Seiten abrufen soll.
+                </div>
+
+                <!-- 3.2.1 Einfache HTTP Checks -->
+                <h4 id="netscaler-simple">3.2.1 Einfache HTTP Checks</h4>
+                <p>Prüft nur den HTTP-Statuscode.</p>
+
+                <h5>Parameter</h5>
+                <table>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Typ</th>
+                        <th>Pflicht</th>
+                        <th>Beschreibung</th>
+                    </tr>
+                    <tr>
+                        <td><code>name</code></td>
+                        <td>string</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Eindeutiger Name des Health Checks</td>
+                    </tr>
+                    <tr>
+                        <td><code>method</code></td>
+                        <td>string</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>HTTP-Methode: GET, POST, HEAD, PUT, DELETE</td>
+                    </tr>
+                    <tr>
+                        <td><code>path</code></td>
+                        <td>string</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>URL-Pfad (relativ zu baseUrl oder absolute URL)</td>
+                    </tr>
+                    <tr>
+                        <td><code>expected</code></td>
+                        <td>object</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td>Erwartete Response-Kriterien</td>
+                    </tr>
+                    <tr>
+                        <td><code>intervalSeconds</code></td>
+                        <td>integer</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td><strong>Dokumentation:</strong> Empfohlenes Prüfintervall für LoadBalancer (wird NICHT von SimpleAdmin genutzt)</td>
+                    </tr>
+                    <tr>
+                        <td><code>timeoutMs</code></td>
+                        <td>integer</td>
+                        <td><span class="badge badge-required">Ja</span></td>
+                        <td><strong>Dokumentation:</strong> Empfohlener Timeout für LoadBalancer (wird NICHT von SimpleAdmin genutzt)</td>
+                    </tr>
+                </table>
+
+                <h5>Beispiel</h5>
+                <pre>{
+  "name": "basic-health-check",
+  "method": "GET",
+  "path": "/health",
+  "expected": {
+    "statusCodes": [200]    // Erwartet HTTP 200
+  },
+  "intervalSeconds": 30,    // Prüft alle 30 Sekunden
+  "timeoutMs": 5000         // Timeout nach 5 Sekunden
+}</pre>
+
+                <!-- 3.2.2 Erweiterte Checks -->
+                <h4 id="netscaler-advanced">3.2.2 Erweiterte Checks</h4>
+                <p>Prüft Statuscode, Body-Inhalt und HTTP-Header.</p>
+
+                <h5>Body Contains Check</h5>
+                <p>Sucht nach bestimmten Texten im Response-Body.</p>
+                <pre>{
+  "name": "api-health-with-body-check",
+  "method": "GET",
+  "path": "/api/v1/health",
+  "expected": {
+    "statusCodes": [200],
+    "bodyContains": ["healthy", "ok"]  // Body muss "healthy" ODER "ok" enthalten
+  },
+  "intervalSeconds": 30,
+  "timeoutMs": 5000
+}</pre>
+
+                <h5>Header Validation</h5>
+                <p>Validiert HTTP-Response-Header.</p>
+                <pre>{
+  "name": "api-with-header-check",
+  "method": "GET",
+  "path": "/api/v1/status",
+  "expected": {
+    "statusCodes": [200],
+    "headers": {
+      "Content-Type": "application/json",    // Exakte Übereinstimmung erforderlich
+      "X-API-Version": "2.0"
+    }
+  },
+  "intervalSeconds": 45,
+  "timeoutMs": 8000
+}</pre>
+
+                <h5>POST Request mit Payload</h5>
+                <p>Sendet JSON-Daten im Request-Body.</p>
+                <pre>{
+  "name": "database-connection-check",
+  "method": "POST",
+  "path": "/api/v1/healthcheck/database",
+  "payload": "{\"check\": \"connection\", \"timeout\": 5000}",
+  "expected": {
+    "statusCodes": [200],
+    "bodyContains": ["connected", "healthy"]
+  },
+  "intervalSeconds": 60,
+  "timeoutMs": 10000
+}</pre>
+
+                <!-- 3.2.3 JSON Path Validierung -->
+                <h4 id="netscaler-json">3.2.3 JSON Path Validierung</h4>
+                <p>Validiert spezifische Werte in JSON-Responses.</p>
+
+                <h5>JSON Path Syntax</h5>
+                <table>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Typ</th>
+                        <th>Beschreibung</th>
+                    </tr>
+                    <tr>
+                        <td><code>path</code></td>
+                        <td>string</td>
+                        <td>JSON-Path-Ausdruck (z.B. <code>$.status</code>, <code>$.data.health</code>)</td>
+                    </tr>
+                    <tr>
+                        <td><code>operator</code></td>
+                        <td>string</td>
+                        <td>Vergleichsoperator: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>value</code></td>
+                        <td>any</td>
+                        <td>Erwarteter Wert (string, number, boolean)</td>
+                    </tr>
+                </table>
+
+                <h5>Beispiel: String-Validierung</h5>
+                <pre>// Erwartete JSON-Response:
+// { "status": "healthy", "version": "1.0" }
+
+{
+  "name": "api-status-check",
+  "method": "GET",
+  "path": "/api/status",
+  "expected": {
+    "statusCodes": [200],
+    "jsonPath": [
+      {
+        "path": "$.status",
+        "operator": "==",
+        "value": "healthy"    // $.status muss "healthy" sein
+      }
+    ]
+  },
+  "intervalSeconds": 30,
+  "timeoutMs": 5000
+}</pre>
+
+                <h5>Beispiel: Numerische Validierung</h5>
+                <pre>// Erwartete JSON-Response:
+// { "status": "healthy", "responseTime": 450 }
+
+{
+  "name": "performance-check",
+  "method": "GET",
+  "path": "/api/health",
+  "expected": {
+    "statusCodes": [200],
+    "jsonPath": [
+      {
+        "path": "$.status",
+        "operator": "==",
+        "value": "healthy"
+      },
+      {
+        "path": "$.responseTime",
+        "operator": "<",
+        "value": 1000        // Response-Zeit muss < 1000ms sein
+      }
+    ]
+  },
+  "intervalSeconds": 30,
+  "timeoutMs": 5000
+}</pre>
+
+                <h5>Beispiel: Verschachtelte JSON-Pfade</h5>
+                <pre>// Erwartete JSON-Response:
+// {
+//   "data": {
+//     "database": {
+//       "status": "connected",
+//       "connections": 42
+//     }
+//   }
+// }
+
+{
+  "name": "database-deep-check",
+  "method": "GET",
+  "path": "/api/health/database",
+  "expected": {
+    "statusCodes": [200],
+    "jsonPath": [
+      {
+        "path": "$.data.database.status",
+        "operator": "==",
+        "value": "connected"
+      },
+      {
+        "path": "$.data.database.connections",
+        "operator": ">",
+        "value": 0           // Mindestens 1 Connection
+      }
+    ]
+  },
+  "intervalSeconds": 60,
+  "timeoutMs": 8000
+}</pre>
+
+                <h5>Externe URLs</h5>
+                <p>Wenn <code>path</code> mit <code>http://</code> oder <code>https://</code> beginnt, wird es als absolute URL verwendet:</p>
+                <pre>{
+  "name": "external-service-check",
+  "method": "GET",
+  "path": "https://api.external.com/health",  // Absolute URL
+  "expected": {
+    "statusCodes": [200, 201]
+  },
+  "intervalSeconds": 60,
+  "timeoutMs": 10000
+}</pre>
+                <div class="info-box">
+                    <strong>Hinweis:</strong> Bei absoluten URLs wird <code>baseUrl</code> ignoriert.
+                </div>
+            </section>
+
+            <!-- 4. Operator-Referenz -->
+            <section id="operators">
+                <h2>4. Operator-Referenz - Alle verfügbaren Operatoren</h2>
+                <p>
+                    SimpleAdmin verwendet Vergleichsoperatoren an zwei Stellen: bei PRTG-Threshold-Prüfungen
+                    und bei JSON-Path-Validierungen. Diese Sektion listet alle verfügbaren Operatoren auf.
+                </p>
+
+                <!-- 4.1 PRTG Threshold Operatoren -->
+                <h3 id="operators-prtg">4.1 PRTG Threshold Operatoren</h3>
+                <p>Verwendet in: <code>threshold.operator</code> bei PRTG-Checks</p>
+
+                <table>
+                    <tr>
+                        <th>Operator</th>
+                        <th>Bedeutung</th>
+                        <th>Verwendung</th>
+                        <th>Beispiel</th>
+                    </tr>
+                    <tr>
+                        <td><code>&gt;</code></td>
+                        <td>Größer als</td>
+                        <td>Alarm wenn Wert ÜBER dem Schwellwert liegt</td>
+                        <td>CPU > 85% → Warning bei 86%</td>
+                    </tr>
+                    <tr>
+                        <td><code>&gt;=</code></td>
+                        <td>Größer gleich</td>
+                        <td>Alarm wenn Wert ÜBER ODER GLEICH dem Schwellwert liegt</td>
+                        <td>CPU >= 85% → Warning bei 85%</td>
+                    </tr>
+                    <tr>
+                        <td><code>&lt;</code></td>
+                        <td>Kleiner als</td>
+                        <td>Alarm wenn Wert UNTER dem Schwellwert liegt</td>
+                        <td>Disk Free < 10% → Critical bei 9%</td>
+                    </tr>
+                    <tr>
+                        <td><code>&lt;=</code></td>
+                        <td>Kleiner gleich</td>
+                        <td>Alarm wenn Wert UNTER ODER GLEICH dem Schwellwert liegt</td>
+                        <td>Disk Free <= 10% → Critical bei 10%</td>
+                    </tr>
+                    <tr>
+                        <td><code>==</code></td>
+                        <td>Gleich</td>
+                        <td>Alarm wenn Wert EXAKT dem Schwellwert entspricht</td>
+                        <td>ErrorCount == 0 → Warning bei genau 0</td>
+                    </tr>
+                    <tr>
+                        <td><code>!=</code></td>
+                        <td>Ungleich</td>
+                        <td>Alarm wenn Wert NICHT dem Schwellwert entspricht</td>
+                        <td>Status != 1 → Warning wenn nicht 1</td>
+                    </tr>
+                </table>
+
+                <h4>Typische Verwendung nach Metrik</h4>
+                <table>
+                    <tr>
+                        <th>Metrik</th>
+                        <th>Empfohlener Operator</th>
+                        <th>Begründung</th>
+                    </tr>
+                    <tr>
+                        <td><code>cpu</code></td>
+                        <td><code>&gt;</code></td>
+                        <td>Alarm bei HOHER Auslastung (über 70%, über 85%)</td>
+                    </tr>
+                    <tr>
+                        <td><code>memory</code></td>
+                        <td><code>&gt;</code></td>
+                        <td>Alarm bei HOHER Auslastung (über 80%, über 90%)</td>
+                    </tr>
+                    <tr>
+                        <td><code>disk</code></td>
+                        <td><code>&lt;=</code></td>
+                        <td>Alarm bei WENIG freiem Speicher (≤20%, ≤10%)</td>
+                    </tr>
+                </table>
+
+                <div class="warning-box">
+                    <strong>Wichtig bei Disk-Monitoring:</strong> Der Wert ist <strong>freier Speicher</strong>, nicht Auslastung!
+                    Daher wird <code>&lt;=</code> verwendet: Alarm wenn zu WENIG frei ist.
+                </div>
+
+                <h4>Beispiele PRTG Threshold</h4>
+                <pre>{
+  "metric": "cpu",
+  "displayName": "CPU Usage",
+  "threshold": {
+    "warning": 70,       // Warnung bei > 70%
+    "critical": 85,      // Kritisch bei > 85%
+    "operator": ">"      // Alarm wenn ÜBER dem Wert
+  }
+}</pre>
+
+                <pre>{
+  "metric": "disk",
+  "displayName": "Disk Free Space",
+  "target": "/",
+  "threshold": {
+    "warning": 20,       // Warnung bei <= 20% frei
+    "critical": 10,      // Kritisch bei <= 10% frei
+    "operator": "<="     // Alarm wenn UNTER ODER GLEICH dem Wert
+  }
+}</pre>
+
+                <!-- 4.2 JSON Path Operatoren -->
+                <h3 id="operators-jsonpath">4.2 JSON Path Operatoren</h3>
+                <p>Verwendet in: <code>expected.jsonPath[].operator</code> bei NetScaler Health Checks</p>
+
+                <table>
+                    <tr>
+                        <th>Operator</th>
+                        <th>Bedeutung</th>
+                        <th>Typ-Unterstützung</th>
+                        <th>Beispiel</th>
+                    </tr>
+                    <tr>
+                        <td><code>==</code></td>
+                        <td>Gleich (Exakte Übereinstimmung)</td>
+                        <td>String, Number, Boolean</td>
+                        <td><code>$.status == "healthy"</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>!=</code></td>
+                        <td>Ungleich</td>
+                        <td>String, Number, Boolean</td>
+                        <td><code>$.errors != 0</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>&gt;</code></td>
+                        <td>Größer als</td>
+                        <td>Nur Number</td>
+                        <td><code>$.connections > 0</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>&gt;=</code></td>
+                        <td>Größer gleich</td>
+                        <td>Nur Number</td>
+                        <td><code>$.uptime >= 60</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>&lt;</code></td>
+                        <td>Kleiner als</td>
+                        <td>Nur Number</td>
+                        <td><code>$.responseTime < 1000</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>&lt;=</code></td>
+                        <td>Kleiner gleich</td>
+                        <td>Nur Number</td>
+                        <td><code>$.errorRate <= 0.01</code></td>
+                    </tr>
+                </table>
+
+                <div class="info-box">
+                    <strong>JSON Path ist Case-Sensitive:</strong> <code>$.Status</code> ist nicht das gleiche wie <code>$.status</code>
+                </div>
+
+                <h4>Beispiele nach Datentyp</h4>
+
+                <h5>String-Vergleich</h5>
+                <pre>// JSON Response: { "status": "healthy", "version": "2.0" }
+
+{
+  "path": "$.status",
+  "operator": "==",         // Nur == oder != für Strings
+  "value": "healthy"        // String-Wert (mit Anführungszeichen in JSON)
+}</pre>
+
+                <h5>Number-Vergleich</h5>
+                <pre>// JSON Response: { "responseTime": 450, "connections": 42 }
+
+{
+  "path": "$.responseTime",
+  "operator": "<",          // Alle 6 Operatoren verfügbar für Numbers
+  "value": 1000            // Number-Wert (OHNE Anführungszeichen in JSON)
+},
+{
+  "path": "$.connections",
+  "operator": ">",
+  "value": 0               // Mindestens 1 Connection
+}</pre>
+
+                <h5>Boolean-Vergleich</h5>
+                <pre>// JSON Response: { "isHealthy": true, "maintenance": false }
+
+{
+  "path": "$.isHealthy",
+  "operator": "==",         // Nur == oder != für Boolean
+  "value": true            // Boolean-Wert (OHNE Anführungszeichen)
+},
+{
+  "path": "$.maintenance",
+  "operator": "!=",
+  "value": true            // Maintenance darf NICHT aktiv sein
+}</pre>
+
+                <h5>Verschachtelte Pfade</h5>
+                <pre>// JSON Response:
+// {
+//   "data": {
+//     "database": {
+//       "status": "connected",
+//       "latency": 12.5,
+//       "poolSize": 20
+//     }
+//   }
+// }
+
+{
+  "path": "$.data.database.status",
+  "operator": "==",
+  "value": "connected"
+},
+{
+  "path": "$.data.database.latency",
+  "operator": "<",
+  "value": 50              // Latenz muss unter 50ms sein
+},
+{
+  "path": "$.data.database.poolSize",
+  "operator": ">=",
+  "value": 10              // Mindestens 10 Connections im Pool
+}</pre>
+
+                <h4>Vollständiges Health Check Beispiel</h4>
+                <pre>{
+  "name": "comprehensive-api-check",
+  "method": "GET",
+  "path": "/api/v1/health",
+  "expected": {
+    "statusCodes": [200],
+    "jsonPath": [
+      {
+        "path": "$.status",
+        "operator": "==",      // String: Exakte Übereinstimmung
+        "value": "healthy"
+      },
+      {
+        "path": "$.services.database",
+        "operator": "==",      // String: Exakte Übereinstimmung
+        "value": "connected"
+      },
+      {
+        "path": "$.metrics.responseTime",
+        "operator": "<",       // Number: Muss kleiner sein
+        "value": 500
+      },
+      {
+        "path": "$.metrics.activeUsers",
+        "operator": ">",       // Number: Muss größer sein
+        "value": 0
+      },
+      {
+        "path": "$.maintenanceMode",
+        "operator": "!=",      // Boolean: Darf NICHT true sein
+        "value": true
+      }
+    ]
+  },
+  "intervalSeconds": 30,
+  "timeoutMs": 5000
+}</pre>
+
+                <div class="danger-box">
+                    <strong>Häufiger Fehler:</strong> Verwende <code>"value": 1000</code> (Number) statt <code>"value": "1000"</code> (String)
+                    bei numerischen Vergleichen!
+                </div>
+            </section>
+
+            <!-- 5. OK-Marker -->
+            <section id="ok-marker">
+                <h2>5. OK-Marker</h2>
+                <p>
+                    Der OK-Marker ist ein HTML-Kommentar, der automatisch in Endpoint-Seiten eingefügt wird.
+                    LoadBalancer und PRTG können nach diesem Text suchen, um den Service-Status zu ermitteln.
+                </p>
+
+                <h3>Unterschiedliches Verhalten für PRTG und NetScaler</h3>
+                <div class="warning-box">
+                    <strong>Wichtig:</strong> Der OK-Marker verhält sich unterschiedlich je nach Endpoint-Typ,
+                    um eine differenzierte Alarmierung zu ermöglichen.
+                </div>
+
+                <table>
+                    <tr>
+                        <th>Status</th>
+                        <th>PRTG (<code>/monitor/</code>)</th>
+                        <th>NetScaler (<code>/loadbalancer/</code>)</th>
+                    </tr>
+                    <tr>
+                        <td><strong>Healthy</strong> (OK)</td>
+                        <td style="background: #d5f4e6;">OK-Marker vorhanden ✓</td>
+                        <td style="background: #d5f4e6;">OK-Marker vorhanden ✓</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Degraded</strong> (Warning)</td>
+                        <td style="background: #fadbd8;">OK-Marker NICHT vorhanden ✗</td>
+                        <td style="background: #d5f4e6;">OK-Marker vorhanden ✓</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Unhealthy</strong> (Critical)</td>
+                        <td style="background: #fadbd8;">OK-Marker NICHT vorhanden ✗</td>
+                        <td style="background: #fadbd8;">OK-Marker NICHT vorhanden ✗</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Unknown</strong></td>
+                        <td style="background: #fadbd8;">OK-Marker NICHT vorhanden ✗</td>
+                        <td style="background: #fadbd8;">OK-Marker NICHT vorhanden ✗</td>
+                    </tr>
+                </table>
+
+                <div class="info-box">
+                    <strong>Begründung:</strong>
+                    <ul>
+                        <li><strong>PRTG:</strong> Soll bereits bei Warning alarmieren → OK-Marker fehlt bei Degraded</li>
+                        <li><strong>NetScaler:</strong> Server soll erst bei Critical aus dem LoadBalancer genommen werden → OK-Marker bleibt bei Degraded</li>
+                    </ul>
+                </div>
+
+                <h3>Konfiguration</h3>
+                <pre>{
+  "output": {
+    "okMarker": "##OK##"  // Anpassbar an LoadBalancer-Anforderungen
+  }
+}</pre>
+
+                <h3>LoadBalancer-Konfiguration</h3>
+                <h4>NetScaler</h4>
+                <p>Der NetScaler prüft <code>/admin/*/loadbalancer/</code> - Server bleibt im Pool bei Warning.</p>
+                <pre>Monitor Type: HTTP
+URL: /admin/api-gateway/loadbalancer/
+Response Code: 200
+Response Contains: ##OK##</pre>
+
+                <h4>PRTG</h4>
+                <p>PRTG prüft <code>/admin/*/monitor/</code> - Alarm wird bei Warning ausgelöst.</p>
+                <pre>Sensor Type: HTTP Advanced
+URL: http://your-server.com/admin/api-gateway/monitor/
+Expected HTTP Status: 200
+Search String: ##OK##</pre>
+            </section>
+
+            <!-- 5. Vollständige Beispiele -->
+            <section id="complete-examples">
+                <h2>5. Vollständige Beispiele</h2>
+
+                <!-- 5.1 Basis -->
+                <h3 id="example-basic">5.1 Basis-Setup (Lokaler Server)</h3>
+                <pre>{
+  "history": { "maxEntries": 500 },
+  "output": { "okMarker": "##OK##" },
+  "servers": [
+    {
+      "name": "localhost",
+      "active": true,
+      "baseUrl": "http://localhost:5067",
+      "serviceTypes": [
+        {
+          "type": "api-gateway",
+          "prtg": {
+            "enabled": true,
+            "adminPath": "/admin/api-gateway/monitor",
+            "checks": [
+              {
+                "metric": "cpu",
+                "displayName": "CPU Usage",
+                "threshold": { "warning": 70, "critical": 85, "operator": ">" }
+              },
+              {
+                "metric": "memory",
+                "displayName": "Memory Usage",
+                "threshold": { "warning": 80, "critical": 90, "operator": ">" }
+              },
+              {
+                "metric": "disk",
+                "displayName": "Disk Free Space",
+                "target": "/",
+                "threshold": { "warning": 20, "critical": 10, "operator": "<=" }
+              }
+            ]
+          },
+          "netscaler": {
+            "enabled": true,
+            "adminPath": "/admin/api-gateway/loadbalancer",
+            "healthChecks": [
+              {
+                "name": "basic-health",
+                "method": "GET",
+                "path": "/health",
+                "expected": { "statusCodes": [200] },
+                "intervalSeconds": 30,
+                "timeoutMs": 5000
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}</pre>
+
+                <!-- 5.2 Multi-Server -->
+                <h3 id="example-multi">5.2 Multi-Server Setup</h3>
+                <p>Überwacht mehrere Server mit verschiedenen Services.</p>
+                <pre>{
+  "history": { "maxEntries": 1000 },
+  "output": { "okMarker": "STATUS_OK" },
+  "servers": [
+    {
+      "name": "web-server-01",
+      "active": true,
+      "baseUrl": "http://web-01.internal.com",
+      "serviceTypes": [
+        {
+          "type": "frontend",
+          "prtg": {
+            "enabled": true,
+            "adminPath": "/admin/frontend/monitor",
+            "checks": [
+              { "metric": "cpu", "displayName": "CPU", "threshold": { "warning": 60, "critical": 80, "operator": ">" } },
+              { "metric": "memory", "displayName": "Memory", "threshold": { "warning": 75, "critical": 85, "operator": ">" } }
+            ]
+          },
+          "netscaler": {
+            "enabled": true,
+            "adminPath": "/admin/frontend/loadbalancer",
+            "healthChecks": [
+              {
+                "name": "http-check",
+                "method": "GET",
+                "path": "/",
+                "expected": { "statusCodes": [200] },
+                "intervalSeconds": 15,
+                "timeoutMs": 3000
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "api-server-01",
+      "active": true,
+      "baseUrl": "http://api-01.internal.com",
+      "serviceTypes": [
+        {
+          "type": "backend-api",
+          "prtg": {
+            "enabled": true,
+            "adminPath": "/admin/backend/monitor",
+            "checks": [
+              { "metric": "cpu", "displayName": "CPU", "threshold": { "warning": 70, "critical": 85, "operator": ">" } },
+              { "metric": "memory", "displayName": "Memory", "threshold": { "warning": 80, "critical": 90, "operator": ">" } }
+            ]
+          },
+          "netscaler": {
+            "enabled": true,
+            "adminPath": "/admin/backend/loadbalancer",
+            "healthChecks": [
+              {
+                "name": "api-health",
+                "method": "GET",
+                "path": "/api/v1/health",
+                "expected": {
+                  "statusCodes": [200],
+                  "bodyContains": ["healthy"]
+                },
+                "intervalSeconds": 30,
+                "timeoutMs": 5000
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}</pre>
+
+                <!-- 5.3 Externe Services -->
+                <h3 id="example-external">5.3 Externe Services (ohne System-Metriken)</h3>
+                <p>Überwacht externe APIs ohne Zugriff auf System-Metriken.</p>
+                <pre>{
+  "history": { "maxEntries": 500 },
+  "output": { "okMarker": "##OK##" },
+  "servers": [
+    {
+      "name": "external-payment-gateway",
+      "active": true,
+      "serviceTypes": [
+        {
+          "type": "payment-api",
+          "prtg": {
+            "enabled": false,           // Keine System-Metriken verfügbar
+            "adminPath": "/admin/payment/monitor",
+            "checks": []
+          },
+          "netscaler": {
+            "enabled": true,
+            "adminPath": "/admin/payment/loadbalancer",
+            "healthChecks": [
+              {
+                "name": "payment-api-check",
+                "method": "GET",
+                "path": "https://api.payment-provider.com/v1/health",
+                "expected": {
+                  "statusCodes": [200],
+                  "headers": { "Content-Type": "application/json" }
+                },
+                "intervalSeconds": 60,
+                "timeoutMs": 10000
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}</pre>
+
+                <!-- 5.4 Erweitert -->
+                <h3 id="example-advanced">5.4 Erweiterte Konfiguration mit JSON-Validierung</h3>
+                <pre>{
+  "history": { "maxEntries": 2000 },
+  "output": { "okMarker": "##HEALTHY##" },
+  "servers": [
+    {
+      "name": "production-api",
+      "active": true,
+      "baseUrl": "https://api.production.com",
+      "serviceTypes": [
+        {
+          "type": "payment-service",
+          "prtg": {
+            "enabled": true,
+            "adminPath": "/admin/payment/monitor",
+            "checks": [
+              { "metric": "cpu", "displayName": "CPU", "threshold": { "warning": 65, "critical": 80, "operator": ">" } },
+              { "metric": "memory", "displayName": "Memory", "threshold": { "warning": 75, "critical": 85, "operator": ">" } },
+              { "metric": "disk", "displayName": "Disk", "target": "/data", "threshold": { "warning": 15, "critical": 5, "operator": "<=" } }
+            ]
+          },
+          "netscaler": {
+            "enabled": true,
+            "adminPath": "/admin/payment/loadbalancer",
+            "healthChecks": [
+              {
+                "name": "payment-api-health",
+                "method": "GET",
+                "path": "/api/v2/health",
+                "expected": {
+                  "statusCodes": [200],
+                  "bodyContains": ["healthy"]
+                },
+                "intervalSeconds": 30,
+                "timeoutMs": 5000
+              },
+              {
+                "name": "payment-database-check",
+                "method": "POST",
+                "path": "/api/v2/healthcheck/database",
+                "payload": "{\"check\": \"connection\", \"timeout\": 5000}",
+                "expected": {
+                  "statusCodes": [200],
+                  "jsonPath": [
+                    { "path": "$.database.status", "operator": "==", "value": "connected" },
+                    { "path": "$.database.responseTime", "operator": "<", "value": 500 },
+                    { "path": "$.database.connections", "operator": ">", "value": 0 }
+                  ]
+                },
+                "intervalSeconds": 60,
+                "timeoutMs": 8000
+              },
+              {
+                "name": "payment-external-provider",
+                "method": "GET",
+                "path": "https://status.payment-provider.com/api/health",
+                "expected": {
+                  "statusCodes": [200],
+                  "headers": { "X-Health-Status": "OK" },
+                  "jsonPath": [
+                    { "path": "$.status", "operator": "==", "value": "operational" }
+                  ]
+                },
+                "intervalSeconds": 120,
+                "timeoutMs": 15000
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}</pre>
+            </section>
+
+            <!-- 7. Windows Service-Überwachung -->
+            <section id="windows-service-monitoring">
+                <h2>7. Windows Service-Überwachung</h2>
+                <p>
+                    SimpleAdmin überwacht Windows-Dienste (Services) über <code>sc.exe</code> und
+                    meldet Probleme, wenn ein überwachter Dienst nicht läuft oder nicht gefunden wird.
+                    Welche Dienste überwacht werden, steuern die <strong>Startart-Filter</strong>
+                    (<em>Automatisch</em> / <em>Manuell</em>) pro Eintrag.
+                </p>
+                <div class="info-box">
+                    <strong>Nur Windows:</strong> Die Service-Überwachung ist ausschließlich auf Windows verfügbar.
+                    Auf Linux und macOS wird der Check übersprungen und liefert leere Ergebnisse.
+                </div>
+
+                <h3>Aktivierung</h3>
+                <ol>
+                    <li>Globalen Feature-Toggle setzen: <code>features.services.enabled: true</code></li>
+                    <li>Pro-Server-Toggle setzen: <code>servers[].checks.services.enabled: true</code></li>
+                    <li>Dienste in <code>servers[].checks.services.checks[]</code> konfigurieren.</li>
+                </ol>
+
+                <h3>Globales Feature-Toggle</h3>
+                <pre>{
+  "features": {
+    "services": {
+      "enabled": true
+    }
+  }
+}</pre>
+
+                <h3>Pro-Server-Konfiguration</h3>
+                <pre>{
+  "checks": {
+    "services": {
+      "enabled": true,
+      "checks": [
+        {
+          "name": "SQLWriter",
+          "displayName": "SQL Server VSS Writer",
+          "monitorAutomatic": true,
+          "monitorManual": false
+        },
+        {
+          "name": "W3SVC",
+          "displayName": "World Wide Web Publishing Service",
+          "monitorAutomatic": true,
+          "monitorManual": true
+        }
+      ]
+    }
+  }
+}</pre>
+
+                <table>
+                    <tr><th>Feld</th><th>Beschreibung</th><th>Standard</th></tr>
+                    <tr><td><code>enabled</code></td><td>Aktiviert die Service-Überwachung für diesen Server</td><td><code>true</code></td></tr>
+                    <tr><td><code>checks[].name</code></td><td>Windows-Dienstname oder Wildcard-Muster (siehe unten)</td><td>–</td></tr>
+                    <tr><td><code>checks[].displayName</code></td><td>Lesbarer Anzeigename (optional). Bei Wildcards: Präfix für jeden gefundenen Dienst.</td><td>= <code>name</code></td></tr>
+                    <tr><td><code>checks[].monitorAutomatic</code></td><td>Überwacht Dienste mit Starttyp <em>Automatisch</em> oder <em>Automatisch (Verzögert)</em>. Mindestens eines von <code>monitorAutomatic</code> oder <code>monitorManual</code> muss <code>true</code> sein.</td><td><code>true</code></td></tr>
+                    <tr><td><code>checks[].monitorManual</code></td><td>Überwacht Dienste mit Starttyp <em>Manuell</em>.</td><td><code>false</code></td></tr>
+                </table>
+
+                <h3>Startart-Filter</h3>
+                <p>
+                    Vor der Statusprüfung liest SimpleAdmin den in Windows konfigurierten Starttyp des Dienstes
+                    (<code>sc.exe qc</code>) und entscheidet anhand der Konfiguration, ob der Dienst überwacht wird:
+                </p>
+                <table>
+                    <tr><th>Starttyp in Windows</th><th>monitorAutomatic</th><th>monitorManual</th><th>Aktion</th></tr>
+                    <tr><td>Automatisch / Automatisch (Verzögert)</td><td><code>true</code></td><td>beliebig</td><td>Prüfen → Alarm wenn gestoppt</td></tr>
+                    <tr><td>Automatisch / Automatisch (Verzögert)</td><td><code>false</code></td><td>beliebig</td><td>Übersprungen (kein Alarm)</td></tr>
+                    <tr><td>Manuell</td><td>beliebig</td><td><code>true</code></td><td>Prüfen → Alarm wenn gestoppt</td></tr>
+                    <tr><td>Manuell</td><td>beliebig</td><td><code>false</code></td><td>Übersprungen (kein Alarm)</td></tr>
+                    <tr><td>Deaktiviert</td><td>beliebig</td><td>beliebig</td><td>Immer übersprungen</td></tr>
+                    <tr><td>Nicht gefunden / Unbekannt</td><td>beliebig</td><td>beliebig</td><td>Critical (Dienst fehlt)</td></tr>
+                </table>
+                <p>
+                    Dieser Filter ermöglicht z.B. dieselbe Konfiguration auf Dev- und Prod-Servern:
+                    Ist ein Dienst auf Dev als Manuell konfiguriert, <code>monitorManual: false</code> eingestellt
+                    und auf Prod als Automatisch, wird er nur auf Prod überwacht.
+                </p>
+
+                <h3>Wildcard-Unterstützung</h3>
+                <p>
+                    Der Dienstname unterstützt die Wildcards <code>*</code> (beliebig viele Zeichen) und
+                    <code>?</code> (genau ein Zeichen). Bei einem Wildcard-Muster werden zur Laufzeit alle
+                    passenden Dienste via <code>sc.exe query type= all state= all</code> ermittelt, dann
+                    nach Starttyp gefiltert und einzeln überwacht.
+                </p>
+                <pre>{
+  "checks": {
+    "services": {
+      "enabled": true,
+      "checks": [
+        { "name": "SQL*",      "displayName": "SQL-Dienste",  "monitorAutomatic": true },
+        { "name": "*BizTalk*", "displayName": "BizTalk",      "monitorAutomatic": true }
+      ]
+    }
+  }
+}</pre>
+                <ul>
+                    <li><code>SQL*</code> → findet z.B. <em>SQLWriter</em>, <em>SQLBrowser</em>, <em>MSSQLSERVER</em></li>
+                    <li><code>*BizTalk*</code> → findet alle Dienste, die „BizTalk" im Namen enthalten</li>
+                    <li>Bei <code>displayName: "SQL-Dienste"</code> erscheint jeder gefundene Dienst als <em>SQL-Dienste / SQLWriter</em> in der UI</li>
+                    <li>Treffer, deren Starttyp nicht dem Filter entspricht, werden still übersprungen</li>
+                </ul>
+                <p>
+                    <strong>Kein Namens-Treffer:</strong> Wenn das Muster keinen Dienst findet (unabhängig vom Starttyp),
+                    wird ein Critical-Problem mit der ID <code>service_{muster}_nomatch</code> erzeugt
+                    (z.B. <code>service_sql__nomatch</code> für Muster <code>SQL*</code>).
+                </p>
+
+                <h3>Statuslogik</h3>
+                <ul>
+                    <li>Dienst läuft (<code>Running</code>) → <strong>Healthy</strong></li>
+                    <li>Dienst hat Starttyp Disabled → <strong>übersprungen</strong> (kein Eintrag, kein Problem)</li>
+                    <li>Dienst hat Starttyp, der nicht überwacht wird → <strong>übersprungen</strong> (kein Eintrag, kein Problem)</li>
+                    <li>Dienst gestoppt (<code>Stopped</code>) → <strong>Critical</strong> — Meldung enthält die Startart, z.B. <em>„Service 'SQLWriter' ist nicht gestartet (Startart: Automatisch)"</em></li>
+                    <li>Dienst nicht gefunden (<code>NotFound</code>) → <strong>Critical</strong></li>
+                    <li>Wildcard ohne Namens-Treffer → <strong>Critical</strong> (Problem-ID: <code>service_{muster}_nomatch</code>)</li>
+                </ul>
+                <div class="info-box">
+                    <strong>Startart in Meldungen:</strong> Wenn der Starttyp eines gestoppten oder nicht gefundenen Dienstes
+                    bekannt ist, wird er automatisch in die Fehlermeldung und in die Detailansicht aufgenommen
+                    (<em>Startart: Automatisch</em> oder <em>Startart: Manuell</em>). So ist auf einen Blick erkennbar,
+                    ob ein eigentlich automatisch startender Dienst ausgefallen ist.
+                </div>
+                <p>
+                    Problem-IDs sind deterministisch und ermöglichen gezielte Quittierungen:
+                    <code>service_{name}_stopped</code> für gestoppte Dienste
+                    (z.B. <code>service_com.docker.service_stopped</code>),
+                    <code>service_{muster}_nomatch</code> für Wildcard ohne Treffer.
+                </p>
+            </section>
+
+            <!-- 8. EventLog-Überwachung -->
+            <section id="eventlog-monitoring">
+                <h2>8. Windows EventLog-Überwachung</h2>
+                <p>
+                    SimpleAdmin kann Windows Event Logs (z.B. <em>Application</em>, <em>System</em>) auf
+                    Fehler und kritische Ereignisse überwachen. Die Abfrage erfolgt via PowerShell
+                    <code>Get-WinEvent</code> mit Level-Filter innerhalb des <code>FilterHashtable</code>.
+                </p>
+
+                <div class="warning-box">
+                    <strong>Nur Windows:</strong> EventLog-Prüfungen sind ausschließlich auf Windows verfügbar.
+                    Auf Linux/macOS wird die Prüfung übersprungen; kein Fehler, kein Ergebnis.
+                </div>
+
+                <h3>Aktivierung (zweistufig)</h3>
+                <p>Beide Schritte sind erforderlich:</p>
+                <ol>
+                    <li>
+                        <strong>Globales Feature-Toggle</strong> in <code>features.eventLog.enabled: true</code> setzen.
+                        Dort lassen sich auch die globalen Standardwerte (Zeitfenster, Schwellwerte, Level) konfigurieren.
+                    </li>
+                    <li>
+                        <strong>Pro-Server-Check</strong> in <code>servers[].checks.eventLog.enabled: true</code> setzen.
+                    </li>
+                </ol>
+
+                <h3>Globale Feature-Konfiguration</h3>
+                <pre>{
+  "features": {
+    "eventLog": {
+      "enabled": true,
+      "defaults": {
+        "timeWindowMinutes": 60,
+        "warningCount": 5,
+        "criticalCount": 20,
+        "levels": ["Critical", "Error"]
+      }
+    }
+  }
+}</pre>
+
+                <h3>Pro-Server-Konfiguration</h3>
+                <p>
+                    Wenn <code>logs</code> leer ist, werden automatisch <strong>Application</strong> und
+                    <strong>System</strong> geprüft (Standardverhalten). Individuelle Logs können mit
+                    optionalen Schwellwert-Overrides und Quell-Filtern angegeben werden:
+                </p>
+                <pre>{
+  "checks": {
+    "eventLog": {
+      "enabled": true,
+      "logs": [
+        {
+          "name": "Application",
+          "timeWindowMinutes": 30,
+          "levels": ["Critical", "Error"],
+          "warningCount": 3,
+          "criticalCount": 10,
+          "includeSources": ["MSSQLSERVER"],
+          "excludeSources": ["SecurityCenter"]
+        },
+        {
+          "name": "System"
+        }
+      ]
+    }
+  }
+}</pre>
+
+                <table>
+                    <tr><th>Feld</th><th>Beschreibung</th><th>Standard</th></tr>
+                    <tr><td><code>name</code></td><td>Name des Windows Event Logs</td><td>–</td></tr>
+                    <tr><td><code>timeWindowMinutes</code></td><td>Zeitfenster in Minuten (überschreibt global)</td><td>global (60)</td></tr>
+                    <tr><td><code>levels</code></td><td>Level-Filter: Critical (1), Error (2), Warning (3), Information (4)</td><td>global (Critical, Error)</td></tr>
+                    <tr><td><code>warningCount</code></td><td>Events im Zeitfenster ab denen Warning ausgelöst wird</td><td>global (5)</td></tr>
+                    <tr><td><code>criticalCount</code></td><td>Events im Zeitfenster ab denen Critical ausgelöst wird</td><td>global (20)</td></tr>
+                    <tr><td><code>includeSources</code></td><td>Nur Events von diesen Quellen berücksichtigen (leer = alle)</td><td>[]</td></tr>
+                    <tr><td><code>excludeSources</code></td><td>Events von diesen Quellen ignorieren</td><td>[]</td></tr>
+                </table>
+
+                <h3>Statuslogik</h3>
+                <p>Der Status wird pro Log berechnet; der schlechteste Status über alle Logs wird gemeldet:</p>
+                <ul>
+                    <li>Ereignisanzahl &ge; <code>criticalCount</code> → <strong>Critical</strong></li>
+                    <li>Ereignisanzahl &ge; <code>warningCount</code> → <strong>Warning</strong></li>
+                    <li>Ereignisanzahl &lt; <code>warningCount</code> → <strong>Healthy</strong> (kein Problem)</li>
+                </ul>
+                <p>
+                    Bei Warning oder Critical erzeugt <code>ProblemDerivationService</code> automatisch
+                    ein aktives Problem mit der deterministischen ID
+                    <code>eventlog_errors_critical</code> bzw. <code>eventlog_errors_warning</code>.
+                    Diese ID ermöglicht gezielte Quittierungen (Acknowledge).
+                </p>
+
+                <div class="info-box">
+                    <strong>Sofortige Auslösung:</strong>
+                    EventLog-Probleme unterliegen <em>nicht</em> dem Status-Smoothing
+                    (<code>minConsecutiveChecks</code>). Sie werden beim ersten Überschreiten der
+                    Schwelle sofort gemeldet — im Gegensatz zu Metrik-Problemen (CPU, Disk),
+                    die N aufeinanderfolgende Checks benötigen.
+                </div>
+
+                <h3>Anzeige</h3>
+                <ul>
+                    <li>
+                        <strong>Statische HTML-Detailseite</strong> (<code>&lt;server&gt;.&lt;service&gt;.html</code>):
+                        Abschnitt „Event Log" mit Ereignistabelle (Zeitstempel, Level, Quelle, ID, Meldung).
+                    </li>
+                    <li>
+                        <strong>WebUI-Detailseite</strong> (<em>Status → [Server]</em>): Event-Log-Karte mit
+                        farbcodierten Level-Badges und Ereignisanzahl im Badge.
+                    </li>
+                    <li>
+                        <strong>Aktive Probleme</strong>: EventLog-Problem erscheint in der Problemliste
+                        und kann über die WebUI quittiert werden.
+                    </li>
+                </ul>
+                <p>
+                    Es werden pro Log maximal <strong>20 Ereignisse</strong> und insgesamt maximal
+                    <strong>50 Ereignisse</strong> im Snapshot gespeichert. Die Gesamtanzahl
+                    (<code>EventCount</code>) spiegelt alle gefundenen Events wider (auch über 50).
+                </p>
+
+                <h3>Troubleshooting: Keine Events trotz aktiviertem Check</h3>
+                <ul>
+                    <li>Prüfe, ob <em>beide</em> Feature-Toggles aktiv sind (global und pro Server).</li>
+                    <li>Stelle sicher, dass SimpleAdmin auf Windows läuft — auf Linux/macOS wird der Check übersprungen.</li>
+                    <li>Prüfe das Zeitfenster (<code>timeWindowMinutes</code>) — bei kurzen Fenstern können keine Errors vorhanden sein.</li>
+                    <li>Überprüfe den Level-Filter: Standard ist nur Critical (1) und Error (2), keine Warnings.</li>
+                    <li>Starte SimpleAdmin mit erhöhten Rechten, falls <code>Security</code>-Logs abgefragt werden sollen (erfordert Administratorrechte).</li>
+                </ul>
+            </section>
+
+            <!-- 9. SQL Query Checks -->
+            <section id="sql-query-checks">
+                <h2>9. SQL Query Checks</h2>
+
+                <h3 id="sql-query-purpose">9.1 Zweck</h3>
+                <p>
+                    SQL Query Checks ermöglichen die Validierung von Datenbankabfrage-Ergebnissen direkt aus der
+                    SimpleAdmin-Konfiguration heraus. Pro Server können beliebig viele Verbindungen (<em>checks</em>)
+                    mit je mehreren Abfragen (<em>queries</em>) definiert werden. Geprüft werden sowohl die
+                    <strong>Anzahl der zurückgegebenen Zeilen</strong> (RowCount) als auch
+                    <strong>konkrete Spaltenwerte</strong> (ColumnAssertions).
+                </p>
+                <p>
+                    ColumnAssertions werden gegen <strong>alle Zeilen</strong> des Ergebnis-Sets ausgewertet.
+                    Eine Assertion gilt als bestanden, wenn sie für jede einzelne Zeile erfüllt ist.
+                    Schlägt mindestens eine Zeile fehl, wird ein Critical-Problem ausgelöst — mit einer
+                    Zusammenfassung wie <em>„2/3 rows failed"</em> und den konkreten Fehlerwerten pro Zeile.
+                </p>
+                <p>
+                    Typische Anwendungsfälle sind: offene Verarbeitungsjobs in einer BizTalk-Datenbank,
+                    veraltete Synchronisations-Zeitstempel, unerwartete Fehlerzähler in Applikationstabellen oder
+                    fehlende Pflichtdatensätze in Stammdaten.
+                </p>
+
+                <h3 id="sql-query-config">9.2 Konfiguration</h3>
+
+                <h4>Globales Feature-Toggle</h4>
+                <p>
+                    SQL Query Checks werden über <code>features.sqlQueries.enabled</code> global aktiviert.
+                    Der optionale <code>defaultTimeoutSeconds</code>-Wert gilt für alle Checks, die keinen eigenen
+                    Timeout definieren:
+                </p>
+                <pre>{
+  "features": {
+    "sqlQueries": {
+      "enabled": true,
+      "defaultTimeoutSeconds": 30
+    }
+  }
+}</pre>
+
+                <h4>Pro-Server-Konfiguration</h4>
+                <p>
+                    Innerhalb des jeweiligen Server-Eintrags wird <code>sqlQueries</code> als Array von
+                    Verbindungs-Checks angelegt. Jeder Check erhält einen eindeutigen <code>name</code>
+                    (Slug, wird für Problem-IDs verwendet), eine optionale <code>description</code>,
+                    eine <code>connectionString</code> sowie ein <code>queries</code>-Array:
+                </p>
+                <pre>{
+  "sqlQueries": {
+    "enabled": true,
+    "checks": [
+      {
+        "name": "biztalk-db",
+        "description": "BizTalk Datenbank",
+        "connectionString": "enc:v1:abc123....xyz789",
+        "timeoutSeconds": 30,
+        "queries": [
+          {
+            "name": "Offene Jobs",
+            "sql": "SELECT COUNT(*) AS Cnt FROM dbo.bts_MessageBox_Jobs WHERE nStatus = 0",
+            "rowCount": { "expectedCount": 0, "operator": "==" },
+            "columnAssertions": [
+              {
+                "name": "Status-Spalte",
+                "column": "Cnt",
+                "expectedValue": "0",
+                "operator": "==",
+                "valueType": "Integer"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}</pre>
+
+                <table>
+                    <tr><th>Feld</th><th>Beschreibung</th><th>Standard</th></tr>
+                    <tr><td><code>name</code></td><td>Eindeutiger Slug des Verbindungs-Checks (wird für Problem-IDs verwendet, z.B. <code>biztalk-db</code>)</td><td>–</td></tr>
+                    <tr><td><code>description</code></td><td>Lesbarer Anzeigename des Verbindungs-Checks (optional)</td><td>–</td></tr>
+                    <tr><td><code>connectionString</code></td><td>ADO.NET Connection-String zur Zieldatenbank. Wird beim Speichern über die WebUI automatisch verschlüsselt (Format <code>enc:v1:…</code>). Klartextwerte bleiben rückwärtskompatibel gültig.</td><td>–</td></tr>
+                    <tr><td><code>timeoutSeconds</code></td><td>Query-Timeout in Sekunden (überschreibt globalen Standard)</td><td>global (30)</td></tr>
+                    <tr><td><code>queries[].name</code></td><td>Lesbarer Name der einzelnen Abfrage</td><td>–</td></tr>
+                    <tr><td><code>queries[].sql</code></td><td>SQL-Abfrage, die ausgeführt wird</td><td>–</td></tr>
+                    <tr><td><code>queries[].rowCount.expectedCount</code></td><td>Erwartete Zeilenanzahl im Ergebnis</td><td>–</td></tr>
+                    <tr><td><code>queries[].rowCount.operator</code></td><td>Vergleichsoperator für die Zeilenanzahl: <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code></td><td>–</td></tr>
+                    <tr><td><code>queries[].columnAssertions[].column</code></td><td>Name der zu prüfenden Spalte im Ergebnis</td><td>–</td></tr>
+                    <tr><td><code>queries[].columnAssertions[].expectedValue</code></td><td>Erwarteter Wert als Zeichenkette (wird gemäß <code>valueType</code> geparst)</td><td>–</td></tr>
+                    <tr><td><code>queries[].columnAssertions[].operator</code></td><td>Vergleichsoperator (typabhängig, siehe unten)</td><td>–</td></tr>
+                    <tr><td><code>queries[].columnAssertions[].valueType</code></td><td>Datentyp des Spaltenwerts: <code>String</code>, <code>Integer</code>, <code>DateTime</code></td><td><code>String</code></td></tr>
+                </table>
+
+                <h3 id="sql-query-webui">9.3 Konfiguration über die WebUI</h3>
+                <p>
+                    SQL Query Checks lassen sich vollständig über die grafische Oberfläche unter
+                    <strong>Server → Bearbeiten → SQL Query Checks</strong> konfigurieren, ohne die
+                    <code>config.json</code> direkt bearbeiten zu müssen.
+                </p>
+                <ol>
+                    <li>In der WebUI unter <strong>Einstellungen → Features</strong> die Option
+                        <em>SQL Queries</em> global aktivieren.</li>
+                    <li>Den Server unter <strong>Server → Bearbeiten</strong> öffnen.</li>
+                    <li>Im Abschnitt <em>SQL Query Checks</em> den Toggle <em>Aktiviert</em> einschalten.</li>
+                    <li>Mit <em>Check-Gruppe hinzufügen</em> eine neue Verbindung anlegen:
+                        <code>Name</code> (Slug, z.B. <code>biztalk-db</code>),
+                        <code>Beschreibung</code> (optional) und <code>Connection-String</code> eingeben.</li>
+                    <li>Mit <em>Abfrage hinzufügen</em> eine oder mehrere SQL-Abfragen definieren.
+                        Pro Abfrage können RowCount-Assertions und ColumnAssertions ergänzt werden.</li>
+                    <li>
+                        Mit <em>Verbindung testen</em> kann der Connection-String direkt aus der WebUI
+                        geprüft werden (liefert Serverversion bei Erfolg, Fehlermeldung bei Fehler).
+                        Mit <em>Abfrage testen</em> lassen sich die ersten 50 Zeilen des Ergebnisses
+                        in einer Vorschau anzeigen.
+                    </li>
+                    <li>
+                        <em>Änderungen speichern</em> speichert die Änderungen in der Laufzeit-Konfiguration
+                        (in-memory). Der Connection-String wird dabei automatisch verschlüsselt
+                        (<code>enc:v1:…</code>). Dauerhaft gespeichert wird erst über
+                        <strong>Import/Export → Konfiguration speichern</strong>.
+                    </li>
+                </ol>
+                <div class="info-box">
+                    <strong>Verbindungs- und Abfrage-Test:</strong>
+                    Der <em>Verbindung testen</em>-Button ruft <code>POST /api/sqlquerytest/connection</code> auf.
+                    Der <em>Abfrage testen</em>-Button ruft <code>POST /api/sqlquerytest/query</code> auf und
+                    gibt die ersten 50 Ergebniszeilen als Vorschautabelle aus — nützlich zur Validierung von
+                    SQL-Syntax und Spaltennamen vor dem produktiven Einsatz.
+                </div>
+
+                <h3 id="sql-query-datatypes">9.4 Unterstützte Datentypen</h3>
+                <p>
+                    Der <code>valueType</code> einer ColumnAssertion bestimmt, wie <code>expectedValue</code>
+                    interpretiert und verglichen wird:
+                </p>
+
+                <h4>String</h4>
+                <p>
+                    Zeichenketten-Vergleich, <strong>Groß-/Kleinschreibung wird ignoriert</strong>
+                    (case-insensitive). Unterstützte Operatoren: <code>==</code> und <code>!=</code>.
+                </p>
+                <pre>{
+  "column": "Status",
+  "expectedValue": "active",
+  "operator": "==",
+  "valueType": "String"
+}</pre>
+
+                <h4>Integer</h4>
+                <p>
+                    Der Spaltenwert wird als <code>long</code> geparst. Unterstützte Operatoren:
+                    <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&gt;=</code>,
+                    <code>&lt;</code>, <code>&lt;=</code>.
+                </p>
+                <pre>{
+  "column": "Cnt",
+  "expectedValue": "0",
+  "operator": "==",
+  "valueType": "Integer"
+}</pre>
+
+                <h4>DateTime</h4>
+                <p>
+                    Der Spaltenwert wird als <code>DateTime</code> interpretiert. <code>expectedValue</code>
+                    akzeptiert sowohl <strong>ISO 8601</strong>-Zeitstempel als auch
+                    <strong>relative Token</strong>:
+                </p>
+                <table>
+                    <tr><th>Token</th><th>Bedeutung</th></tr>
+                    <tr><td><code>now</code></td><td>Aktueller Zeitpunkt</td></tr>
+                    <tr><td><code>today</code></td><td>Heutiger Tag um 00:00:00 Uhr</td></tr>
+                    <tr><td><code>now-30m</code></td><td>Aktueller Zeitpunkt minus 30 Minuten</td></tr>
+                    <tr><td><code>now-1h</code></td><td>Aktueller Zeitpunkt minus 1 Stunde</td></tr>
+                    <tr><td><code>now-1d</code></td><td>Aktueller Zeitpunkt minus 1 Tag</td></tr>
+                    <tr><td><code>now+1h</code></td><td>Aktueller Zeitpunkt plus 1 Stunde (Zukunft)</td></tr>
+                </table>
+                <p>Unterstützte Operatoren: <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>.</p>
+                <pre>{
+  "column": "LetzteAktualisierung",
+  "expectedValue": "now-1h",
+  "operator": "&gt;=",
+  "valueType": "DateTime"
+}</pre>
+                <p>
+                    Im obigen Beispiel wird geprüft, ob <code>LetzteAktualisierung</code> nicht älter als
+                    eine Stunde ist — ein typischer Freshness-Check für Synchronisationsjobs.
+                </p>
+
+                <h3 id="sql-query-alerts">9.5 Alert-Verhalten</h3>
+                <p>
+                    SQL Query Checks lösen immer <strong>Critical</strong> aus — es gibt keine Warning-Stufe.
+                    Ein Critical-Problem wird erzeugt, wenn einer der folgenden Fälle eintritt:
+                </p>
+                <ul>
+                    <li><strong>Verbindungsfehler:</strong> Die Datenbankverbindung kann nicht hergestellt werden (falsche Credentials, Server nicht erreichbar, Timeout).</li>
+                    <li><strong>Query-Fehler:</strong> Die SQL-Abfrage schlägt fehl (Syntaxfehler, fehlende Tabelle, fehlende Berechtigung).</li>
+                    <li><strong>RowCount-Mismatch:</strong> Die Anzahl der zurückgegebenen Zeilen erfüllt den definierten Operator-Vergleich nicht.</li>
+                    <li><strong>ColumnAssertion-Fehler:</strong> Mindestens eine Zeile im Ergebnis-Set erfüllt den Vergleich mit <code>expectedValue</code> nicht. Alle Zeilen werden geprüft — ein Fehlschlag in einer Zeile bricht die Auswertung der übrigen Zeilen und Assertions <em>nicht</em> ab.</li>
+                </ul>
+
+                <div class="info-box">
+                    <strong>Sofortige Auslösung:</strong>
+                    SQL Query Check-Probleme unterliegen <em>nicht</em> dem Status-Smoothing
+                    (<code>minConsecutiveChecks</code>). Ein Fehlschlag wird beim ersten Auftreten
+                    sofort als Critical gemeldet — analog zum EventLog-Checker.
+                </div>
+
+                <p>
+                    Problem-IDs sind deterministisch aufgebaut: <code>sqlquery_{checkId}_{queryName}</code>
+                    (normalisiert auf Kleinbuchstaben, Leerzeichen durch Unterstriche ersetzt). Dadurch können
+                    SQL Query Check-Probleme gezielt über die Acknowledge-Funktion quittiert werden.
+                </p>
+
+                <div class="info-box">
+                    <strong>Verschlüsselung von Connection-Strings:</strong>
+                    Connection-Strings werden beim Speichern über die WebUI automatisch mit
+                    <strong>AES-256-CBC / PBKDF2-HMACSHA256</strong> verschlüsselt. Der verschlüsselte Wert
+                    beginnt mit dem Präfix <code>enc:v1:</code> gefolgt von Salt, IV und Chiffrat (je Base64,
+                    durch Punkte getrennt). Klartextwerte in bestehenden Konfigurationen werden beim nächsten
+                    Speichervorgang automatisch migriert.
+                    <br><br>
+                    Der <strong>Master-Key</strong> wird <em>nicht</em> in <code>config.json</code> gespeichert —
+                    er muss in <code>appsettings.json</code> (oder per Umgebungsvariable
+                    <code>Encryption__ConnectionStringKey</code>) beider Instanzen (Worker und WebUI) identisch
+                    hinterlegt sein:
+                    <pre style="margin-top:8px;">{
+  "Encryption": {
+    "ConnectionStringKey": "&lt;base64-kodierter 32-Byte-Zufallsschlüssel&gt;"
+  }
+}</pre>
+                    Einen neuen Schlüssel erzeugt man einmalig z.&nbsp;B. per PowerShell:<br>
+                    <code>[Convert]::ToBase64String((1..32 | % { [byte](Get-Random -Max 256) }))</code>
+                </div>
+            </section>
+
+            <!-- 10. Best Practices -->
+            <section id="best-practices">
+                <h2>10. Best Practices</h2>
+
+                <h3>Allgemein</h3>
+                <ul>
+                    <li>Verwende sprechende Namen für <code>name</code>, <code>displayName</code> und <code>type</code></li>
+                    <li>Setze <code>active: false</code> statt Server zu löschen (einfacheres Re-Enable)</li>
+                    <li>Dokumentiere Änderungen in Kommentaren oder einem separaten CHANGELOG</li>
+                </ul>
+
+                <h3>PRTG Monitoring</h3>
+                <ul>
+                    <li><strong>CPU/Memory:</strong> Warning bei 70-80%, Critical bei 85-90%</li>
+                    <li><strong>Disk:</strong> Warning bei 15-20% frei, Critical bei 5-10% frei</li>
+                    <li>Passe Schwellwerte an die tatsächliche Last deines Systems an</li>
+                    <li>Berücksichtige Lastspitzen (z.B. Batch-Jobs nachts)</li>
+                </ul>
+
+                <h3>NetScaler Health Checks</h3>
+                <ul>
+                    <li><strong>Intervalle:</strong> 15-30 Sekunden für kritische Services, 60-120 Sekunden für externe Services</li>
+                    <li><strong>Timeouts:</strong> 5-10 Sekunden für lokale Services, 10-15 Sekunden für externe APIs</li>
+                    <li>Verwende <code>HEAD</code> statt <code>GET</code> wenn nur Erreichbarkeit geprüft werden soll</li>
+                    <li>Bei externen APIs: Prüfe mehrere Statuscodeszahlen (z.B. <code>[200, 201, 204]</code>)</li>
+                </ul>
+
+                <h3>Performance</h3>
+                <ul>
+                    <li>Limitiere <code>maxEntries</code> auf das Notwendige (500-1000 reicht meist)</li>
+                    <li>Vermeide zu kurze Intervalle bei vielen Health Checks</li>
+                    <li>Nutze <code>bodyContains</code> nur wenn wirklich nötig (langsamer als Status-Code-Check)</li>
+                </ul>
+
+                <h3>Sicherheit</h3>
+                <ul>
+                    <li>Verwende HTTPS für externe URLs (<code>https://...</code>)</li>
+                    <li>Konfiguriere <code>Encryption:ConnectionStringKey</code> in <code>appsettings.json</code>, damit SQL Connection-Strings verschlüsselt gespeichert werden (<code>enc:v1:…</code>)</li>
+                    <li>Der Master-Key darf <em>nicht</em> in <code>config.json</code> stehen — nur in <code>appsettings.json</code> oder per Umgebungsvariable <code>Encryption__ConnectionStringKey</code></li>
+                    <li>Limitiere Zugriff auf <code>/admin/*</code> Pfade über Firewall/Proxy</li>
+                </ul>
+            </section>
+
+            <!-- 11. Troubleshooting -->
+            <section id="troubleshooting">
+                <h2>11. Troubleshooting</h2>
+
+                <h3>Service zeigt immer "Unhealthy"</h3>
+                <div class="danger-box">
+                    <strong>Problem:</strong> Service ist laut HTML unhealthy, obwohl Metriken OK sind
+                </div>
+                <p><strong>Lösung:</strong></p>
+                <ul>
+                    <li>Prüfe die Threshold-Werte in der config.json</li>
+                    <li>Kontrolliere ob der Operator korrekt ist (<code>">"</code> für CPU/Memory, <code>"<="</code> für Disk)</li>
+                    <li>Schaue in die Logs: <code>dotnet run</code> zeigt die aktuellen Metrik-Werte</li>
+                </ul>
+
+                <h3>OK-Marker erscheint nicht</h3>
+                <div class="danger-box">
+                    <strong>Problem:</strong> LoadBalancer oder PRTG findet den OK-Marker nicht
+                </div>
+                <p><strong>Lösung:</strong></p>
+                <ul>
+                    <li><strong>PRTG (<code>/monitor/</code>):</strong> OK-Marker erscheint nur bei <code>Status: Healthy</code></li>
+                    <li><strong>NetScaler (<code>/loadbalancer/</code>):</strong> OK-Marker erscheint bei <code>Healthy</code> UND <code>Degraded</code></li>
+                    <li>Prüfe im Browser: Rechtsklick → "Seitenquelltext anzeigen" → Suche nach "Status:"</li>
+                    <li>Teste mit: <code>curl http://localhost:9090/admin/api-gateway/monitor/ | grep "Status:"</code></li>
+                    <li>Bei Degraded/Warning: NetScaler-Pfad verwenden, wenn Server im Pool bleiben soll</li>
+                </ul>
+
+                <h3>NetScaler Health Check schlägt fehl</h3>
+                <div class="danger-box">
+                    <strong>Problem:</strong> Health Check meldet immer Fehler
+                </div>
+                <p><strong>Lösung:</strong></p>
+                <ul>
+                    <li>Teste die URL manuell: <code>curl -v http://localhost:5067/health</code></li>
+                    <li>Prüfe ob <code>baseUrl</code> korrekt ist (mit/ohne trailing slash)</li>
+                    <li>Kontrolliere <code>timeoutMs</code> - ist er zu kurz?</li>
+                    <li>Bei JSON-Path: Prüfe ob der JSON-Pfad korrekt ist (Case-Sensitive!)</li>
+                </ul>
+
+                <h3>Hohe CPU-Last durch SimpleAdmin</h3>
+                <div class="danger-box">
+                    <strong>Problem:</strong> SimpleAdmin verbraucht viel CPU
+                </div>
+                <p><strong>Lösung:</strong></p>
+                <ul>
+                    <li>Reduziere <code>maxEntries</code> in der History</li>
+                    <li>Erhöhe die Intervalle bei Health Checks</li>
+                    <li>Deaktiviere nicht benötigte Health Checks</li>
+                    <li>Nutze <code>HEAD</code> statt <code>GET</code> bei Health Checks</li>
+                </ul>
+
+                <h3>JSON-Validierung funktioniert nicht</h3>
+                <div class="danger-box">
+                    <strong>Problem:</strong> JSON-Path-Check schlägt fehl obwohl Wert korrekt ist
+                </div>
+                <p><strong>Lösung:</strong></p>
+                <ul>
+                    <li>JSON-Pfade sind <strong>Case-Sensitive</strong>: <code>$.Status</code> ≠ <code>$.status</code></li>
+                    <li>Prüfe die JSON-Response manuell: <code>curl http://localhost:5067/api/health | jq</code></li>
+                    <li>Teste den JSON-Path online: <a href="https://jsonpath.com">jsonpath.com</a></li>
+                    <li>Bei numerischen Werten: Verwende Number, nicht String (<code>"value": 1000</code> statt <code>"value": "1000"</code>)</li>
+                </ul>
+
+                <h3>Config-Änderungen werden nicht übernommen</h3>
+                <div class="danger-box">
+                    <strong>Problem:</strong> Änderungen in config.json haben keine Wirkung
+                </div>
+                <p><strong>Lösung:</strong></p>
+                <ul>
+                    <li>Stoppe und starte den SimpleAdmin neu</li>
+                    <li>Prüfe auf JSON-Syntax-Fehler: <code>cat config.json | jq</code></li>
+                    <li>Kontrolliere Logs auf Fehler beim Laden der Config</li>
+                </ul>
+            </section>
+
+            <!-- 12. Detailseite Features -->
+            <section id="detail-page-features">
+                <h2>12. Detailseite Features</h2>
+                <p>
+                    Die Detailseite (<code>&lt;server&gt;.&lt;service&gt;.html</code>) zeigt umfassende Informationen
+                    zu einem Service an. Die Seite wird alle 60 Sekunden automatisch aktualisiert.
+                </p>
+
+                <h3 id="detail-metrics">12.1 Metrik-Anzeige</h3>
+                <p>Jede Metrik wird mit folgenden Informationen dargestellt:</p>
+                <ul>
+                    <li><strong>Aktueller Wert:</strong> Der letzte gemessene Wert mit Einheit (z.B. "45.2%")</li>
+                    <li><strong>Durchschnittswert:</strong> Der Durchschnitt der letzten N Messungen (konfiguriert über <code>minConsecutiveChecks</code>)</li>
+                    <li><strong>Schwellwert:</strong> Die konfigurierten Warning/Critical-Schwellwerte mit Operator (z.B. "> 70% / > 85%")</li>
+                    <li><strong>Status:</strong> Farbcodiert (grün=OK, gelb=Warning, rot=Critical)</li>
+                </ul>
+
+                <div class="info-box">
+                    <strong>Durchschnittswert-Farbcodierung:</strong><br>
+                    Der Durchschnittswert wird farblich gekennzeichnet basierend auf den Schwellwerten:
+                    <ul>
+                        <li><span style="color: #27ae60;">Grün</span>: Durchschnitt liegt im OK-Bereich</li>
+                        <li><span style="color: #f39c12;">Gelb</span>: Durchschnitt liegt im Warning-Bereich</li>
+                        <li><span style="color: #e74c3c;">Rot</span>: Durchschnitt liegt im Critical-Bereich</li>
+                    </ul>
+                </div>
+
+                <h3 id="detail-history">12.2 Logarithmische Verlaufsdarstellung</h3>
+                <p>
+                    Die Verlaufshistorie wird als Balkendiagramm mit maximal 20 Balken dargestellt.
+                    Die Darstellung verwendet eine <strong>logarithmische Aggregation</strong>, um sowohl aktuelle
+                    als auch ältere Daten sinnvoll zu visualisieren.
+                </p>
+
+                <h4>Funktionsweise</h4>
+                <div class="success-box">
+                    <strong>Die letzten N Balken</strong> (N = <code>minConsecutiveChecks</code>, z.B. 5) zeigen die <strong>exakten Einzelwerte</strong>
+                    der letzten N Messungen. Dies entspricht den Werten, die für die Status-Bestimmung verwendet werden.
+                </div>
+                <div class="info-box">
+                    <strong>Die restlichen Balken</strong> (z.B. 15 bei maxBars=20) zeigen <strong>aggregierte Durchschnittswerte</strong>
+                    älterer Messungen. Je weiter links (älter), desto mehr Einzelwerte werden zu einem Balken zusammengefasst.
+                </div>
+
+                <h4>Beispiel bei 100 Verlaufseinträgen</h4>
+                <pre>Konfiguration: maxBars: 20, minConsecutiveChecks: 5
+
+Balken 16-20 (rechts, neueste):
+  Jeder Balken = 1 exakter Messwert (die letzten 5 Messungen)
+
+Balken 1-15 (links, ältere):
+  Logarithmische Verteilung der restlichen 95 Einträge:
+  - Balken 1:  ~25 Einträge (älteste, aggregiert)
+  - Balken 2:  ~18 Einträge
+  - Balken 3:  ~13 Einträge
+  - ...
+  - Balken 15: ~2 Einträge (neueste der aggregierten Gruppe)
+
+→ Je älter die Daten, desto mehr Werte werden zusammengefasst</pre>
+
+                <h4>Farbcodierung der Balken</h4>
+                <table>
+                    <tr>
+                        <th>Farbe</th>
+                        <th>Status</th>
+                        <th>Bedeutung</th>
+                    </tr>
+                    <tr>
+                        <td style="background: #27ae60; color: white; padding: 0.5rem;">Grün</td>
+                        <td>OK</td>
+                        <td>Wert liegt unterhalb der Warning-Schwelle</td>
+                    </tr>
+                    <tr>
+                        <td style="background: #f39c12; color: white; padding: 0.5rem;">Gelb</td>
+                        <td>Warning</td>
+                        <td>Wert liegt zwischen Warning- und Critical-Schwelle</td>
+                    </tr>
+                    <tr>
+                        <td style="background: #e74c3c; color: white; padding: 0.5rem;">Rot</td>
+                        <td>Critical</td>
+                        <td>Wert überschreitet die Critical-Schwelle</td>
+                    </tr>
+                </table>
+
+                <h3 id="detail-legend">12.3 Legende</h3>
+                <p>Unterhalb der Metriken befindet sich eine Legende, die folgende Informationen erklärt:</p>
+                <ul>
+                    <li><strong>Status-Farben:</strong> Bedeutung der Farbcodes (OK, Warning, Critical)</li>
+                    <li><strong>Verlaufsbalken:</strong> Erklärung der logarithmischen Darstellung</li>
+                    <li><strong>Durchschnittswert:</strong> Basiert auf den letzten N Messungen</li>
+                    <li><strong>Status-Glättung:</strong> Hinweis auf die <code>minConsecutiveChecks</code>-Konfiguration</li>
+                </ul>
+
+                <h3 id="detail-auto-refresh">12.4 Auto-Refresh</h3>
+                <p>
+                    Die Detailseite wird automatisch alle <strong>60 Sekunden</strong> neu geladen.
+                    Dies wird über ein HTML-Meta-Tag gesteuert:
+                </p>
+                <pre>&lt;meta http-equiv="refresh" content="60"&gt;</pre>
+                <div class="warning-box">
+                    <strong>Hinweis:</strong> Der Auto-Refresh zeigt immer die zuletzt generierten Daten an.
+                    Da SimpleAdmin als einmaliger Task läuft, werden die Daten nur aktualisiert, wenn
+                    SimpleAdmin erneut ausgeführt wird (z.B. per Cronjob).
+                </div>
+            </section>
+
+            <!-- 13. E-Mail-Monitoring -->
+            <section id="email-monitoring">
+                <h2>13. E-Mail-Monitoring</h2>
+                <p>
+                    Das E-Mail-Monitoring überwacht SMTP-Relay-Pfade durch zyklisch versendete Probe-E-Mails
+                    und prüft deren rechtzeitigen Eingang im Postfach. Dadurch werden Ausfälle im
+                    E-Mail-Zustellweg frühzeitig erkannt.
+                </p>
+                <div class="info-box">
+                    <strong>Globaler Feature-Toggle:</strong>
+                    <code>features.emailMonitoring.enabled = true</code> — muss aktiviert sein, damit die
+                    Sender- und Checker-Funktionen ausgeführt werden.<br>
+                    Konfigurierbar über <strong>WebUI → Einstellungen → Features → E-Mail-Monitoring</strong>.
+                </div>
+
+                <h3 id="email-topology">13.1 Topologie</h3>
+                <p>
+                    Das Monitoring basiert auf einer strikten Rollentrennung: Jede Instanz ist entweder
+                    <strong>Sender</strong> oder <strong>Checker</strong> — nie beides.
+                </p>
+                <ul>
+                    <li>
+                        <strong>Sender-Instanzen</strong> (eine pro Netzwerksegment): Versenden Probe-E-Mails
+                        per SMTP an ein gemeinsames Monitoring-Postfach. Jede Probe testet einen eigenen
+                        SMTP-Relay-Pfad. Der Sendezeitpunkt wird in einer State-Datei festgehalten, sodass
+                        das konfigurierte Intervall eingehalten wird.
+                    </li>
+                    <li>
+                        <strong>Checker-Instanz</strong> (eine, netzwerkweit): Verbindet sich per IMAP mit
+                        dem gemeinsamen Postfach und prüft für jeden konfigurierten Betreff-Filter, ob die
+                        neueste passende E-Mail innerhalb der Schwellwerte angekommen ist.
+                    </li>
+                </ul>
+                <pre><code>Sender A (Segment 1) ──[SA-Probe] seg1──►
+Sender B (Segment 2) ──[SA-Probe] seg2──►  Gemeinsames IMAP-Postfach
+Sender C (Segment 3) ──[SA-Probe] seg3──►         │
+                                                   │
+                                         Checker-Instanz prüft:
+                                         seg1: 8 Min → Healthy
+                                         seg2: 45 Min → Warning
+                                         seg3: nicht vorhanden → Critical</code></pre>
+
+                <h3 id="email-sender-config">13.2 Sender-Konfiguration</h3>
+                <p>Konfiguration unter <code>server.checks.emailProbes</code>:</p>
+                <pre><code>{
+  "features": { "emailMonitoring": { "enabled": true } },
+  "servers": [{
+    "id": "server-a",
+    "checks": {
+      "emailProbes": {
+        "enabled": true,
+        "probes": [{
+          "name": "seg1-relay",
+          "description": "Segment 1 SMTP-Relay Test",
+          "smtp": {
+            "host": "mailrelay.seg1.example.com",
+            "port": 25,
+            "sslMode": "false",
+            "useSsl": false,
+            "from": "simpleadmin@server-a.example.com",
+            "to": "monitor@example.com",
+            "username": "sa-sender",
+            "password": "enc:v1:..."
+          },
+          "subject": "[SA-Probe] seg1-relay",
+          "sendIntervalMinutes": 15
+        }]
+      }
+    }
+  }]
+}</code></pre>
+                <table>
+                    <thead><tr><th>Schlüssel</th><th>Typ</th><th>Standard</th><th>Beschreibung</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>name</code></td><td>string</td><td>—</td><td>Eindeutiger Slug (wird in Problem-IDs verwendet)</td></tr>
+                        <tr><td><code>smtp.host</code></td><td>string</td><td>—</td><td>SMTP-Servername oder IP</td></tr>
+                        <tr><td><code>smtp.port</code></td><td>int</td><td>25</td><td>SMTP-Port</td></tr>
+                        <tr><td><code>smtp.sslMode</code></td><td>string?</td><td>null</td><td>Expliziter SSL-Modus: <code>"true"</code>, <code>"false"</code> oder <code>"auto"</code>. Überschreibt <code>useSsl</code>, wenn gesetzt.</td></tr>
+                        <tr><td><code>smtp.useSsl</code></td><td>bool</td><td>false</td><td>Abwärtskompatibler Fallback, wenn <code>sslMode</code> nicht gesetzt ist. <code>false</code> bedeutet jetzt verbindlich: ohne SSL/TLS beim Connect.</td></tr>
+                        <tr><td><code>smtp.from</code></td><td>string</td><td>—</td><td>Absenderadresse (From-Header)</td></tr>
+                        <tr><td><code>smtp.to</code></td><td>string</td><td>—</td><td>Empfängeradresse (gemeinsames Postfach)</td></tr>
+                        <tr><td><code>smtp.username</code></td><td>string?</td><td>null</td><td>SMTP-Benutzername (optional)</td></tr>
+                        <tr><td><code>smtp.password</code></td><td>string?</td><td>null</td><td>SMTP-Passwort — Klartext oder <code>enc:v1:...</code></td></tr>
+                        <tr><td><code>subject</code></td><td>string</td><td>—</td><td>E-Mail-Betreff — muss dem <code>subjectFilter</code> im Checker entsprechen</td></tr>
+                        <tr><td><code>sendIntervalMinutes</code></td><td>int</td><td>15</td><td>Mindestabstand zwischen zwei Sendungen in Minuten</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 id="email-checker-config">13.3 Checker-Konfiguration</h3>
+                <p>Konfiguration unter <code>server.checks.emailDelivery</code>:</p>
+                <pre><code>{
+  "features": { "emailMonitoring": { "enabled": true } },
+  "servers": [{
+    "id": "checker",
+    "checks": {
+      "emailDelivery": {
+        "enabled": true,
+        "imap": {
+          "host": "mail.example.com",
+          "port": 993,
+          "sslMode": "true",
+          "useSsl": true,
+          "username": "monitor@example.com",
+          "password": "enc:v1:...",
+          "folder": "INBOX"
+        },
+        "checks": [
+          {
+            "name": "seg1-relay-check",
+            "description": "Segment 1 Zustellungscheck",
+            "subjectFilter": "[SA-Probe] seg1-relay",
+            "maxAgeWarningMinutes": 20,
+            "maxAgeCriticalMinutes": 60,
+            "deleteAfterCheck": true
+          }
+        ]
+      }
+    }
+  }]
+}</code></pre>
+                <table>
+                    <thead><tr><th>Schlüssel</th><th>Typ</th><th>Standard</th><th>Beschreibung</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>imap.host</code></td><td>string</td><td>—</td><td>IMAP-Servername oder IP</td></tr>
+                        <tr><td><code>imap.port</code></td><td>int</td><td>993</td><td>IMAP-Port</td></tr>
+                        <tr><td><code>imap.sslMode</code></td><td>string?</td><td>null</td><td>Expliziter SSL-Modus: <code>"true"</code>, <code>"false"</code> oder <code>"auto"</code>. Überschreibt <code>useSsl</code>, wenn gesetzt.</td></tr>
+                        <tr><td><code>imap.useSsl</code></td><td>bool</td><td>true</td><td>Abwärtskompatibler Fallback, wenn <code>sslMode</code> nicht gesetzt ist. <code>false</code> bedeutet jetzt verbindlich: ohne SSL/TLS beim Connect.</td></tr>
+                        <tr><td><code>imap.folder</code></td><td>string</td><td>INBOX</td><td>Zu überwachender Ordner</td></tr>
+                        <tr><td><code>checks[].name</code></td><td>string</td><td>—</td><td>Eindeutiger Slug (wird in Problem-IDs verwendet)</td></tr>
+                        <tr><td><code>checks[].subjectFilter</code></td><td>string</td><td>—</td><td>IMAP-Suche: Subject enthält diesen Text</td></tr>
+                        <tr><td><code>checks[].maxAgeWarningMinutes</code></td><td>int</td><td>20</td><td>Minuten bis zum Warning-Status</td></tr>
+                        <tr><td><code>checks[].maxAgeCriticalMinutes</code></td><td>int</td><td>60</td><td>Minuten bis zum Critical-Status</td></tr>
+                        <tr><td><code>checks[].deleteAfterCheck</code></td><td>bool</td><td>true</td><td>Gematchte E-Mails nach Prüfung löschen</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 id="email-thresholds">13.4 Schwellwerte &amp; Status</h3>
+                <table>
+                    <thead><tr><th>Status</th><th>Bedingung</th></tr></thead>
+                    <tbody>
+                        <tr><td>✅ Healthy</td><td>Neueste E-Mail ist jünger als <code>maxAgeWarningMinutes</code></td></tr>
+                        <tr><td>⚠️ Warning</td><td>Alter ≥ <code>maxAgeWarningMinutes</code> und &lt; <code>maxAgeCriticalMinutes</code></td></tr>
+                        <tr><td>❌ Critical</td><td>Alter ≥ <code>maxAgeCriticalMinutes</code> oder keine E-Mail gefunden</td></tr>
+                        <tr><td>❌ Critical</td><td>IMAP-Verbindung fehlgeschlagen (alle Checks betroffen)</td></tr>
+                    </tbody>
+                </table>
+                <p>
+                    Problem-IDs: <code>emailprobe_{name}_smtp_error</code> (Sender),
+                    <code>emaildelivery_{name}_imap_error</code> (IMAP-Fehler),
+                    <code>emaildelivery_{name}_stale</code> (Warning oder Critical).
+                </p>
+
+                <h3 id="email-encryption">13.5 Passwort-Verschlüsselung</h3>
+                <p>
+                    SMTP- und IMAP-Passwörter werden mit demselben AES-256-CBC-Mechanismus verschlüsselt wie
+                    SQL-Connection-Strings. Unverschlüsselte Werte werden beim Speichern über die WebUI
+                    automatisch verschlüsselt.
+                </p>
+                <pre><code># PowerShell: Schlüssel generieren
+[Convert]::ToBase64String((1..32 | % { [byte](Get-Random -Max 256) }))</code></pre>
+                <p>
+                    Der Schlüssel wird in <code>appsettings.json</code> unter
+                    <code>Encryption:ConnectionStringKey</code> konfiguriert und muss in Worker und WebUI
+                    identisch sein. Im Server-Editor stehen direkte Test-Buttons für SMTP und IMAP zur
+                    Verfügung (10&nbsp;Sekunden Timeout).
+                </p>
+            </section>
+
+            <!-- 14. Zentrale Benachrichtigungen (Notifier) -->
+            <section id="notifications">
+                <h2>14. Zentrale Benachrichtigungen (Notifier)</h2>
+                <p>
+                    Eine SimpleAdmin-Instanz kann als <strong>zentraler Notifier</strong> betrieben werden: Sie
+                    aggregiert den Status aller Server über HTTP und verschickt eine Sammel-E-Mail, sobald ein
+                    noch nicht quittiertes Problem auftritt — jede Problemzeile enthält einen Direkt-Quittier-Link.
+                </p>
+
+                <h3 id="notifications-activation">14.1 Aktivierung</h3>
+                <p>
+                    Das Feature wird in der <code>config.json</code> unter <code>features.notifications.enabled</code>
+                    oder in der WebUI unter <em>Einstellungen → Feature-Toggles → Benachrichtigungen</em> aktiviert.
+                    Dort wählt man einen oder mehrere <strong>sendende Server</strong> (<code>notifierServers</code>)
+                    und eine <strong>zentrale WebUI</strong> (<code>webUiServer</code>). Ein Worker, dessen Hostname in
+                    <code>notifierServers</code> steht, übernimmt automatisch den Versand — <strong>kein
+                    <code>--notify</code>-Schalter mehr nötig</strong>. Alle URLs werden aus den <code>baseUrl</code>s
+                    der Server abgeleitet.
+                </p>
+
+                <h3 id="notifications-ha">14.2 Hochverfügbarkeit (zwei Instanzen)</h3>
+                <p>
+                    Der Notifier kann auf <strong>zwei Servern parallel</strong> laufen, ohne dass eine
+                    Benachrichtigung doppelt versendet wird — und ohne zentrale Sperre oder Dateifreigabe. Jede
+                    Instanz veröffentlicht ihren Versand-Stand (<code>notify-state.json</code>) über IIS; vor dem
+                    Senden wird der Versand mit einem Zeitstempel „beansprucht" (claim-first), und jede Instanz liest
+                    den Stand der anderen (<code>peerNotifyStateUrls</code>). In Kombination mit <strong>versetzten
+                    Laufzeiten</strong> bleibt das Doppelversand-Risiko minimal, während ein verpasster Versand
+                    ausgeschlossen ist (fällt eine Instanz aus, übernimmt die andere automatisch).
+                </p>
+                <div class="info-box">
+                    Damit der Quittier-Link funktioniert, veröffentlicht die zentrale WebUI die aktiven Acknowledges
+                    nach <code>wwwroot/status/acknowledges.json</code>; der Notifier liest sie über
+                    <code>acknowledgesUrl</code>.
+                </div>
+
+                <h3 id="notifications-config">14.3 Konfiguration</h3>
+                <pre><code>"features": {
+  "notifications": {
+    "enabled": true,
+    "minSeverity": "Warning",
+    "notifyOnStaleServer": true,
+    "staleThresholdMinutes": 10,
+    "reNotifyIntervalHours": 4,
+    "retryAfterMinutes": 10,
+    "sendResolvedNotice": true,
+    "notifierServers": ["server1", "server2"],
+    "webUiServer": "server1",
+    "smtpRef": "server1:seg1-relay",
+    "recipients": "ops@example.com,oncall@example.com",
+    "subjectPrefix": "[SimpleAdmin]"
+  }
+}</code></pre>
+                <table>
+                    <thead>
+                        <tr><th>Feld</th><th>Beschreibung</th><th>Standard</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>enabled</code></td><td>Notifier aktivieren</td><td>false</td></tr>
+                        <tr><td><code>notifierServers</code></td><td>Server, die senden (Hostname-Match aktiviert den Notifier; ersetzt <code>--notify</code>)</td><td>[]</td></tr>
+                        <tr><td><code>webUiServer</code></td><td>Server der zentralen WebUI (Quittier-Link &amp; acknowledges.json); leer = erster Notifier</td><td>-</td></tr>
+                        <tr><td><code>minSeverity</code></td><td>Mindest-Schweregrad: <code>Warning</code> oder <code>Critical</code></td><td>Warning</td></tr>
+                        <tr><td><code>notifyOnStaleServer</code></td><td>Nicht erreichbaren/veralteten Server als eigenes Critical melden</td><td>true</td></tr>
+                        <tr><td><code>staleThresholdMinutes</code></td><td>Alter, ab dem eine Statusmeldung als veraltet gilt</td><td>10</td></tr>
+                        <tr><td><code>reNotifyIntervalHours</code></td><td>Erinnerung für weiterhin offene, nicht quittierte Probleme</td><td>4</td></tr>
+                        <tr><td><code>retryAfterMinutes</code></td><td>Erneuter Versuch nach fehlgeschlagenem Versand</td><td>10</td></tr>
+                        <tr><td><code>sendResolvedNotice</code></td><td>Entwarnung bei behobenem/quittiertem Problem</td><td>true</td></tr>
+                        <tr><td colspan="3"><em>Die URLs (Status, Peers, Acknowledges, Quittier-Link) werden aus den Server-<code>baseUrl</code>s abgeleitet. Optionale Overrides: <code>statusUrls</code>, <code>peerNotifyStateUrls</code>, <code>acknowledgesUrl</code>, <code>webUiBaseUrl</code>, <code>localNotifyStatePath</code>.</em></td></tr>
+                        <tr><td><code>smtpRef</code></td><td>Wiederverwendete E-Mail-Probe im Format <code>Server:Probe</code></td><td>erste verfügbare</td></tr>
+                        <tr><td><code>recipients</code></td><td>Empfänger, kommagetrennt (überschreibt <code>to</code> der Probe)</td><td>-</td></tr>
+                        <tr><td><code>subjectPrefix</code></td><td>Betreff-Präfix der E-Mails</td><td>[SimpleAdmin]</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 id="notifications-ack">14.4 Quittieren aus der E-Mail</h3>
+                <p>
+                    Jede Problemzeile enthält einen Link der Form
+                    <code>{webUiBaseUrl}/Problems?ackServer=…&amp;ackProblem=…</code>. Er öffnet die Probleme-Seite
+                    mit vorausgefülltem Quittier-Dialog. Nach dem Quittieren entfällt die weitere Benachrichtigung;
+                    optional wird eine Entwarnung verschickt.
+                </p>
+            </section>
+
+            <!-- 15. BizTalk-Überwachung -->
+            <section id="biztalk">
+                <h2>15. BizTalk-Überwachung</h2>
+                <p>
+                    Überwacht BizTalk über die <strong>BizTalk Management Service REST-API</strong>: Anwendungen,
+                    Orchestrierungen, Sendeports, Empfangsorte und suspendierte Instanzen. Authentifizierung erfolgt
+                    integriert (Windows) über das Dienstkonto; der Worker läuft typischerweise auf dem BizTalk-Server
+                    und fragt <code>localhost</code> ab.
+                </p>
+                <h3 id="biztalk-config">15.1 Konfiguration</h3>
+                <pre><code>"features": { "biztalk": { "enabled": true, "defaults": { "suspendedWarning": 1, "suspendedCritical": 25 } } }
+
+// pro Server unter checks:
+"biztalk": {
+  "enabled": true,
+  "baseUrl": "http://localhost/BizTalkManagementService",
+  "applications":     { "monitor": "all", "exclude": ["BizTalk.System"] },
+  "orchestrations":   { "monitor": "all" },
+  "sendPorts":        { "monitor": "all" },
+  "receiveLocations": { "monitor": "all", "disabledSeverity": "Warning", "criticalList": ["RL_OrderIn"] },
+  "suspendedInstances": { "enabled": true, "warning": 1, "critical": 25, "byApplication": true }
+}</code></pre>
+                <table>
+                    <thead><tr><th>Signal</th><th>Bedingung</th><th>Schweregrad</th></tr></thead>
+                    <tbody>
+                        <tr><td>Anwendung / Orchestrierung / Sendeport</td><td>Status ≠ Started</td><td>Critical</td></tr>
+                        <tr><td>Empfangsort</td><td>deaktiviert</td><td>Warning (konfigurierbar Critical)</td></tr>
+                        <tr><td>Suspendierte Instanzen</td><td>Anzahl ≥ Schwelle</td><td>Warning / Critical</td></tr>
+                        <tr><td>Management-API</td><td>nicht erreichbar</td><td>Critical</td></tr>
+                    </tbody>
+                </table>
+                <div class="info-box">
+                    Der Laufzeitstatus der Host-Instanz-Dienste (<code>BTSSvc$…</code>) ist nicht Teil der API — diese
+                    über die Windows-Dienste-Überwachung auf den BizTalk-Servern abdecken.
+                </div>
+            </section>
+
+            <!-- 16. Datei-/Protokollüberwachung -->
+            <section id="filemonitoring">
+                <h2>16. Datei-/Protokollüberwachung</h2>
+                <p>
+                    Überwacht Fileshares auf <strong>hängengebliebene Dateien</strong> und durchsucht Logdateien nach
+                    <strong>Fehlersignaturen</strong> (z.B. die Verarbeitungsordner von Schnittstellen je Standort:
+                    Eingang / Kasse / Log). Ein <strong>zentraler Worker</strong> erreicht die Standort-Shares über
+                    UNC-Pfade; das Dienstkonto benötigt Leserechte. Funde laufen durch die normale Pipeline (Status,
+                    Probleme, Notifier-Mail) und tragen optional einen Wiki-Link sowie Nachbearbeitungsschritte.
+                </p>
+                <h3 id="filemonitoring-stuck">16.1 Hängengebliebene Dateien</h3>
+                <p>
+                    Eine Datei gilt je Verzeichnis als hängend, wenn sie <strong>älter</strong> als die Schwelle ist
+                    <em>oder</em> nach der <strong>Cutoff-Zeit</strong> (z.B. <code>21:45</code>) noch vorhanden ist.
+                </p>
+                <h3 id="filemonitoring-logs">16.2 Log-Scans</h3>
+                <p>
+                    Pro Logpfad (oder Glob wie <code>…\log\*.log</code>) werden Signaturen per regulärem Ausdruck gesucht;
+                    Treffer werden je Signatur gezählt. In der WebUI eine Signatur pro Zeile:
+                    <code>Anzeigename :: Severity :: Regex</code>.
+                </p>
+                <h3 id="filemonitoring-config">16.3 Konfiguration</h3>
+                <pre><code>"features": { "fileMonitoring": { "enabled": true, "defaults": { "stuckFileAgeMinutesWarning": 60, "stuckFileAgeMinutesCritical": 240, "maxReportedItems": 50 } } }
+
+// pro Server unter checks:
+"fileMonitoring": {
+  "enabled": true,
+  "schedule": "Mon-Fri 06:00-22:00",
+  "directories": [
+    {
+      "name": "Eingang",
+      "path": "\\\\fileserver01\\d$\\Daten\\schnittstelle\\kasse\\eingang",
+      "includePatterns": ["*.xml"],
+      "cutoffTime": "21:45",
+      "cutoffSeverity": "Critical",
+      "wikiUrl": "https://wiki.intern/schnittstelle/haengende-datei",
+      "remediationSteps": [
+        "Datei vom Eingang in den Kassenordner verschieben",
+        "Mit der Logdatei abgleichen",
+        "Bei anhaltendem Fehler die Fachverfahrensbetreuung informieren"
+      ]
+    }
+  ],
+  "logScans": [
+    {
+      "name": "Schnittstellen-Log",
+      "path": "\\\\fileserver01\\d$\\Daten\\schnittstelle\\kasse\\log\\*.log",
+      "maxFileAgeMinutes": 1440,
+      "patterns": [
+        { "name": "Hängende Nachricht", "severity": "Critical", "regex": "Nachricht.*haengt|stuck" }
+      ]
+    }
+  ]
+}</code></pre>
+                <table>
+                    <thead><tr><th>Signal</th><th>Bedingung</th><th>Schweregrad</th></tr></thead>
+                    <tbody>
+                        <tr><td>Hängende Datei (Alter)</td><td>älter als Warning-/Critical-Schwelle</td><td>Warning / Critical</td></tr>
+                        <tr><td>Hängende Datei (Cutoff)</td><td>nach Cutoff-Zeit noch vorhanden</td><td>konfigurierbar (Standard Critical)</td></tr>
+                        <tr><td>Log-Fehler</td><td>Signatur trifft zu</td><td>je Signatur Warning / Critical</td></tr>
+                        <tr><td>Verzeichnis/Log</td><td>nicht erreichbar</td><td>Critical</td></tr>
+                    </tbody>
+                </table>
+                <div class="info-box">
+                    Mit <em>Betriebszeiten</em> (<code>schedule</code>) wird außerhalb des Fensters nicht geprüft. Das Tool
+                    meldet nur — es verschiebt oder löscht keine Dateien.
+                </div>
+            </section>
+
+            <a href="./" class="back-link">← Zurück zur Übersicht</a>
+        </main>
+    </div>
+
+    <footer>
+        <p>SimpleAdmin - Vollständige Konfigurationsdokumentation - © 2025</p>
+    </footer>
+
+    <!-- Scroll to Top Button -->
+    <button class="scroll-to-top" id="scrollToTop" aria-label="Nach oben scrollen">
+        ↑
+    </button>
+
+    <script>
+        // ========== Search Functionality ==========
+        const searchBox = document.getElementById('searchBox');
+        const searchResults = document.getElementById('searchResults');
+        const mainContent = document.querySelector('main');
+        const allSections = mainContent.querySelectorAll('section');
+
+        let originalContent = {};
+        allSections.forEach(section => {
+            originalContent[section.id] = section.innerHTML;
+        });
+
+        searchBox.addEventListener('input', function() {
+            const query = this.value.trim().toLowerCase();
+
+            // Clear highlights and restore original content
+            allSections.forEach(section => {
+                section.innerHTML = originalContent[section.id];
+            });
+
+            if (query.length < 2) {
+                searchResults.textContent = '';
+                allSections.forEach(section => section.classList.remove('hidden'));
+                return;
+            }
+
+            let matchCount = 0;
+            let sectionsWithMatches = 0;
+
+            allSections.forEach(section => {
+                const text = section.textContent.toLowerCase();
+                const hasMatch = text.includes(query);
+
+                if (hasMatch) {
+                    sectionsWithMatches++;
+                    // Highlight matches in this section
+                    highlightInElement(section, query);
+                    section.classList.remove('hidden');
+
+                    // Count matches
+                    const matches = text.split(query).length - 1;
+                    matchCount += matches;
+                } else {
+                    section.classList.add('hidden');
+                }
+            });
+
+            if (matchCount > 0) {
+                searchResults.textContent = `${matchCount} Ergebnis(se) in ${sectionsWithMatches} Abschnitt(en) gefunden`;
+            } else {
+                searchResults.textContent = 'Keine Ergebnisse gefunden';
+            }
+        });
+
+        function highlightInElement(element, query) {
+            const walker = document.createTreeWalker(
+                element,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+            );
+
+            const nodesToReplace = [];
+            let node;
+
+            while (node = walker.nextNode()) {
+                if (node.nodeValue.toLowerCase().includes(query)) {
+                    nodesToReplace.push(node);
+                }
+            }
+
+            nodesToReplace.forEach(node => {
+                const span = document.createElement('span');
+                const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+                span.innerHTML = node.nodeValue.replace(regex, '<span class="highlight">$1</span>');
+                node.parentNode.replaceChild(span, node);
+            });
+        }
+
+        function escapeRegex(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // ========== Active TOC Highlighting (Scroll Spy) ==========
+        const tocLinks = document.querySelectorAll('.toc-sidebar a');
+        const sections = document.querySelectorAll('section[id], h3[id], h4[id]');
+
+        function updateActiveTocLink() {
+            let currentSection = '';
+            const scrollPosition = window.scrollY + 200; // Offset for header
+
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.offsetHeight;
+
+                if (scrollPosition >= sectionTop && scrollPosition < sectionTop + sectionHeight) {
+                    currentSection = section.getAttribute('id');
+                }
+            });
+
+            tocLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${currentSection}`) {
+                    link.classList.add('active');
+                }
+            });
+        }
+
+        window.addEventListener('scroll', updateActiveTocLink);
+        window.addEventListener('load', updateActiveTocLink);
+
+        // ========== Scroll to Top Button ==========
+        const scrollToTopBtn = document.getElementById('scrollToTop');
+
+        window.addEventListener('scroll', function() {
+            if (window.pageYOffset > 300) {
+                scrollToTopBtn.classList.add('visible');
+            } else {
+                scrollToTopBtn.classList.remove('visible');
+            }
+        });
+
+        scrollToTopBtn.addEventListener('click', function() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+
+        // ========== Mobile TOC Toggle ==========
+        const tocToggle = document.getElementById('tocToggle');
+        const tocSidebar = document.getElementById('tocSidebar');
+
+        tocToggle.addEventListener('click', function() {
+            tocSidebar.classList.toggle('expanded');
+            tocToggle.classList.toggle('active');
+        });
+
+        // Close TOC when clicking a link on mobile
+        if (window.innerWidth <= 768) {
+            tocLinks.forEach(link => {
+                link.addEventListener('click', function() {
+                    tocSidebar.classList.remove('expanded');
+                    tocToggle.classList.remove('active');
+                });
+            });
+        }
+
+        // ========== Smooth Scrolling for Anchor Links ==========
+        tocLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+
+                if (targetElement) {
+                    const headerOffset = 180;
+                    const elementPosition = targetElement.getBoundingClientRect().top;
+                    const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+                    window.scrollTo({
+                        top: offsetPosition,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

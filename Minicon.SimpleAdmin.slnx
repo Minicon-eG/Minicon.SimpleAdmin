@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Minicon.SimpleAdmin.Checkers/Minicon.SimpleAdmin.Checkers.csproj" />
+    <Project Path="src/Minicon.SimpleAdmin.HtmlGenerator/Minicon.SimpleAdmin.HtmlGenerator.csproj" />
+    <Project Path="src/Minicon.SimpleAdmin.Services/Minicon.SimpleAdmin.Services.csproj" />
+    <Project Path="src/Minicon.SimpleAdmin.Shared/Minicon.SimpleAdmin.Shared.csproj" />
+    <Project Path="src/Minicon.SimpleAdmin.Tests/Minicon.SimpleAdmin.Tests.csproj" />
+    <Project Path="src/Minicon.SimpleAdmin.WebUI/Minicon.SimpleAdmin.WebUI.csproj" />
+    <Project Path="src/Minicon.SimpleAdmin.Worker/Minicon.SimpleAdmin.Worker.csproj" />
+  </Folder>
+</Solution>

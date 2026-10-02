@@ -1,0 +1,401 @@
+@model Minicon.SimpleAdmin.WebUI.Controllers.EnvironmentMatrixViewModel
+@{
+    ViewData["Title"] = "Umgebungen";
+}
+
+<style>
+    .server-pool {
+        min-height: 200px;
+        background: #f8f9fa;
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        padding: 10px;
+    }
+    .server-item {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin: 4px;
+        cursor: grab;
+        display: inline-block;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+        user-select: none;
+    }
+    .server-item:hover {
+        background: #e9ecef;
+        border-color: #0d6efd;
+    }
+    .server-item.dragging {
+        opacity: 0.5;
+        cursor: grabbing;
+    }
+    .drop-zone {
+        min-height: 60px;
+        background: #fff;
+        border: 2px dashed #dee2e6;
+        border-radius: 6px;
+        padding: 8px;
+        transition: all 0.2s;
+    }
+    .drop-zone.drag-over {
+        background: #e7f1ff;
+        border-color: #0d6efd;
+        border-style: solid;
+    }
+    .drop-zone .server-item {
+        background: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+    .drop-zone .server-item:hover {
+        background: #0b5ed7;
+    }
+    .drop-zone .server-item .remove-btn {
+        margin-left: 6px;
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    .drop-zone .server-item .remove-btn:hover {
+        opacity: 1;
+    }
+    .env-card {
+        margin-bottom: 1rem;
+    }
+    .env-header-production { background: #dc3545 !important; }
+    .env-header-ref { background: #fd7e14 !important; }
+    .env-header-development { background: #198754 !important; }
+    .category-label {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-bottom: 4px;
+    }
+    .empty-hint {
+        color: #adb5bd;
+        font-size: 0.8rem;
+        font-style: italic;
+        padding: 10px;
+        text-align: center;
+    }
+    .save-indicator {
+        display: none;
+        color: #198754;
+        font-size: 0.8rem;
+    }
+    .save-indicator.saving {
+        display: inline;
+        color: #fd7e14;
+    }
+    .save-indicator.saved {
+        display: inline;
+        color: #198754;
+    }
+</style>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>
+            <i class="bi bi-layers me-2"></i>Umgebungen
+            <span class="save-indicator" id="saveIndicator">
+                <i class="bi bi-arrow-repeat spin"></i> Speichern...
+            </span>
+        </h1>
+    </div>
+
+    @if (!Model.Environments.Any())
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            Keine Umgebungen vorhanden. Erstellen Sie eine neue Umgebung.
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <!-- Server Pool (Left Side) -->
+            <div class="col-lg-3">
+                <div class="card sticky-top" style="top: 80px;">
+                    <div class="card-header bg-secondary text-white">
+                        <i class="bi bi-hdd-stack me-2"></i>Verfügbare Server
+                        <span class="badge bg-light text-dark ms-2">@Model.AvailableServers.Count</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="server-pool" id="serverPool">
+                            @if (!Model.AvailableServers.Any())
+                            {
+                                <div class="empty-hint">Keine aktiven Server vorhanden</div>
+                            }
+                            else
+                            {
+                                foreach (var server in Model.AvailableServers)
+                                {
+                                    var description = Model.ServerDescriptions.GetValueOrDefault(server);
+                                    <div class="server-item" draggable="true" data-server="@server" data-description="@description" title="@(string.IsNullOrEmpty(description) ? server : $"{server}: {description}")">
+                                        <i class="bi bi-server me-1"></i>@server
+                                    </div>
+                                }
+                            }
+                        </div>
+                        <div class="form-text mt-2">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Ziehen Sie Server in die gewünschte Kategorie. Nur aktive Server werden angezeigt.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Environment Matrix (Right Side) -->
+            <div class="col-lg-9">
+                @foreach (var env in Model.Environments)
+                {
+                    var headerClass = env.ToLower() switch
+                    {
+                        "production" => "env-header-production",
+                        "ref" => "env-header-ref",
+                        "development" => "env-header-development",
+                        _ => "bg-primary"
+                    };
+                    var isStandardEnv = env.ToLower() == "production" || env.ToLower() == "ref" || env.ToLower() == "development";
+
+                    <div class="card env-card">
+                        <div class="card-header text-white d-flex justify-content-between align-items-center @headerClass">
+                            <span>
+                                <i class="bi bi-cloud me-2"></i>
+                                <strong>@env</strong>
+                            </span>
+                            @if (!isStandardEnv)
+                            {
+                                <form asp-action="DeleteEnvironment" method="post" class="d-inline delete-env-form" data-env-name="@env">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="name" value="@env" />
+                                    <button type="submit" class="btn btn-sm btn-outline-light" title="Umgebung löschen">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                @foreach (var category in Model.Categories)
+                                {
+                                    var servers = Model.ServerAssignments.ContainsKey(env) &&
+                                                 Model.ServerAssignments[env].ContainsKey(category)
+                                        ? Model.ServerAssignments[env][category]
+                                        : new List<string>();
+
+                                    <div class="col-md-3 mb-3">
+                                        <div class="category-label">
+                                            <i class="bi bi-folder me-1"></i>@category
+                                            <span class="badge bg-secondary ms-1">@servers.Count</span>
+                                        </div>
+                                        <div class="drop-zone"
+                                             data-environment="@env"
+                                             data-category="@category">
+                                            @if (servers.Any())
+                                            {
+                                                foreach (var server in servers)
+                                                {
+                                                    var serverDesc = Model.ServerDescriptions.GetValueOrDefault(server);
+                                                    <div class="server-item" data-server="@server" title="@(string.IsNullOrEmpty(serverDesc) ? server : $"{server}: {serverDesc}")">
+                                                        <i class="bi bi-server me-1"></i>@server
+                                                        <i class="bi bi-x-circle remove-btn" onclick="removeServer(this, '@server')"></i>
+                                                    </div>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <div class="empty-hint">Server hierher ziehen</div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+
+@section Scripts {
+    <script>
+        let draggedElement = null;
+
+        // Initialize drag & drop
+        document.addEventListener('DOMContentLoaded', function() {
+            initDragAndDrop();
+        });
+
+        function initDragAndDrop() {
+            // Make pool items draggable
+            document.querySelectorAll('#serverPool .server-item').forEach(item => {
+                item.addEventListener('dragstart', handleDragStart);
+                item.addEventListener('dragend', handleDragEnd);
+            });
+
+            // Make drop zones accept drops
+            document.querySelectorAll('.drop-zone').forEach(zone => {
+                zone.addEventListener('dragover', handleDragOver);
+                zone.addEventListener('dragleave', handleDragLeave);
+                zone.addEventListener('drop', handleDrop);
+            });
+        }
+
+        function handleDragStart(e) {
+            draggedElement = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('text/plain', this.dataset.server);
+            e.dataTransfer.setData('text/description', this.dataset.description || '');
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            draggedElement = null;
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            this.classList.add('drag-over');
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+
+            const serverName = e.dataTransfer.getData('text/plain');
+            const description = e.dataTransfer.getData('text/description') || '';
+            const environment = this.dataset.environment;
+            const category = this.dataset.category;
+
+            // Check if server already exists in this zone
+            const existingServers = Array.from(this.querySelectorAll('.server-item'))
+                .map(el => el.dataset.server);
+
+            if (existingServers.includes(serverName)) {
+                return; // Server already in this zone
+            }
+
+            // Remove empty hint if present
+            const emptyHint = this.querySelector('.empty-hint');
+            if (emptyHint) {
+                emptyHint.remove();
+            }
+
+            // Add server to drop zone
+            const serverItem = document.createElement('div');
+            serverItem.className = 'server-item';
+            serverItem.dataset.server = serverName;
+            serverItem.title = description ? `${serverName}: ${description}` : serverName;
+            serverItem.innerHTML = `<i class="bi bi-server me-1"></i>${serverName}<i class="bi bi-x-circle remove-btn" onclick="removeServer(this, '${serverName}')"></i>`;
+            this.appendChild(serverItem);
+
+            // Update badge count
+            updateBadgeCount(this);
+
+            // Save to server
+            saveAssignment(environment, category, this);
+        }
+
+        function removeServer(btn, serverName) {
+            const dropZone = btn.closest('.drop-zone');
+            const serverItem = btn.closest('.server-item');
+            const environment = dropZone.dataset.environment;
+            const category = dropZone.dataset.category;
+
+            serverItem.remove();
+
+            // Add empty hint if no servers left
+            if (dropZone.querySelectorAll('.server-item').length === 0) {
+                const emptyHint = document.createElement('div');
+                emptyHint.className = 'empty-hint';
+                emptyHint.textContent = 'Server hierher ziehen';
+                dropZone.appendChild(emptyHint);
+            }
+
+            // Update badge count
+            updateBadgeCount(dropZone);
+
+            // Save to server
+            saveAssignment(environment, category, dropZone);
+        }
+
+        function updateBadgeCount(dropZone) {
+            const count = dropZone.querySelectorAll('.server-item').length;
+            const categoryContainer = dropZone.closest('.col-md-3');
+            const badge = categoryContainer.querySelector('.badge');
+            if (badge) {
+                badge.textContent = count;
+            }
+        }
+
+        function saveAssignment(environment, category, dropZone) {
+            const servers = Array.from(dropZone.querySelectorAll('.server-item'))
+                .map(el => el.dataset.server);
+
+            const indicator = document.getElementById('saveIndicator');
+            indicator.className = 'save-indicator saving';
+            indicator.innerHTML = '<i class="bi bi-arrow-repeat"></i> Speichern...';
+
+            fetch('@Url.Action("UpdateAssignmentAjax", "Environments")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    environment: environment,
+                    category: category,
+                    servers: servers
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    indicator.className = 'save-indicator saved';
+                    indicator.innerHTML = '<i class="bi bi-check-circle"></i> Gespeichert';
+                    setTimeout(() => {
+                        indicator.className = 'save-indicator';
+                    }, 2000);
+                } else {
+                    indicator.className = 'save-indicator';
+                    indicator.innerHTML = '<i class="bi bi-exclamation-triangle text-danger"></i> Fehler';
+                    alert('Fehler beim Speichern: ' + data.error);
+                }
+            })
+            .catch(error => {
+                indicator.className = 'save-indicator';
+                console.error('Error:', error);
+                alert('Fehler beim Speichern');
+            });
+        }
+
+        // Delete environment confirmation
+        document.querySelectorAll('.delete-env-form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                const envName = this.dataset.envName;
+                if (!confirm('Umgebung "' + envName + '" wirklich löschen?')) {
+                    e.preventDefault();
+                }
+            });
+        });
+    </script>
+
+    <style>
+        .bi-arrow-repeat {
+            animation: spin 1s linear infinite;
+        }
+        @@keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+}
