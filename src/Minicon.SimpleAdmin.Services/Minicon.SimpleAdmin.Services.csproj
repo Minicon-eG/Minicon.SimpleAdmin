@@ -7,7 +7,7 @@
     <RootNamespace>Minicon.SimpleAdmin</RootNamespace>
     <AssemblyName>Minicon.SimpleAdmin.Services</AssemblyName>
     <PackageId>Minicon.SimpleAdmin.Services</PackageId>
-    <Version>2.26.0</Version>
+    <Version>2.27.0</Version>
     <Authors>Minicon Contributors</Authors>
     <Description>Platform metrics, status evaluation and runtime status persistence services for the Minicon SimpleAdmin monitoring platform.</Description>
     <PackageTags>monitoring;simpleadmin;services;metrics;platform</PackageTags>
