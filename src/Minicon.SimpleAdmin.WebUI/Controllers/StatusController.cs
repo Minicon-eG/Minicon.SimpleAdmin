@@ -5,33 +5,49 @@ namespace Minicon.SimpleAdmin.WebUI.Controllers;
 
 public class StatusController : Controller
 {
-    private readonly StatusReaderService _statusReader;
+	private readonly StatusReaderService _statusReader;
 
-    public StatusController(StatusReaderService statusReader)
-    {
-        _statusReader = statusReader;
-    }
+	public StatusController(StatusReaderService statusReader)
+	{
+		_statusReader = statusReader;
+	}
 
-    public async Task<IActionResult> Index()
-    {
-        var servers = await _statusReader.GetAllServersAsync();
-        return View(servers);
-    }
+	/// <summary>
+	/// Returns the full status page immediately with a skeleton UI.
+	/// Status data is loaded asynchronously via GetAllServersJson() on the client.
+	/// </summary>
+	public IActionResult Index()
+	{
+		return View();
+	}
 
-    public async Task<IActionResult> Details(string id)
-    {
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            return RedirectToAction(nameof(Index));
-        }
+	/// <summary>
+	/// JSON endpoint for asynchronous status loading.
+	/// Uses the StatusReaderService cache (10s TTL) so repeated calls are fast.
+	/// </summary>
+	[HttpGet]
+	public async Task<IActionResult> GetAllServersJson([FromServices] StatusReaderService statusReader)
+	{
+		// Note: using the injected service directly (request-level DI scope)
+		// because the action-scoped instance may differ from the singleton used by the page.
+		var servers = await statusReader.GetAllServersAsync();
+		return Json(servers);
+	}
 
-        var server = await _statusReader.GetServerAsync(id);
-        if (server == null)
-        {
-            TempData["Error"] = $"Server '{id}' nicht gefunden.";
-            return RedirectToAction(nameof(Index));
-        }
+	public async Task<IActionResult> Details(string id)
+	{
+		if (string.IsNullOrWhiteSpace(id))
+		{
+			return RedirectToAction(nameof(Index));
+		}
 
-        return View(server);
-    }
+		var server = await _statusReader.GetServerAsync(id);
+		if (server == null)
+		{
+			TempData["Error"] = $"Server '{id}' nicht gefunden.";
+			return RedirectToAction(nameof(Index));
+		}
+
+		return View(server);
+	}
 }
