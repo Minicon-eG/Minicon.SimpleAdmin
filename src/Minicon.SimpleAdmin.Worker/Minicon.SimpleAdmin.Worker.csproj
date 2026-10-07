@@ -8,7 +8,7 @@
     <RootNamespace>Minicon.SimpleAdmin.Worker</RootNamespace>
     <AssemblyName>Minicon.SimpleAdmin.Worker</AssemblyName>
     <PackageId>Minicon.SimpleAdmin.Worker</PackageId>
-    <Version>2.27.0</Version>
+    <Version>2.27.1</Version>
     <Authors>Minicon Contributors</Authors>
     <Description>Standalone console worker that orchestrates monitoring checks, problem derivation and static HTML generation for the Minicon SimpleAdmin monitoring platform.</Description>
     <PackageTags>monitoring;simpleadmin;worker;console</PackageTags>
