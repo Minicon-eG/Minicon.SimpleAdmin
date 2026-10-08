@@ -59,15 +59,10 @@ public class AcknowledgesController : ControllerBase
             return BadRequest(new { message = "Das Enddatum muss in der Zukunft liegen" });
         }
 
-        // Prefer the authenticated Windows user over the client-supplied name.
-        var acknowledgedBy = User?.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(User.Identity.Name)
-            ? User.Identity.Name!
-            : request.AcknowledgedBy;
-
         var acknowledge = await _acknowledgeService.CreateAcknowledgeAsync(
             request.ServerId,
             request.ProblemId,
-            acknowledgedBy,
+            ResolveAcknowledgedBy(request.AcknowledgedBy),
             request.Comment,
             request.DurationMinutes,
             request.AutoResetOnHealthy,
@@ -78,6 +73,58 @@ public class AcknowledgesController : ControllerBase
 
         return CreatedAtAction(nameof(GetById), new { acknowledgeId = acknowledge.Id }, acknowledge);
     }
+
+    /// <summary>
+    /// Acknowledges several problems at once with shared duration/comment. Duplicate items are
+    /// ignored; the active acknowledges are published once at the end.
+    /// </summary>
+    [HttpPost("bulk")]
+    public async Task<IActionResult> CreateBulk([FromBody] BulkAcknowledgeRequest request)
+    {
+        if (request.Items == null || request.Items.Count == 0 ||
+            request.Items.Any(i => string.IsNullOrWhiteSpace(i.ServerId) || string.IsNullOrWhiteSpace(i.ProblemId)) ||
+            string.IsNullOrWhiteSpace(request.AcknowledgedBy) ||
+            request.DurationMinutes < 0)
+        {
+            return BadRequest(new { message = "Invalid bulk acknowledge request payload" });
+        }
+
+        if (request.ExpiresAt.HasValue && request.ExpiresAt.Value.ToUniversalTime() <= DateTime.UtcNow)
+        {
+            return BadRequest(new { message = "Das Enddatum muss in der Zukunft liegen" });
+        }
+
+        var acknowledgedBy = ResolveAcknowledgedBy(request.AcknowledgedBy);
+        var items = request.Items
+            .DistinctBy(i => (i.ServerId, i.ProblemId))
+            .ToList();
+
+        var created = new List<Acknowledge>(items.Count);
+        foreach (var item in items)
+        {
+            created.Add(await _acknowledgeService.CreateAcknowledgeAsync(
+                item.ServerId,
+                item.ProblemId,
+                acknowledgedBy,
+                request.Comment,
+                request.DurationMinutes,
+                request.AutoResetOnHealthy,
+                request.SuppressAlerts,
+                request.ExpiresAt?.ToUniversalTime()));
+        }
+
+        await PublishActiveAcknowledgesAsync();
+
+        return Ok(created);
+    }
+
+    /// <summary>
+    /// Prefer the authenticated Windows user over the client-supplied name.
+    /// </summary>
+    private string ResolveAcknowledgedBy(string clientSupplied) =>
+        User?.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(User.Identity.Name)
+            ? User.Identity.Name!
+            : clientSupplied;
 
     [HttpGet("server/{serverId}")]
     public async Task<IActionResult> GetByServer(string serverId)

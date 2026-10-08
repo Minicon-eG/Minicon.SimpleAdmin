@@ -10,6 +10,9 @@
         <p class="text-muted">Übersicht über alle aktiven Probleme</p>
     </div>
     <div class="col-auto">
+        <button class="btn btn-primary me-2" id="bulkAcknowledgeButton" onclick="acknowledgeSelected()" disabled>
+            <i class="bi bi-check2-all me-1"></i>Auswahl quittieren (<span id="selectedCount">0</span>)
+        </button>
         <button class="btn btn-outline-secondary" onclick="location.reload()">
             <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
         </button>
@@ -53,6 +56,10 @@
     <table class="table table-hover">
         <thead class="table-light">
             <tr>
+                <th style="width: 1%;">
+                    <input type="checkbox" class="form-check-input" id="selectAllProblems"
+                           title="Alle unquittierten Probleme auswählen" onchange="toggleSelectAll(this.checked)" />
+                </th>
                 <th>Server</th>
                 <th>Problem</th>
                 <th>Schweregrad</th>
@@ -72,6 +79,14 @@
                     _ => ""
                 };
                 <tr class="@severityClass">
+                    <td>
+                        @if (!problem.Problem.Acknowledged)
+                        {
+                            <input type="checkbox" class="form-check-input problem-select"
+                                   data-server-id="@problem.ServerId" data-problem-id="@problem.Problem.Id"
+                                   onchange="updateSelection()" />
+                        }
+                    </td>
                     <td>
                         <strong>@problem.ServerId</strong>
                     </td>
@@ -171,12 +186,11 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Problem bestätigen</h5>
+                <h5 class="modal-title" id="acknowledgeModalTitle">Problem bestätigen</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="acknowledgeProblemId" />
-                <input type="hidden" id="acknowledgeServerId" />
+                <ul class="small mb-3 d-none" id="acknowledgeSelectionList"></ul>
                 <div class="mb-3">
                     <label for="acknowledgeDuration" class="form-label">Dauer</label>
                     <select class="form-select" id="acknowledgeDuration" onchange="toggleAcknowledgeDate()">
@@ -214,6 +228,8 @@
 @section Scripts {
     <script>
         let acknowledgeModal;
+        // Problems the open dialog applies to: [{ serverId, problemId }]
+        let acknowledgeTargets = [];
         const acknowledgeApiUrl = '@Url.Content("~/api/acknowledges")';
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -227,12 +243,54 @@
             if (ackServer && ackProblem) {
                 acknowledgeProblem(ackProblem, ackServer);
             }
+            updateSelection();
         });
 
         function acknowledgeProblem(problemId, serverId) {
-            document.getElementById('acknowledgeProblemId').value = problemId;
-            document.getElementById('acknowledgeServerId').value = serverId;
+            openAcknowledgeModal([{ serverId: serverId, problemId: problemId }]);
+        }
+
+        function selectedProblemBoxes() {
+            return Array.from(document.querySelectorAll('.problem-select:checked'));
+        }
+
+        function acknowledgeSelected() {
+            const targets = selectedProblemBoxes().map(cb => ({
+                serverId: cb.dataset.serverId,
+                problemId: cb.dataset.problemId
+            }));
+            if (targets.length > 0) openAcknowledgeModal(targets);
+        }
+
+        function openAcknowledgeModal(targets) {
+            acknowledgeTargets = targets;
+            const multi = targets.length > 1;
+            document.getElementById('acknowledgeModalTitle').textContent =
+                multi ? targets.length + ' Probleme bestätigen' : 'Problem bestätigen';
+            const list = document.getElementById('acknowledgeSelectionList');
+            list.replaceChildren(...(multi ? targets.map(t => {
+                const li = document.createElement('li');
+                li.textContent = t.serverId + ': ' + t.problemId;
+                return li;
+            }) : []));
+            list.classList.toggle('d-none', !multi);
             acknowledgeModal.show();
+        }
+
+        function toggleSelectAll(checked) {
+            document.querySelectorAll('.problem-select').forEach(cb => cb.checked = checked);
+            updateSelection();
+        }
+
+        function updateSelection() {
+            const all = document.querySelectorAll('.problem-select').length;
+            const selected = selectedProblemBoxes().length;
+            document.getElementById('selectedCount').textContent = selected;
+            document.getElementById('bulkAcknowledgeButton').disabled = selected === 0;
+            const selectAll = document.getElementById('selectAllProblems');
+            selectAll.checked = all > 0 && selected === all;
+            selectAll.indeterminate = selected > 0 && selected < all;
+            selectAll.disabled = all === 0;
         }
 
         function toggleAcknowledgeDate() {
@@ -248,8 +306,7 @@
         }
 
         async function submitAcknowledge() {
-            const problemId = document.getElementById('acknowledgeProblemId').value;
-            const serverId = document.getElementById('acknowledgeServerId').value;
+            if (acknowledgeTargets.length === 0) return;
             const choice = document.getElementById('acknowledgeDuration').value;
             let duration = 0;
             let expiresAt = null;
@@ -263,14 +320,14 @@
             const comment = document.getElementById('acknowledgeComment').value;
 
             try {
-                const response = await fetch(acknowledgeApiUrl, {
+                const single = acknowledgeTargets.length === 1;
+                const response = await fetch(single ? acknowledgeApiUrl : acknowledgeApiUrl + '/bulk', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        serverId: serverId,
-                        problemId: problemId,
+                        ...(single ? acknowledgeTargets[0] : { items: acknowledgeTargets }),
                         acknowledgedBy: 'WebUI User',
                         comment: comment,
                         durationMinutes: duration,

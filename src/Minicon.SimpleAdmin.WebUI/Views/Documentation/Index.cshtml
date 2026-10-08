@@ -1383,7 +1383,8 @@ $.version != deprecated</code></pre>
                 <h4>Acknowledge erstellen</h4>
                 <ul>
                     <li>Über den Knopf <strong>„Acknowledge“</strong> auf der Probleme-Seite — oder direkt über den Quittier-Link in der Benachrichtigungs-Mail</li>
-                    <li>Über die REST API (<code>POST /api/acknowledges</code>)</li>
+                    <li>Mehrere auf einmal: auf der Probleme-Seite die gewünschten Probleme per Checkbox (oder „Alle auswählen“) markieren und <strong>„Auswahl quittieren“</strong> klicken — Dauer und Kommentar gelten für alle</li>
+                    <li>Über die REST API (<code>POST /api/acknowledges</code>, mehrere: <code>POST /api/acknowledges/bulk</code> mit <code>items: [{ serverId, problemId }]</code> und denselben übrigen Feldern)</li>
                 </ul>
                 <p>Im Dialog wählbare Dauer:</p>
                 <ul>

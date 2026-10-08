@@ -7,7 +7,7 @@
     <RootNamespace>Minicon.SimpleAdmin</RootNamespace>
     <AssemblyName>Minicon.SimpleAdmin.Shared</AssemblyName>
     <PackageId>Minicon.SimpleAdmin.Shared</PackageId>
-    <Version>2.27.1</Version>
+    <Version>2.28.0</Version>
     <Authors>Minicon Contributors</Authors>
     <Description>Core models, services, and DTOs for the Minicon SimpleAdmin monitoring platform.</Description>
     <PackageTags>monitoring;simpleadmin;models;status</PackageTags>
