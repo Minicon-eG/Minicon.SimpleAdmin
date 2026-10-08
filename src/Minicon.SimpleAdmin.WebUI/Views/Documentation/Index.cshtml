@@ -1785,6 +1785,11 @@ $.version != deprecated</code></pre>
                             <td>Neues Acknowledge erstellen</td>
                         </tr>
                         <tr>
+                            <td><span class="badge bg-primary">POST</span></td>
+                            <td><code>/api/acknowledges/bulk</code></td>
+                            <td>Mehrere Probleme auf einmal quittieren (<code>items: [{ serverId, problemId }]</code>)</td>
+                        </tr>
+                        <tr>
                             <td><span class="badge bg-warning text-dark">PUT</span></td>
                             <td><code>/api/acknowledges/{id}/extend</code></td>
                             <td>Acknowledge verlängern</td>

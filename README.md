@@ -36,7 +36,7 @@ return await SimpleAdminWorkerHost.RunAsync(args);
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.22.0" />
+<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.28.0" />
 ```
 
 ### Admin UI
@@ -53,7 +53,7 @@ app.Run();
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.22.0" />
+<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.28.0" />
 ```
 
 The host's `appsettings.json` supplies deployment specifics:
@@ -124,7 +124,7 @@ service types, feature toggles and the PRTG/NetScaler endpoints. Supported featu
   and send summary mails with acknowledge deep-links (HTML + plaintext, reminders,
   all-clear notices, HA via two coordinated instances) — testable end-to-end via
   the "Test-Mail senden" button in the admin UI
-- Problem acknowledgement with expiry
+- Problem acknowledgement with expiry — single or multi-select ("Auswahl quittieren")
 - Time profiles (relaxed thresholds outside business hours)
 - Central aggregation across multiple servers
 - AES-256 connection-string encryption (`Encryption:ConnectionStringKey`)
