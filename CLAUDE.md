@@ -147,7 +147,7 @@ Razor Class Library. The host application provides only the entry point + appset
 ### REST API (all under `/api/...`)
 - `GET /api/status[/{id}][/metrics|/apppools|/services]` — `Api/StatusController`
 - `GET /api/problems[/server/{id}]`, `GET /api/problems/{id}?serverId=` — `Api/ProblemsController`
-- `GET|POST|PUT|DELETE /api/acknowledges[/{id}|/server/{id}|/{id}/extend]` — `Api/AcknowledgesController`; `POST /api/acknowledges/bulk` (v2.28.0, `BulkAcknowledgeRequest`: `items[{serverId, problemId}]` + shared duration/comment/expiresAt, duplicates ignored, publishes once) backs the multi-select "Auswahl quittieren" on `Views/Problems/Index.cshtml`
+- `GET|POST|PUT|DELETE /api/acknowledges[/{id}|/server/{id}|/{id}/extend]` — `Api/AcknowledgesController`; `POST /api/acknowledges/bulk` (v2.28.0, `BulkAcknowledgeRequest`: `items[{serverId, problemId}]` + shared duration/comment/expiresAt, duplicates ignored, publishes once) backs the multi-select "Auswahl quittieren" on `Views/Problems/Index.cshtml`. Problems page (v2.30.0): default filter = open (unacknowledged); client-side filters status/severity/server/text kept in the query string (`?status=all&severity=Critical&server=…&q=…`), KPI tiles set filters, select-all/bulk act on visible rows only; styles under "Problems page" in `wwwroot/css/site.css`
 - `POST /api/sqlquerytest/{connection|query}` — `Api/SqlQueryTestController`
 - `POST /api/emailtest/{smtp|imap}` — `Api/EmailTestController`
 - `POST /api/notificationtest/send` — `Api/NotificationTestController` (resolves the notifier's `smtpRef` exactly like `NotificationService` and sends a test mail; accepts current form values so it works before saving)

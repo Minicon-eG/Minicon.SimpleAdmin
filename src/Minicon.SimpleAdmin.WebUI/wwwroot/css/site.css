@@ -344,3 +344,193 @@ footer {
     background-color: #f8f9fa;
     border-top: 2px solid var(--brand-primary) !important;
 }
+
+/* ---------- Problems page ---------- */
+.problem-kpi {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 0.85rem;
+    align-items: center;
+    width: 100%;
+    padding: 0.9rem 1.1rem;
+    text-align: left;
+    background: #fff;
+    border: 1px solid var(--bs-border-color);
+    border-left: 4px solid var(--kpi-color);
+    border-radius: 0.6rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.15s, transform 0.15s, background-color 0.15s;
+}
+
+.problem-kpi:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+.problem-kpi.active {
+    background: color-mix(in srgb, var(--kpi-color) 8%, #fff);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--kpi-color) 35%, transparent);
+}
+
+.problem-kpi > i {
+    grid-row: span 2;
+    font-size: 1.6rem;
+    color: var(--kpi-color);
+}
+
+.problem-kpi .kpi-value {
+    font-size: 1.6rem;
+    font-weight: 600;
+    line-height: 1.1;
+}
+
+.problem-kpi .kpi-label {
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.kpi-open { --kpi-color: var(--brand-primary); }
+.kpi-critical { --kpi-color: var(--brand-danger); }
+.kpi-warning { --kpi-color: #e0a800; }
+.kpi-acknowledged { --kpi-color: var(--brand-accent); }
+
+.problem-panel {
+    border-radius: 0.6rem;
+}
+
+.problem-toolbar {
+    background: #f8f9fb;
+    padding: 0.75rem 1rem;
+}
+
+.problem-bulkbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1rem;
+    color: #fff;
+    background: var(--brand-primary);
+    position: sticky;
+    top: 56px;
+    z-index: 5;
+}
+
+.problem-bulkbar.d-none {
+    display: none !important;
+}
+
+.problem-table thead th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--bs-secondary-color);
+    background: #fff;
+    border-bottom-width: 1px;
+    white-space: nowrap;
+}
+
+.problem-table tbody td {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+}
+
+.problem-row > td:first-child {
+    border-left: 4px solid transparent;
+}
+
+.problem-row.severity-critical > td:first-child { border-left-color: var(--brand-danger); }
+.problem-row.severity-warning > td:first-child { border-left-color: #ffc107; }
+.problem-row.severity-info > td:first-child { border-left-color: var(--brand-accent); }
+
+.problem-row:hover > td {
+    background-color: #f6f8fb;
+}
+
+.problem-row.is-selected > td {
+    background-color: rgba(0, 158, 224, 0.08);
+}
+
+.problem-row.is-acknowledged > td {
+    color: var(--bs-secondary-color);
+}
+
+.problem-row.is-acknowledged .severity-pill {
+    opacity: 0.6;
+}
+
+.problem-table .form-check-input {
+    border-color: #8c96a3;
+}
+
+.problem-row.is-acknowledged > td:first-child {
+    border-left-color: var(--bs-border-color);
+}
+
+.problem-main {
+    min-width: 280px;
+}
+
+.problem-origin {
+    color: var(--bs-secondary-color);
+    font-size: 0.8rem;
+}
+
+.problem-steps summary {
+    cursor: pointer;
+    color: var(--brand-accent);
+}
+
+.severity-pill,
+.state-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.severity-pill-critical { color: #a50013; background: #fde8ea; }
+.severity-pill-warning { color: #8a6100; background: #fff4d1; }
+.severity-pill-info { color: #00658f; background: #e3f4fc; }
+
+.state-open { color: #a50013; background: #fde8ea; }
+.state-open i { font-size: 0.5rem; }
+.state-acknowledged { color: #00658f; background: #e3f4fc; }
+
+.server-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.15rem 0.55rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.4rem;
+    font-size: 0.85rem;
+    color: var(--bs-body-color);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.server-chip:hover {
+    border-color: var(--brand-accent);
+    color: var(--brand-accent);
+}
+
+.problem-empty {
+    padding: 3rem 1rem;
+    text-align: center;
+}
+
+.problem-empty > i {
+    display: block;
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}

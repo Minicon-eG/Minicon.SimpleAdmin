@@ -7,7 +7,7 @@
     <RootNamespace>Minicon.SimpleAdmin</RootNamespace>
     <AssemblyName>Minicon.SimpleAdmin.Checkers</AssemblyName>
     <PackageId>Minicon.SimpleAdmin.Checkers</PackageId>
-    <Version>2.29.0</Version>
+    <Version>2.30.0</Version>
     <Authors>Minicon Contributors</Authors>
     <Description>AppPool, Windows service, event log, certificate, SQL and email checkers for the Minicon SimpleAdmin monitoring platform.</Description>
     <PackageTags>monitoring;simpleadmin;checkers;iis;sql;email</PackageTags>

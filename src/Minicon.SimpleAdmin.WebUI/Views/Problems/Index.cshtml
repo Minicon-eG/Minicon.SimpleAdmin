@@ -1,183 +1,266 @@
+@using Minicon.SimpleAdmin.Models.State
 @model IEnumerable<(string ServerId, Minicon.SimpleAdmin.Models.State.ActiveProblem Problem)>
 
 @{
     ViewData["Title"] = "Probleme";
+
+    // Open problems first; within each group the reader's order (severity, then most recent) is kept.
+    var all = Model.OrderBy(p => p.Problem.Acknowledged).ToList();
+    var open = all.Where(p => !p.Problem.Acknowledged).ToList();
+    var openCritical = open.Count(p => p.Problem.Severity == ProblemSeverity.Critical);
+    var openWarning = open.Count(p => p.Problem.Severity == ProblemSeverity.Warning);
+    var acknowledgedCount = all.Count - open.Count;
+    var servers = all.Select(p => p.ServerId).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList();
+
+    // Status timestamps are UTC; unspecified kinds come from JSON without offset and are UTC as well.
+    static DateTime AsUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : value.ToUniversalTime();
+    static string Iso(DateTime value) => AsUtc(value).ToString("o");
+    static string Local(DateTime value) => AsUtc(value).ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 }
 
-<div class="row">
-    <div class="col">
-        <h1><i class="bi bi-exclamation-triangle me-2"></i>Aktive Probleme</h1>
-        <p class="text-muted">Übersicht über alle aktiven Probleme</p>
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-4">
+    <div>
+        <h1 class="mb-1"><i class="bi bi-exclamation-triangle me-2"></i>Probleme</h1>
+        <p class="text-muted mb-0">
+            @(open.Count == 0 ? "Keine offenen Probleme" : $"{open.Count} offen")@(acknowledgedCount > 0 ? $" · {acknowledgedCount} quittiert" : "")
+        </p>
     </div>
-    <div class="col-auto">
-        <button class="btn btn-primary me-2" id="bulkAcknowledgeButton" onclick="acknowledgeSelected()" disabled>
-            <i class="bi bi-check2-all me-1"></i>Auswahl quittieren (<span id="selectedCount">0</span>)
+    <button class="btn btn-outline-secondary" onclick="location.reload()">
+        <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
+    </button>
+</div>
+
+@* KPI tiles — clicking one applies the matching filter *@
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <button type="button" class="problem-kpi kpi-open" data-filter-status="open" data-filter-severity="all">
+            <i class="bi bi-exclamation-octagon"></i>
+            <span class="kpi-value">@open.Count</span>
+            <span class="kpi-label">Offen</span>
         </button>
-        <button class="btn btn-outline-secondary" onclick="location.reload()">
-            <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
+    </div>
+    <div class="col-6 col-lg-3">
+        <button type="button" class="problem-kpi kpi-critical" data-filter-status="open" data-filter-severity="Critical">
+            <i class="bi bi-x-octagon"></i>
+            <span class="kpi-value">@openCritical</span>
+            <span class="kpi-label">Critical offen</span>
+        </button>
+    </div>
+    <div class="col-6 col-lg-3">
+        <button type="button" class="problem-kpi kpi-warning" data-filter-status="open" data-filter-severity="Warning">
+            <i class="bi bi-exclamation-triangle"></i>
+            <span class="kpi-value">@openWarning</span>
+            <span class="kpi-label">Warning offen</span>
+        </button>
+    </div>
+    <div class="col-6 col-lg-3">
+        <button type="button" class="problem-kpi kpi-acknowledged" data-filter-status="acknowledged" data-filter-severity="all">
+            <i class="bi bi-check2-circle"></i>
+            <span class="kpi-value">@acknowledgedCount</span>
+            <span class="kpi-label">Quittiert</span>
         </button>
     </div>
 </div>
 
-@{
-    var criticalCount = Model.Count(p => p.Problem.Severity == Minicon.SimpleAdmin.Models.State.ProblemSeverity.Critical);
-    var warningCount = Model.Count(p => p.Problem.Severity == Minicon.SimpleAdmin.Models.State.ProblemSeverity.Warning);
-}
-
-@if (criticalCount > 0 || warningCount > 0)
+@if (all.Count == 0)
 {
-    <div class="row mb-3">
-        @if (criticalCount > 0)
-        {
-            <div class="col-auto">
-                <div class="card text-white bg-danger" style="min-width: 120px;">
-                    <div class="card-body text-center">
-                        <h2 class="mb-0">@criticalCount</h2>
-                        <small>Critical</small>
-                    </div>
-                </div>
-            </div>
-        }
-        @if (warningCount > 0)
-        {
-            <div class="col-auto">
-                <div class="card text-white bg-warning" style="min-width: 120px;">
-                    <div class="card-body text-center">
-                        <h2 class="mb-0">@warningCount</h2>
-                        <small>Warning</small>
-                    </div>
-                </div>
-            </div>
-        }
+    <div class="card shadow-sm problem-panel">
+        <div class="problem-empty">
+            <i class="bi bi-check-circle text-success"></i>
+            <h5>Keine aktiven Probleme</h5>
+            <p class="text-muted mb-0">Alle Systeme sind funktionsfähig.</p>
+        </div>
     </div>
 }
+else
+{
+    <div class="card shadow-sm problem-panel">
+        @* Filter bar *@
+        <div class="card-header problem-toolbar">
+            <div class="row g-2 align-items-center">
+                <div class="col-12 col-lg-auto">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-funnel"></i></span>
+                        <select class="form-select" id="filterStatus" aria-label="Status-Filter">
+                            <option value="open" selected>Offen (nicht quittiert)</option>
+                            <option value="acknowledged">Quittiert</option>
+                            <option value="all">Alle</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-auto">
+                    <select class="form-select form-select-sm" id="filterSeverity" aria-label="Schweregrad-Filter">
+                        <option value="all" selected>Alle Schweregrade</option>
+                        <option value="Critical">Critical</option>
+                        <option value="Warning">Warning</option>
+                        <option value="Info">Info</option>
+                    </select>
+                </div>
+                <div class="col-6 col-lg-auto">
+                    <select class="form-select form-select-sm" id="filterServer" aria-label="Server-Filter">
+                        <option value="all" selected>Alle Server</option>
+                        @foreach (var server in servers)
+                        {
+                            <option value="@server">@server</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-lg">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="search" class="form-control" id="filterText" placeholder="Suchen (Problem, Meldung, Server) …" />
+                    </div>
+                </div>
+                <div class="col-12 col-lg-auto text-lg-end">
+                    <small class="text-muted" id="filterSummary"></small>
+                    <button type="button" class="btn btn-link btn-sm p-0 ms-2 d-none" id="filterReset" onclick="resetFilters()">Filter zurücksetzen</button>
+                </div>
+            </div>
+        </div>
 
-<div class="table-responsive">
-    <table class="table table-hover">
-        <thead class="table-light">
-            <tr>
-                <th style="width: 1%;">
-                    <input type="checkbox" class="form-check-input" id="selectAllProblems"
-                           title="Alle unquittierten Probleme auswählen" onchange="toggleSelectAll(this.checked)" />
-                </th>
-                <th>Server</th>
-                <th>Problem</th>
-                <th>Schweregrad</th>
-                <th>Status</th>
-                <th>Erstmals</th>
-                <th>Zuletzt</th>
-                <th>Aktionen</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var problem in Model)
-            {
-                var severityClass = problem.Problem.Severity switch
-                {
-                    Minicon.SimpleAdmin.Models.State.ProblemSeverity.Critical => "table-danger",
-                    Minicon.SimpleAdmin.Models.State.ProblemSeverity.Warning => "table-warning",
-                    _ => ""
-                };
-                <tr class="@severityClass">
-                    <td>
-                        @if (!problem.Problem.Acknowledged)
+        @* Bulk action bar — visible while problems are selected *@
+        <div class="problem-bulkbar d-none" id="bulkBar">
+            <span><i class="bi bi-check2-square me-2"></i><strong id="selectedCount">0</strong> ausgewählt</span>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-light" onclick="toggleSelectAll(false)">Auswahl aufheben</button>
+                <button type="button" class="btn btn-sm btn-light" onclick="acknowledgeSelected()">
+                    <i class="bi bi-check2-all me-1"></i>Auswahl quittieren
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table align-middle mb-0 problem-table">
+                <thead>
+                    <tr>
+                        <th class="ps-3" style="width: 1%;">
+                            <input type="checkbox" class="form-check-input" id="selectAllProblems"
+                                   title="Alle angezeigten offenen Probleme auswählen" onchange="toggleSelectAll(this.checked)" />
+                        </th>
+                        <th style="width: 1%;">Schweregrad</th>
+                        <th>Problem</th>
+                        <th>Server</th>
+                        <th>Seit</th>
+                        <th>Status</th>
+                        <th class="text-end pe-3">Aktion</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (serverId, problem) in all)
+                    {
+                        var severityKey = problem.Severity.ToString().ToLowerInvariant();
+                        var severityIcon = problem.Severity switch
                         {
-                            <input type="checkbox" class="form-check-input problem-select"
-                                   data-server-id="@problem.ServerId" data-problem-id="@problem.Problem.Id"
-                                   onchange="updateSelection()" />
-                        }
-                    </td>
-                    <td>
-                        <strong>@problem.ServerId</strong>
-                    </td>
-                    <td>
-                        <strong>@problem.Problem.Type: @problem.Problem.Source</strong>
-                        @if (!string.IsNullOrEmpty(problem.Problem.Message))
-                        {
-                            <br />
-                            <small class="text-muted">@problem.Problem.Message</small>
-                        }
-                        @if (!string.IsNullOrEmpty(problem.Problem.WikiUrl) || problem.Problem.RemediationSteps.Count > 0)
-                        {
-                            <br />
-                            @if (!string.IsNullOrEmpty(problem.Problem.WikiUrl))
-                            {
-                                <a href="@problem.Problem.WikiUrl" target="_blank" rel="noopener" class="small">
-                                    <i class="bi bi-book me-1"></i>Lösungsanleitung
-                                </a>
-                            }
-                            @if (problem.Problem.RemediationSteps.Count > 0)
-                            {
-                                <ol class="small text-muted mb-0 mt-1">
-                                    @foreach (var step in problem.Problem.RemediationSteps)
-                                    {
-                                        <li>@step</li>
-                                    }
-                                </ol>
-                            }
-                        }
-                    </td>
-                    <td>
-                        @{
-                            var badgeClass = problem.Problem.Severity switch
-                            {
-                                Minicon.SimpleAdmin.Models.State.ProblemSeverity.Critical => "bg-danger",
-                                Minicon.SimpleAdmin.Models.State.ProblemSeverity.Warning => "bg-warning text-dark",
-                                _ => "bg-secondary"
-                            };
-                        }
-                        <span class="badge @badgeClass">@problem.Problem.Severity</span>
-                    </td>
-                    <td>
-                        @if (problem.Problem.Acknowledged)
-                        {
-                            <span class="badge bg-info">Acknowledged</span>
-                            <div class="small text-muted mt-1">
-                                @(problem.Problem.AcknowledgeExpiresAt.HasValue
-                                    ? "bis " + problem.Problem.AcknowledgeExpiresAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
-                                    : "unbegrenzt")
-                                @if (!string.IsNullOrEmpty(problem.Problem.AcknowledgedBy))
+                            ProblemSeverity.Critical => "bi-x-octagon-fill",
+                            ProblemSeverity.Warning => "bi-exclamation-triangle-fill",
+                            _ => "bi-info-circle-fill"
+                        };
+                        var searchText = $"{problem.Type} {problem.Source} {problem.Message} {serverId} {problem.Id}".ToLowerInvariant();
+                        var origin = string.IsNullOrWhiteSpace(problem.Source) ? problem.Type : $"{problem.Type} · {problem.Source}";
+                        var title = string.IsNullOrWhiteSpace(problem.Message) ? origin : problem.Message;
+
+                        <tr class="problem-row severity-@severityKey @(problem.Acknowledged ? "is-acknowledged" : "")"
+                            data-status="@(problem.Acknowledged ? "acknowledged" : "open")"
+                            data-severity="@problem.Severity"
+                            data-server="@serverId"
+                            data-search="@searchText">
+                            <td class="ps-3">
+                                @if (!problem.Acknowledged)
                                 {
-                                    <span> · @problem.Problem.AcknowledgedBy</span>
+                                    <input type="checkbox" class="form-check-input problem-select"
+                                           data-server-id="@serverId" data-problem-id="@problem.Id" data-label="@title"
+                                           aria-label="Problem auswählen" onchange="updateSelection()" />
                                 }
-                            </div>
-                        }
-                        else
-                        {
-                            <span class="badge bg-secondary">Unacknowledged</span>
-                        }
-                    </td>
-                    <td>
-                        <small>@problem.Problem.FirstOccurrence.ToString("yyyy-MM-dd HH:mm")</small>
-                    </td>
-                    <td>
-                        <small>@problem.Problem.LastOccurrence.ToString("yyyy-MM-dd HH:mm")</small>
-                    </td>
-                    <td>
-                        @if (!problem.Problem.Acknowledged)
-                        {
-                            <button class="btn btn-sm btn-outline-primary" onclick="acknowledgeProblem('@problem.Problem.Id', '@problem.ServerId')">
-                                <i class="bi bi-check-circle me-1"></i>Acknowledge
-                            </button>
-                        }
-                        else
-                        {
-                            <button class="btn btn-sm btn-outline-danger" onclick="cancelAcknowledge('@problem.Problem.AcknowledgeId')"
-                                    title="Quittierung aufheben — das Problem wird wieder gemeldet">
-                                <i class="bi bi-x-circle me-1"></i>Aufheben
-                            </button>
-                        }
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
-</div>
+                            </td>
+                            <td>
+                                <span class="severity-pill severity-pill-@severityKey">
+                                    <i class="bi @severityIcon"></i>@problem.Severity
+                                </span>
+                            </td>
+                            <td class="problem-main">
+                                <div class="fw-semibold">@title</div>
+                                @if (!string.IsNullOrWhiteSpace(problem.Message))
+                                {
+                                    <div class="small text-muted"><code class="problem-origin">@origin</code></div>
+                                }
+                                @if (!string.IsNullOrEmpty(problem.WikiUrl) || problem.RemediationSteps.Count > 0)
+                                {
+                                    <div class="small mt-1 d-flex flex-wrap gap-3">
+                                        @if (!string.IsNullOrEmpty(problem.WikiUrl))
+                                        {
+                                            <a href="@problem.WikiUrl" target="_blank" rel="noopener">
+                                                <i class="bi bi-book me-1"></i>Lösungsanleitung
+                                            </a>
+                                        }
+                                        @if (problem.RemediationSteps.Count > 0)
+                                        {
+                                            <details class="problem-steps">
+                                                <summary>Lösungsschritte (@problem.RemediationSteps.Count)</summary>
+                                                <ol class="text-muted mb-0 mt-1 ps-3">
+                                                    @foreach (var step in problem.RemediationSteps)
+                                                    {
+                                                        <li>@step</li>
+                                                    }
+                                                </ol>
+                                            </details>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                <a href="@Url.Action("Details", "Status", new { id = serverId })" class="server-chip">
+                                    <i class="bi bi-hdd-network"></i>@serverId
+                                </a>
+                            </td>
+                            <td class="text-nowrap">
+                                <span class="relative-time" data-utc="@Iso(problem.FirstOccurrence)"
+                                      title="Erstmals: @Local(problem.FirstOccurrence) · Zuletzt: @Local(problem.LastOccurrence)">@Local(problem.FirstOccurrence)</span>
+                            </td>
+                            <td>
+                                @if (problem.Acknowledged)
+                                {
+                                    <span class="state-pill state-acknowledged"><i class="bi bi-check2-circle"></i>Quittiert</span>
+                                    <div class="small text-muted mt-1">
+                                        @(problem.AcknowledgeExpiresAt.HasValue ? "bis " + Local(problem.AcknowledgeExpiresAt.Value) : "unbegrenzt")
+                                        @if (!string.IsNullOrEmpty(problem.AcknowledgedBy))
+                                        {
+                                            <span> · @problem.AcknowledgedBy</span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="state-pill state-open"><i class="bi bi-circle-fill"></i>Offen</span>
+                                }
+                            </td>
+                            <td class="text-end pe-3 text-nowrap">
+                                @if (!problem.Acknowledged)
+                                {
+                                    <button class="btn btn-sm btn-outline-primary" onclick="acknowledgeProblem('@problem.Id', '@serverId')">
+                                        <i class="bi bi-check2 me-1"></i>Quittieren
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="cancelAcknowledge('@problem.AcknowledgeId')"
+                                            title="Quittierung aufheben — das Problem wird wieder gemeldet">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>Aufheben
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
 
-@if (!Model.Any())
-{
-    <div class="alert alert-success">
-        <i class="bi bi-check-circle me-2"></i>Keine aktiven Probleme vorhanden. Alle Systeme sind funktionsfähig.
+        @* Shown when the filter hides every row *@
+        <div class="problem-empty d-none" id="filterEmpty">
+            <i class="bi bi-check-circle text-success" id="filterEmptyIcon"></i>
+            <h5 id="filterEmptyTitle">Keine offenen Probleme</h5>
+            <p class="text-muted mb-0" id="filterEmptyText"></p>
+        </div>
     </div>
 }
 
@@ -231,34 +314,176 @@
         // Problems the open dialog applies to: [{ serverId, problemId }]
         let acknowledgeTargets = [];
         const acknowledgeApiUrl = '@Url.Content("~/api/acknowledges")';
+        const filterDefaults = { status: 'open', severity: 'all', server: 'all', q: '' };
 
         document.addEventListener('DOMContentLoaded', function() {
             acknowledgeModal = new bootstrap.Modal(document.getElementById('acknowledgeModal'));
 
+            const params = new URLSearchParams(window.location.search);
+            initFilters(params);
+            renderRelativeTimes();
+
             // Deep-link support (notifier mail): open the acknowledge dialog pre-filled
             // from ?ackServer=<serverId>&ackProblem=<problemId>.
-            const params = new URLSearchParams(window.location.search);
             const ackServer = params.get('ackServer');
             const ackProblem = params.get('ackProblem');
             if (ackServer && ackProblem) {
                 acknowledgeProblem(ackProblem, ackServer);
             }
-            updateSelection();
         });
+
+        // ---------- Filter ----------
+
+        function filterControls() {
+            return {
+                status: document.getElementById('filterStatus'),
+                severity: document.getElementById('filterSeverity'),
+                server: document.getElementById('filterServer'),
+                q: document.getElementById('filterText')
+            };
+        }
+
+        function initFilters(params) {
+            const controls = filterControls();
+            if (!controls.status) return; // no problems at all
+
+            for (const [key, control] of Object.entries(controls)) {
+                const value = params.get(key);
+                if (value !== null && (control.tagName !== 'SELECT' || [...control.options].some(o => o.value === value))) {
+                    control.value = value;
+                }
+                control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', applyFilters);
+            }
+
+            document.querySelectorAll('.problem-kpi').forEach(tile => tile.addEventListener('click', () => {
+                controls.status.value = tile.dataset.filterStatus;
+                controls.severity.value = tile.dataset.filterSeverity;
+                applyFilters();
+            }));
+
+            applyFilters();
+        }
+
+        function currentFilters() {
+            const controls = filterControls();
+            return {
+                status: controls.status.value,
+                severity: controls.severity.value,
+                server: controls.server.value,
+                q: controls.q.value.trim()
+            };
+        }
+
+        function applyFilters() {
+            const f = currentFilters();
+            const needle = f.q.toLowerCase();
+            const rows = document.querySelectorAll('.problem-row');
+            let visible = 0;
+
+            rows.forEach(row => {
+                const show = (f.status === 'all' || row.dataset.status === f.status)
+                    && (f.severity === 'all' || row.dataset.severity === f.severity)
+                    && (f.server === 'all' || row.dataset.server.toLowerCase() === f.server.toLowerCase())
+                    && (!needle || row.dataset.search.includes(needle));
+                row.classList.toggle('d-none', !show);
+                if (!show) {
+                    const cb = row.querySelector('.problem-select');
+                    if (cb) cb.checked = false; // never act on hidden rows
+                }
+                if (show) visible++;
+            });
+
+            document.getElementById('filterSummary').textContent = visible + ' von ' + rows.length + ' angezeigt';
+            const isDefault = Object.keys(filterDefaults).every(k => f[k] === filterDefaults[k]);
+            document.getElementById('filterReset').classList.toggle('d-none', isDefault);
+
+            document.querySelectorAll('.problem-kpi').forEach(tile => tile.classList.toggle('active',
+                tile.dataset.filterStatus === f.status && tile.dataset.filterSeverity === f.severity));
+
+            document.getElementById('filterEmpty').classList.toggle('d-none', visible > 0);
+            document.querySelector('.problem-table').classList.toggle('d-none', visible === 0);
+            if (visible === 0) {
+                const onlyOpen = f.status === 'open' && f.severity === 'all' && f.server === 'all' && f.q === '';
+                document.getElementById('filterEmptyTitle').textContent =
+                    onlyOpen ? 'Keine offenen Probleme' : 'Keine Probleme für diesen Filter';
+                document.getElementById('filterEmptyText').textContent =
+                    onlyOpen ? 'Alle aktuellen Probleme sind quittiert.' : 'Passen Sie den Filter an oder setzen Sie ihn zurück.';
+                document.getElementById('filterEmptyIcon').className =
+                    onlyOpen ? 'bi bi-check-circle text-success' : 'bi bi-funnel text-muted';
+            }
+
+            // Keep the filter in the URL so reloads and shared links keep it (deep-link params are dropped).
+            const params = new URLSearchParams();
+            for (const [key, value] of Object.entries(f)) {
+                if (value !== filterDefaults[key]) params.set(key, value);
+            }
+            const query = params.toString();
+            history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+
+            updateSelection();
+        }
+
+        function resetFilters() {
+            for (const [key, control] of Object.entries(filterControls())) control.value = filterDefaults[key];
+            applyFilters();
+        }
+
+        function renderRelativeTimes() {
+            const rtf = new Intl.RelativeTimeFormat('de', { numeric: 'auto' });
+            const units = [['day', 86400], ['hour', 3600], ['minute', 60]];
+            document.querySelectorAll('.relative-time').forEach(el => {
+                const seconds = (new Date(el.dataset.utc) - Date.now()) / 1000;
+                if (isNaN(seconds)) return;
+                const [unit, size] = units.find(([, s]) => Math.abs(seconds) >= s) || ['minute', 60];
+                el.textContent = rtf.format(Math.round(seconds / size), unit);
+            });
+        }
+
+        // ---------- Selection ----------
+
+        function visibleProblemBoxes() {
+            return Array.from(document.querySelectorAll('.problem-row:not(.d-none) .problem-select'));
+        }
+
+        function selectedProblemBoxes() {
+            return visibleProblemBoxes().filter(cb => cb.checked);
+        }
+
+        function toggleSelectAll(checked) {
+            visibleProblemBoxes().forEach(cb => cb.checked = checked);
+            updateSelection();
+        }
+
+        function updateSelection() {
+            const selectAll = document.getElementById('selectAllProblems');
+            if (!selectAll) return;
+            const all = visibleProblemBoxes().length;
+            const selected = selectedProblemBoxes().length;
+            document.getElementById('selectedCount').textContent = selected;
+            document.getElementById('bulkBar').classList.toggle('d-none', selected === 0);
+            document.querySelectorAll('.problem-row').forEach(row => {
+                const cb = row.querySelector('.problem-select');
+                row.classList.toggle('is-selected', !!cb && cb.checked);
+            });
+            selectAll.checked = all > 0 && selected === all;
+            selectAll.indeterminate = selected > 0 && selected < all;
+            selectAll.disabled = all === 0;
+        }
+
+        // ---------- Acknowledge ----------
 
         function acknowledgeProblem(problemId, serverId) {
             openAcknowledgeModal([{ serverId: serverId, problemId: problemId }]);
         }
 
-        function selectedProblemBoxes() {
-            return Array.from(document.querySelectorAll('.problem-select:checked'));
-        }
+        // Readable label for the dialog list: the problem message, falling back to the id.
+        const problemLabels = new Map();
 
         function acknowledgeSelected() {
-            const targets = selectedProblemBoxes().map(cb => ({
-                serverId: cb.dataset.serverId,
-                problemId: cb.dataset.problemId
-            }));
+            const targets = selectedProblemBoxes().map(cb => {
+                problemLabels.set(cb.dataset.serverId + '|' + cb.dataset.problemId, cb.dataset.label);
+                return { serverId: cb.dataset.serverId, problemId: cb.dataset.problemId };
+            });
             if (targets.length > 0) openAcknowledgeModal(targets);
         }
 
@@ -270,27 +495,11 @@
             const list = document.getElementById('acknowledgeSelectionList');
             list.replaceChildren(...(multi ? targets.map(t => {
                 const li = document.createElement('li');
-                li.textContent = t.serverId + ': ' + t.problemId;
+                li.textContent = t.serverId + ': ' + (problemLabels.get(t.serverId + '|' + t.problemId) || t.problemId);
                 return li;
             }) : []));
             list.classList.toggle('d-none', !multi);
             acknowledgeModal.show();
-        }
-
-        function toggleSelectAll(checked) {
-            document.querySelectorAll('.problem-select').forEach(cb => cb.checked = checked);
-            updateSelection();
-        }
-
-        function updateSelection() {
-            const all = document.querySelectorAll('.problem-select').length;
-            const selected = selectedProblemBoxes().length;
-            document.getElementById('selectedCount').textContent = selected;
-            document.getElementById('bulkAcknowledgeButton').disabled = selected === 0;
-            const selectAll = document.getElementById('selectAllProblems');
-            selectAll.checked = all > 0 && selected === all;
-            selectAll.indeterminate = selected > 0 && selected < all;
-            selectAll.disabled = all === 0;
         }
 
         function toggleAcknowledgeDate() {
