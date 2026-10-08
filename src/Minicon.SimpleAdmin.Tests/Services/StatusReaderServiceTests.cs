@@ -230,6 +230,64 @@ public class StatusReaderServiceTests : IDisposable
         servers.Should().BeEmpty();
     }
 
+    [Fact]
+    public void GetDiagnostics_NoConfigAndMissingDirectory_ExplainsBoth()
+    {
+        var folder = Path.Combine(_tempDirectory, "does-not-exist");
+        var reader = new StatusReaderService(folder, new AcknowledgeService(_tempDirectory, _acknowledgeLogger.Object),
+            new ConfigurationService(new ConfigurationBuilder().Build()), _statusReaderLogger.Object);
+
+        var diagnostics = reader.GetDiagnostics();
+
+        diagnostics.ConfigLoaded.Should().BeFalse();
+        diagnostics.Directories[0].Exists.Should().BeFalse();
+        diagnostics.Reasons.Should().HaveCount(2);
+        diagnostics.Reasons[0].Should().Contain("config.json wurde nicht geladen");
+        diagnostics.Reasons[1].Should().Contain(folder).And.Contain("existiert nicht");
+    }
+
+    [Fact]
+    public void GetDiagnostics_EmptyDirectoryAndNoActiveServers_ExplainsBoth()
+    {
+        var folder = Path.Combine(_tempDirectory, "empty");
+        Directory.CreateDirectory(folder);
+        var configurationService = new ConfigurationService(new ConfigurationBuilder().Build());
+        configurationService.LoadFromJson(JsonSerializer.Serialize(new
+        {
+            servers = new object[] { new { name = "server-a", active = false, baseUrl = "https://server-a.test" } }
+        }));
+        var reader = new StatusReaderService(folder, new AcknowledgeService(folder, _acknowledgeLogger.Object),
+            configurationService, _statusReaderLogger.Object, new HttpClient(new StubHandler(_ => new HttpResponseMessage())));
+
+        var diagnostics = reader.GetDiagnostics();
+
+        diagnostics.ConfigLoaded.Should().BeTrue();
+        diagnostics.ServerCount.Should().Be(1);
+        diagnostics.ActiveServerCount.Should().Be(0);
+        diagnostics.Reasons.Should().HaveCount(2);
+        diagnostics.Reasons[0].Should().Contain("keine Statusdateien");
+        diagnostics.Reasons[1].Should().Contain("keiner der 1 Server aktiv");
+    }
+
+    [Fact]
+    public async Task GetDiagnostics_InvalidFilesAndPullDisabled_ExplainsBoth()
+    {
+        var folder = Path.Combine(_tempDirectory, "invalid");
+        Directory.CreateDirectory(folder);
+        await File.WriteAllTextAsync(Path.Combine(folder, "foo.json"), "{\"unrelated\": true}");
+        await File.WriteAllTextAsync(Path.Combine(folder, "acknowledges.json"), "{}");
+        var reader = new StatusReaderService(folder, new AcknowledgeService(folder, _acknowledgeLogger.Object),
+            CreateConfigurationWithServers(pull: false), _statusReaderLogger.Object);
+
+        (await reader.GetAllServersAsync(forceRefresh: true)).Should().BeEmpty();
+        var diagnostics = reader.GetDiagnostics();
+
+        diagnostics.Directories[0].JsonFileCount.Should().Be(1); // acknowledges.json is not a status source
+        diagnostics.Reasons.Should().HaveCount(2);
+        diagnostics.Reasons[0].Should().Contain("1 JSON-Datei(en)");
+        diagnostics.Reasons[1].Should().Contain("pullStatusOverHttp = false");
+    }
+
     private static ConfigurationService CreateConfigurationWithCentralOutputPath(string centralOutputDirectory)
     {
         var configurationService = new ConfigurationService(new ConfigurationBuilder().Build());

@@ -208,6 +208,91 @@
     <div class="alert alert-info">
         <i class="bi bi-info-circle me-2"></i>Keine Server-Statusdaten verfügbar. Stellen Sie sicher, dass SimpleAdmin ausgeführt wird und die Statusdaten gespeichert wurden.
     </div>
+
+    @if (ViewData["Diagnostics"] is Minicon.SimpleAdmin.WebUI.ViewModels.StatusSourceDiagnostics diag)
+    {
+        <div class="card border-warning mb-4" id="statusDiagnostics">
+            <div class="card-header bg-warning-subtle">
+                <i class="bi bi-search me-2"></i><strong>Warum werden keine Einträge angezeigt?</strong>
+            </div>
+            <div class="card-body">
+                <h6>Wahrscheinliche Ursachen</h6>
+                <ul class="mb-4">
+                    @foreach (var reason in diag.Reasons)
+                    {
+                        <li>@reason</li>
+                    }
+                </ul>
+
+                <h6>Aktuelle Einstellungen</h6>
+                <table class="table table-sm small mb-0">
+                    <tbody>
+                        <tr>
+                            <th style="width: 30%;">config.json</th>
+                            <td>
+                                @if (diag.ConfigLoaded)
+                                {
+                                    <span class="badge bg-success me-1">geladen</span><code>@(diag.ConfigFilePath ?? "–")</code>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger me-1">nicht geladen</span>@diag.ConfigLoadError
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>StatusDirectory <span class="text-muted fw-normal">(appsettings.json)</span></th>
+                            <td><code>@diag.DefaultStatusDirectory</code></td>
+                        </tr>
+                        <tr>
+                            <th>output.centralOutputPath <span class="text-muted fw-normal">(config.json)</span></th>
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(diag.CentralOutputPath))
+                                {
+                                    <span class="text-muted">nicht gesetzt — StatusDirectory wird verwendet</span>
+                                }
+                                else
+                                {
+                                    <code>@diag.CentralOutputPath</code><span class="text-muted"> — hat Vorrang vor StatusDirectory</span>
+                                }
+                            </td>
+                        </tr>
+                        @for (var i = 0; i < diag.Directories.Count; i++)
+                        {
+                            var dir = diag.Directories[i];
+                            var optional = i > 0;
+                            <tr>
+                                <th>@(optional ? "Unterordner (optional)" : "Gelesenes Verzeichnis")</th>
+                                <td>
+                                    <code>@dir.Path</code><br />
+                                    @if (!dir.Exists)
+                                    {
+                                        <span class="badge @(optional ? "bg-secondary" : "bg-danger")">@(optional ? "nicht vorhanden" : "existiert nicht / nicht lesbar")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge @(dir.JsonFileCount > 0 ? "bg-success" : "bg-secondary")">@dir.JsonFileCount JSON-Datei(en)</span>
+                                        @if (dir.NewestFileUtc.HasValue)
+                                        {
+                                            <span class="text-muted ms-1">neueste: @dir.NewestFileUtc.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        <tr>
+                            <th>output.pullStatusOverHttp</th>
+                            <td>@(diag.PullStatusOverHttp ? "aktiv" : "deaktiviert")</td>
+                        </tr>
+                        <tr>
+                            <th>Server in config.json</th>
+                            <td>@diag.ServerCount gesamt · @diag.ActiveServerCount aktiv · @diag.ActiveServersWithBaseUrl aktiv mit baseUrl</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
 }
 
 @section Scripts {

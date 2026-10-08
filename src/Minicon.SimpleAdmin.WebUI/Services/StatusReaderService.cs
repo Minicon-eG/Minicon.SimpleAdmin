@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Minicon.SimpleAdmin.Models.Config;
 using Minicon.SimpleAdmin.Models.State;
 using Minicon.SimpleAdmin.Models.Status;
 using Minicon.SimpleAdmin.Services;
@@ -101,6 +102,110 @@ public class StatusReaderService
         var server = await GetServerAsync(serverId, forceRefresh);
         if (server == null) return new();
         return server.ActiveProblems.Select(p => (server.ServerId, p)).ToList();
+    }
+
+    /// <summary>
+    /// Describes the configured status sources and lists the likely reasons why no status data was found.
+    /// Cheap (file system listing only, no HTTP); meant for the empty state of the status page.
+    /// </summary>
+    public StatusSourceDiagnostics GetDiagnostics()
+    {
+        var configLoaded = _configService.IsLoaded;
+        var output = configLoaded ? _configService.GetOutputSettings() : new OutputSettings();
+        var servers = configLoaded ? _configService.GetServers() : Array.Empty<Server>();
+        var activeServers = servers.Where(s => s.Active).ToList();
+        var activeWithBaseUrl = activeServers.Count(s => !string.IsNullOrWhiteSpace(s.BaseUrl));
+        var pullEnabled = _httpClient != null && output.PullStatusOverHttp;
+
+        var statusDirectory = GetEffectiveStatusDirectory();
+        var directories = GetRuntimeStatusDirectories(statusDirectory)
+            .Select(DescribeDirectory)
+            .ToList();
+
+        var reasons = new List<string>();
+        if (!configLoaded)
+        {
+            reasons.Add($"Die config.json wurde nicht geladen ({_configService.LoadError ?? "keine Datei konfiguriert"}). " +
+                        "Ohne Konfiguration kennt die Statusseite keine Server und liest nur das Statusverzeichnis.");
+        }
+
+        var source = string.IsNullOrWhiteSpace(output.CentralOutputPath)
+            ? "appsettings.json → StatusDirectory"
+            : "config.json → output.centralOutputPath";
+        if (!directories[0].Exists)
+        {
+            reasons.Add($"Das Statusverzeichnis „{statusDirectory}“ ({source}) existiert nicht oder ist für das " +
+                        "App-Pool-Konto nicht lesbar.");
+        }
+        else if (directories.Sum(d => d.JsonFileCount) == 0)
+        {
+            reasons.Add($"Im Statusverzeichnis „{statusDirectory}“ ({source}) liegen keine Statusdateien. Läuft der Worker " +
+                        "(geplante Aufgabe) und schreibt er in dieses Verzeichnis (Worker-Argument statusDir bzw. output.centralOutputPath)?");
+        }
+        else
+        {
+            reasons.Add($"Im Statusverzeichnis liegen {directories.Sum(d => d.JsonFileCount)} JSON-Datei(en), aber keine enthält " +
+                        "gültige Statusdaten (Server/Service fehlt oder anderes Format).");
+        }
+
+        if (configLoaded)
+        {
+            if (!output.PullStatusOverHttp)
+            {
+                reasons.Add("Der HTTP-Abruf ist deaktiviert (output.pullStatusOverHttp = false) — Server werden nur über Dateien angezeigt.");
+            }
+            else if (activeServers.Count == 0)
+            {
+                reasons.Add(servers.Count == 0
+                    ? "In der config.json ist kein Server konfiguriert."
+                    : $"In der config.json ist keiner der {servers.Count} Server aktiv.");
+            }
+            else if (activeWithBaseUrl == 0)
+            {
+                reasons.Add($"Keiner der {activeServers.Count} aktiven Server hat eine baseUrl — der Status kann nicht per HTTP abgerufen werden.");
+            }
+        }
+
+        return new StatusSourceDiagnostics
+        {
+            ConfigLoaded = configLoaded,
+            ConfigFilePath = _configService.FilePath,
+            ConfigLoadError = _configService.LoadError,
+            DefaultStatusDirectory = _defaultStatusDirectory,
+            CentralOutputPath = output.CentralOutputPath,
+            Directories = directories,
+            PullStatusOverHttp = output.PullStatusOverHttp,
+            HttpClientAvailable = pullEnabled,
+            ServerCount = servers.Count,
+            ActiveServerCount = activeServers.Count,
+            ActiveServersWithBaseUrl = activeWithBaseUrl,
+            Reasons = reasons
+        };
+    }
+
+    private static StatusSourceDiagnostics.DirectoryInfoEntry DescribeDirectory(string path)
+    {
+        try
+        {
+            if (!Directory.Exists(path))
+                return new StatusSourceDiagnostics.DirectoryInfoEntry { Path = path };
+
+            var files = Directory.GetFiles(path, "*.json")
+                .Where(f => !Path.GetFileName(f).Equals("acknowledges.json", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return new StatusSourceDiagnostics.DirectoryInfoEntry
+            {
+                Path = path,
+                Exists = true,
+                JsonFileCount = files.Count,
+                NewestFileUtc = files.Count == 0 ? null : files.Max(File.GetLastWriteTimeUtc)
+            };
+        }
+        catch (Exception)
+        {
+            // Unreadable (e.g. missing permissions) is reported like a missing directory.
+            return new StatusSourceDiagnostics.DirectoryInfoEntry { Path = path };
+        }
     }
 
     /// <summary>

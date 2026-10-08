@@ -15,6 +15,10 @@ public class StatusController : Controller
     public async Task<IActionResult> Index()
     {
         var servers = await _statusReader.GetAllServersAsync();
+        if (servers.Count == 0)
+        {
+            ViewData["Diagnostics"] = _statusReader.GetDiagnostics();
+        }
         return View(servers);
     }
 

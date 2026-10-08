@@ -46,6 +46,11 @@ public class ConfigurationService
     public string? LoadError { get; internal set; }
 
     /// <summary>
+    /// Gets the path of the loaded config.json, or null if the configuration was not loaded from a file
+    /// </summary>
+    public string? FilePath => _originalFilePath;
+
+    /// <summary>
     /// Gets whether the configuration has unsaved changes
     /// </summary>
     public bool HasChanges => _isLoaded && ExportToJson() != _originalJson;
