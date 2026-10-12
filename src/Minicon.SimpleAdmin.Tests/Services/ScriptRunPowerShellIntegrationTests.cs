@@ -8,7 +8,7 @@ namespace Minicon.SimpleAdmin.Tests.Services;
 
 /// <summary>
 /// End-to-end check of the bootstrap with a real PowerShell. Runs only when PowerShell is
-/// available (pwsh on PATH, or SIMPLEADMIN_TEST_PWSH pointing to the executable); otherwise it is a no-op.
+/// available (pwsh on PATH, or SIMPLEADMIN_TEST_PWSH pointing to the executable); otherwise skipped.
 /// </summary>
 public sealed class ScriptRunPowerShellIntegrationTests : IDisposable
 {
@@ -19,22 +19,10 @@ public sealed class ScriptRunPowerShellIntegrationTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { /* ignore */ }
     }
 
-    private static string? FindPowerShell()
-    {
-        var configured = Environment.GetEnvironmentVariable("SIMPLEADMIN_TEST_PWSH");
-        if (!string.IsNullOrEmpty(configured) && File.Exists(configured)) return configured;
-        var names = OperatingSystem.IsWindows() ? new[] { "pwsh.exe", "powershell.exe" } : new[] { "pwsh" };
-        foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))
-            foreach (var n in names)
-                if (File.Exists(Path.Combine(dir, n))) return Path.Combine(dir, n);
-        return null;
-    }
-
-    [Fact]
+    [PowerShellFact]
     public async Task Bootstrap_SplatsTypedArguments_WithoutInjection_AndPropagatesExitCode()
     {
-        var pwsh = FindPowerShell();
-        if (pwsh == null) return;
+        var pwsh = TestPowerShell.Path!;
 
         Directory.CreateDirectory(_dir);
         var script = Path.Combine(_dir, "Echo Params.ps1");
@@ -63,7 +51,7 @@ public sealed class ScriptRunPowerShellIntegrationTests : IDisposable
 
         var options = new ScriptRunnerOptions { Enabled = true, PowerShellPath = pwsh };
         var policy = new ScriptPathPolicy(Path.Combine(_dir, "up"), Array.Empty<string>(), Array.Empty<string>());
-        var service = new ScriptRunService(options, policy, Path.Combine(_dir, "runs"), NullLogger<ScriptRunService>.Instance);
+        using var service = new ScriptRunService(options, policy, Path.Combine(_dir, "runs"), NullLogger<ScriptRunService>.Instance);
 
         var definition = PowerShellScriptParser.CreateDefinition(script, await File.ReadAllTextAsync(script));
         var input = new Dictionary<string, List<string>>

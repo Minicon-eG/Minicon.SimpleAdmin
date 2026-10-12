@@ -3043,7 +3043,7 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     <li><strong>Eingabefelder:</strong> Datum (Datumsauswahl), Uhrzeit, Schalter (<code>[switch]</code>), Auswahlliste (<code>[ValidateSet]</code>), Liste (<code>[string[]]</code>), Zahl, Datei-/Ordnerauswahl auf dem Server. Alles nachträglich anpassbar; Parameter können fest vorgegeben oder ausgeblendet werden.</li>
                     <li><strong>Ausführen:</strong> Live-Ausgabe, Abbrechen, erneut mit gleichen Werten, Log-Download. Jeder Lauf wird mit Benutzer, Parametern, Dauer und Exit-Code protokolliert. Exit-Code ≠ 0 = fehlgeschlagen.</li>
                 </ul>
-                <p>Die Funktion ist <strong>standardmäßig aktiv</strong> und wird in der <code>appsettings.json</code> der WebUI gesteuert, nicht in <code>config.json</code>:</p>
+                <p>Die Funktion ist <strong>standardmäßig aktiv</strong> und wird in der <code>appsettings.json</code> der WebUI gesteuert, nicht in <code>config.json</code>. Läuft die WebUI ohne Anmeldung (<code>Authentication:Enabled=false</code>), ist sie automatisch aus (Ausnahme für Test-Hosts: <code>AllowWithoutAuthentication</code>):</p>
                 <pre><code>"ScriptRunner": {
   "Enabled": true,
   "RequiredRole": "DOMAIN\\SimpleAdmin-Skripte",

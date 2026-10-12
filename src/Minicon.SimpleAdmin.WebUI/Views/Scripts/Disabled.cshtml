@@ -9,7 +9,7 @@
 </div>
 
 <div class="card">
-    <div class="card-header">Aktivierung (appsettings.json der WebUI)</div>
+    <div class="card-header">Einstellungen (appsettings.json der WebUI)</div>
     <div class="card-body">
         <pre class="mb-0 small">"ScriptRunner": {
   "Enabled": true,   // oder Eintrag entfernen (Standard = an)
@@ -18,6 +18,8 @@
 }</pre>
         <p class="text-muted small mt-3 mb-0">
             Die Skripte laufen auf diesem Rechner unter dem Konto der WebUI (z.&nbsp;B. der IIS-Anwendungspool-Identität).
+            Läuft die WebUI ohne Anmeldung (<code>"Authentication": { "Enabled": false }</code>), bleibt die Skript-Ausführung aus,
+            außer für isolierte Test-Hosts mit <code>"AllowWithoutAuthentication": true</code>.
             Bewusst nicht über config.json schaltbar: Wer die Konfiguration bearbeiten darf, soll eine abgeschaltete Skript-Ausführung nicht wieder freischalten können.
         </p>
     </div>

@@ -8,6 +8,14 @@
     <a class="btn btn-primary" asp-action="Create"><i class="bi bi-plus-lg me-1"></i>Skript hinzufügen</a>
 </div>
 
+@if (Model.StoreError != null)
+{
+    <div class="alert alert-danger">
+        <i class="bi bi-exclamation-octagon me-2"></i><strong>Skriptliste nicht lesbar:</strong> @Model.StoreError
+        <div class="small mt-1">Änderungen sind gesperrt, bis die Datei korrigiert ist — sie wird nicht überschrieben.</div>
+    </div>
+}
+
 <p class="text-muted">
     PowerShell-Skripte, die direkt aus der WebUI gestartet werden können. Sie laufen auf diesem Rechner unter dem Konto der WebUI;
     jeder Lauf wird mit Benutzer, Parametern und Ausgabe protokolliert.

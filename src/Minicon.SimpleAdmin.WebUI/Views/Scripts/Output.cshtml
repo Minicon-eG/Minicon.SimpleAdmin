@@ -52,6 +52,11 @@
                     }
                     <dt>Skript</dt>
                     <dd class="font-monospace text-break">@Model.ScriptPath</dd>
+                    @if (!string.IsNullOrEmpty(Model.CommandLine))
+                    {
+                        <dt>Aufruf</dt>
+                        <dd class="font-monospace text-break small">@Model.CommandLine</dd>
+                    }
                     <dt>Parameter</dt>
                     <dd class="mb-0">
                         @if (!Model.Arguments.Any())
@@ -86,27 +91,42 @@
 <script>
 (function () {
     const outputUrl = '@Url.Content($"~/api/scripts/runs/{Uri.EscapeDataString(Model.Id)}")';
+    const maxDomLines = @Minicon.SimpleAdmin.WebUI.Services.Scripts.ScriptRunnerOptions.TailLines * 2;
     const consoleEl = document.getElementById('console');
     const badges = {
         Running: ['bg-primary', 'bi-arrow-repeat'], Succeeded: ['bg-success', 'bi-check-circle'],
         Failed: ['bg-danger', 'bi-x-circle'], Cancelled: ['bg-secondary', 'bi-slash-circle'],
         TimedOut: ['bg-warning text-dark', 'bi-hourglass-bottom'], Interrupted: ['bg-warning text-dark', 'bi-exclamation-circle']
     };
-    let next = 0, total = 0, running = true;
+    let next = null;          // null = load the tail first
+    let running = true;
+    let failures = 0;
+    let dropped = 0;          // lines removed from the page (still in the log file)
+    let hiddenOlder = false;  // the server did not send older lines
+    let timer = null;
+    let inFlight = false;     // never two polls at once (would append lines twice)
 
     function fmtDuration(s) {
         const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
         return [h, m, sec].map(n => String(n).padStart(2, '0')).join(':');
     }
 
-    function append(lines, skipped) {
-        const frag = document.createDocumentFragment();
-        if (skipped > 0) {
-            const d = document.createElement('div');
-            d.className = 'text-warning';
-            d.textContent = `… ${skipped} ältere Zeilen nur im Log (Download)`;
-            frag.appendChild(d);
+    function updateMarker() {
+        let marker = document.getElementById('olderMarker');
+        if (!hiddenOlder && dropped === 0) { marker?.remove(); return; }
+        if (!marker) {
+            marker = document.createElement('div');
+            marker.id = 'olderMarker';
+            marker.className = 'text-warning';
+            consoleEl.prepend(marker);
         }
+        marker.textContent = dropped > 0
+            ? `… ${dropped.toLocaleString('de-DE')} ältere Zeilen ausgeblendet — vollständig im Log (Download)`
+            : '… ältere Zeilen nur im Log (Download)';
+    }
+
+    function append(lines) {
+        const frag = document.createDocumentFragment();
         for (const l of lines) {
             const d = document.createElement('div');
             if (l.e) d.className = 'line-error';
@@ -118,30 +138,78 @@
             frag.appendChild(d);
         }
         consoleEl.appendChild(frag);
-        total += lines.length;
-        document.getElementById('lineCount').textContent = `(${total} Zeilen)`;
+        // Keep the page light during long runs: only the newest lines stay in the DOM.
+        let excess = consoleEl.querySelectorAll(':scope > div:not(#olderMarker)').length - maxDomLines;
+        while (excess-- > 0) {
+            const first = document.getElementById('olderMarker')?.nextElementSibling ?? consoleEl.firstElementChild;
+            if (!first) break;
+            first.remove();
+            dropped++;
+        }
+        updateMarker();
+        document.getElementById('lineCount').textContent =
+            `(${consoleEl.querySelectorAll(':scope > div:not(#olderMarker)').length.toLocaleString('de-DE')} Zeilen angezeigt)`;
         if (document.getElementById('autoScroll').checked) consoleEl.scrollTop = consoleEl.scrollHeight;
     }
 
-    async function poll() {
-        try {
-            const res = await fetch(outputUrl + '?from=' + next, { cache: 'no-store' });
-            if (res.ok) {
-                const data = await res.json();
-                if (data.lines.length || data.skipped) append(data.lines, data.skipped);
-                next = data.next;
-                document.getElementById('duration').textContent = fmtDuration(data.durationSeconds);
-                document.getElementById('exitCode').textContent = data.exitCode ?? '–';
-                if (data.error) { const e = document.getElementById('runError'); e.textContent = data.error; e.classList.remove('d-none'); }
-                const [css, icon] = badges[data.status] || badges.Interrupted;
-                document.getElementById('statusBadge').innerHTML = `<span class="badge ${css}"><i class="bi ${icon} me-1"></i>${data.statusText}</span>`;
-                running = data.running;
-                document.getElementById('btnCancel').classList.toggle('d-none', !running);
-                if (data.lines.length >= 5000) { setTimeout(poll, 50); return; }
-            }
-        } catch (e) { /* retry */ }
-        if (running) setTimeout(poll, 1000);
+    function reset() {
+        consoleEl.innerHTML = '';
+        next = null; dropped = 0; hiddenOlder = false;
     }
+
+    function schedule(ms) {
+        if (!running) return;
+        // Background tabs poll slowly; errors back off up to 15 s.
+        const delay = failures > 0 ? Math.min(15000, 1000 * 2 ** failures) : (document.hidden ? 5000 : ms);
+        clearTimeout(timer);
+        timer = setTimeout(poll, delay);
+    }
+
+    async function poll() {
+        if (inFlight) return;
+        inFlight = true;
+        try { await pollOnce(); } finally { inFlight = false; }
+    }
+
+    async function pollOnce() {
+        let res;
+        try {
+            res = await fetch(outputUrl + (next === null ? '' : '?from=' + next), { cache: 'no-store' });
+        } catch (e) {
+            failures++;
+            schedule(1000);
+            return;
+        }
+        if (res.status === 404) {
+            running = false;
+            document.getElementById('btnCancel').classList.add('d-none');
+            const e = document.getElementById('runError');
+            e.textContent = 'Lauf nicht mehr vorhanden (aus dem Verlauf entfernt).';
+            e.classList.remove('d-none');
+            return;
+        }
+        if (!res.ok) { failures++; schedule(1000); return; }
+        failures = 0;
+
+        const data = await res.json();
+        if (data.resync) { reset(); setTimeout(poll, 0); return; }
+        if (next === null && data.skipped !== 0) hiddenOlder = true;
+        if (data.lines.length) append(data.lines);
+        else updateMarker();
+        if (data.skipped > 0 && next !== null) { dropped += data.skipped; updateMarker(); }
+        next = data.next;
+
+        document.getElementById('duration').textContent = fmtDuration(data.durationSeconds);
+        document.getElementById('exitCode').textContent = data.exitCode ?? '–';
+        if (data.error) { const e = document.getElementById('runError'); e.textContent = data.error; e.classList.remove('d-none'); }
+        const [css, icon] = badges[data.status] || badges.Interrupted;
+        document.getElementById('statusBadge').innerHTML = `<span class="badge ${css}"><i class="bi ${icon} me-1"></i>${data.statusText}</span>`;
+        running = data.running || data.lines.length >= 5000; // finished runs: fetch remaining lines once more
+        document.getElementById('btnCancel').classList.toggle('d-none', !data.running);
+        schedule(data.lines.length >= 5000 ? 50 : 1000);
+    }
+
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && running && !inFlight) schedule(0); });
 
     document.getElementById('btnCancel').addEventListener('click', async () => {
         if (!confirm('Skript wirklich abbrechen? Der Prozess wird sofort beendet.')) return;

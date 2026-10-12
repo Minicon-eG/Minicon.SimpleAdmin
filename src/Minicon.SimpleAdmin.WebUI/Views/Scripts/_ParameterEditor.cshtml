@@ -9,6 +9,7 @@
     <input type="hidden" name="Parameters.Index" value="@idx" />
     <input type="hidden" name="@(prefix).PsType" value="@Model.PsType" />
     <input type="hidden" name="@(prefix).DefaultExpression" value="@Model.DefaultExpression" />
+    <input type="hidden" name="@(prefix).ScriptDefaultValue" value="@Model.ScriptDefaultValue" />
     <div class="card-body py-3">
         <div class="row g-2 align-items-end">
             <div class="col-md-3">
@@ -89,8 +90,8 @@
             <div class="col-md-3" data-show-for="Number">
                 <label class="form-label small mb-1">Min / Max</label>
                 <div class="input-group input-group-sm">
-                    <input type="number" step="any" name="@(prefix).Min" value="@Model.Min?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="form-control" />
-                    <input type="number" step="any" name="@(prefix).Max" value="@Model.Max?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="form-control" />
+                    <input type="number" step="any" name="@(prefix).MinText" value="@Model.MinText" class="form-control" placeholder="Min" />
+                    <input type="number" step="any" name="@(prefix).MaxText" value="@Model.MaxText" class="form-control" placeholder="Max" />
                 </div>
             </div>
             @if (!string.IsNullOrEmpty(Model.PsType))

@@ -93,7 +93,7 @@ public static class SimpleAdminWebUIExtensions
         services.AddSingleton<IAcknowledgeService>(sp =>
             new AcknowledgeService(acknowledgeDirectory, sp.GetRequiredService<ILogger<AcknowledgeService>>()));
 
-        AddScriptRunner(services, configuration, acknowledgeDirectory);
+        AddScriptRunner(services, configuration, ResolveConfigDirectory(configuration));
 
         return services;
     }
@@ -101,11 +101,12 @@ public static class SimpleAdminWebUIExtensions
     /// <summary>
     /// PowerShell script runner ("Skripte"). Definitions live in scripts.json next to config.json,
     /// uploads in &lt;ConfigPath&gt;/scripts, run history + logs in &lt;ConfigPath&gt;/script-runs.
-    /// On by default; a host opts out with <c>ScriptRunner:Enabled = false</c>.
+    /// On by default; a host opts out with <c>ScriptRunner:Enabled = false</c>. Switched off
+    /// automatically while authentication is disabled (see <see cref="ScriptRunnerOptions.Resolve"/>).
     /// </summary>
     private static void AddScriptRunner(IServiceCollection services, IConfiguration configuration, string configDirectory)
     {
-        var options = configuration.GetSection(ScriptRunnerOptions.SectionName).Get<ScriptRunnerOptions>() ?? new ScriptRunnerOptions();
+        var options = ScriptRunnerOptions.Resolve(configuration, IsAuthenticationEnabled(configuration));
         var uploadDirectory = Path.GetFullPath(string.IsNullOrWhiteSpace(options.UploadDirectory)
             ? Path.Combine(configDirectory, "scripts")
             : options.UploadDirectory);
@@ -115,7 +116,9 @@ public static class SimpleAdminWebUIExtensions
 
         services.AddSingleton(options);
         services.AddSingleton(new ScriptPathPolicy(uploadDirectory, options.AllowedDirectories, options.BrowseRoots));
-        services.AddSingleton(new ScriptDefinitionStore(Path.Combine(configDirectory, "scripts.json")));
+        services.AddSingleton(sp => new ScriptDefinitionStore(
+            Path.Combine(configDirectory, "scripts.json"),
+            sp.GetRequiredService<ILogger<ScriptDefinitionStore>>()));
         services.AddSingleton(sp => new ScriptRunService(
             options,
             sp.GetRequiredService<ScriptPathPolicy>(),
@@ -228,7 +231,11 @@ public static class SimpleAdminWebUIExtensions
                 string.IsNullOrWhiteSpace(scriptRunner.RequiredRole) ? "-" : scriptRunner.RequiredRole);
             if (!IsAuthenticationEnabled(app.Configuration))
                 app.Logger.LogWarning(
-                    "SimpleAdmin WebUI: the script runner is enabled while authentication is DISABLED — anyone reaching the WebUI can run the registered scripts.");
+                    "SimpleAdmin WebUI: the script runner is enabled while authentication is DISABLED (ScriptRunner:AllowWithoutAuthentication) — anyone reaching the WebUI can run the registered scripts.");
+        }
+        else if (scriptRunner.DisabledReason != null)
+        {
+            app.Logger.LogInformation("SimpleAdmin WebUI: PowerShell script runner is OFF — {Reason}", scriptRunner.DisabledReason);
         }
 
         app.MapControllerRoute(

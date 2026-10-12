@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Minicon.SimpleAdmin.Services;
 using Minicon.SimpleAdmin.WebUI.Models.Scripts;
 
 namespace Minicon.SimpleAdmin.WebUI.Services.Scripts;
@@ -20,12 +21,6 @@ internal static class PowerShellScriptParser
         "SYNOPSIS", "DESCRIPTION", "PARAMETER", "EXAMPLE", "INPUTS", "OUTPUTS", "NOTES", "LINK",
         "COMPONENT", "ROLE", "FUNCTIONALITY", "FORWARDHELPTARGETNAME", "FORWARDHELPCATEGORY",
         "REMOTEHELPRUNSPACE", "EXTERNALHELP"
-    };
-
-    private static readonly HashSet<string> NumberTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "int", "int16", "int32", "int64", "long", "short", "byte", "sbyte", "uint", "uint16", "uint32",
-        "uint64", "ulong", "ushort", "double", "single", "float", "decimal"
     };
 
     private static readonly Regex TimeName = new(@"(^|[a-z])Time([A-Z_]|$)", RegexOptions.Compiled);
@@ -53,35 +48,74 @@ internal static class PowerShellScriptParser
     }
 
     /// <summary>
-    /// Re-reads the parameters of a script while keeping what the admin adjusted
-    /// (label, control type, format, fixed/hidden, default value) for parameters that still exist.
-    /// Parameters removed from the script are dropped, new ones are added.
+    /// Re-reads the parameters of a script while keeping what the admin adjusted for parameters
+    /// that still exist — but only as long as the script did not change underneath:
+    /// <list type="bullet">
+    /// <item>PowerShell type changed → the control is re-detected (old type/format/fixed value would break binding).</item>
+    /// <item>Script default changed → the new default wins over the stored one.</item>
+    /// </list>
+    /// Parameters removed from the script are dropped, new ones are added. <see cref="MergeResult.Notes"/>
+    /// lists every change in German for the UI.
     /// </summary>
-    public static List<ScriptParameterDefinition> MergeParameters(
+    public static MergeResult MergeParameters(
         IReadOnlyList<ScriptParameterDefinition> existing, IReadOnlyList<ScriptParameterDefinition> fresh)
     {
-        var result = new List<ScriptParameterDefinition>(fresh.Count);
+        var result = new MergeResult();
         foreach (var f in fresh)
         {
             var old = existing.FirstOrDefault(e => e.Name.Equals(f.Name, StringComparison.OrdinalIgnoreCase));
-            if (old != null)
+            if (old == null)
             {
-                f.Label = old.Label;
-                f.Type = old.Type;
-                f.Format = old.Format;
-                f.Fixed = old.Fixed;
-                f.Hidden = old.Hidden;
-                f.AllowMultiple = old.AllowMultiple;
-                if (old.DefaultValue != null) f.DefaultValue = old.DefaultValue;
-                if (f.Choices.Count == 0) f.Choices = old.Choices;
-                if (string.IsNullOrWhiteSpace(f.Pattern)) f.Pattern = old.Pattern;
-                f.Min ??= old.Min;
-                f.Max ??= old.Max;
-                if (string.IsNullOrWhiteSpace(f.Description)) f.Description = old.Description;
+                result.Notes.Add($"'{f.Name}' neu ({ScriptFormValues.TypeLabel(f.Type)}).");
+                result.Parameters.Add(f);
+                continue;
             }
-            result.Add(f);
+
+            f.Label = old.Label;
+            f.Hidden = old.Hidden;
+            if (string.IsNullOrWhiteSpace(f.Description)) f.Description = old.Description;
+
+            // Unknown old type (parameter added by hand) is not a change — keep the admin's settings.
+            var typeChanged = old.PsType != null
+                && !string.Equals(old.PsType, f.PsType ?? "", StringComparison.OrdinalIgnoreCase);
+            if (typeChanged)
+            {
+                result.Notes.Add($"'{f.Name}': Typ im Skript geändert ([{old.PsType ?? "–"}] → [{f.PsType ?? "–"}]) – Eingabefeld neu erkannt als {ScriptFormValues.TypeLabel(f.Type)}.");
+                if (old.Fixed) result.Notes.Add($"'{f.Name}': Fester Wert wurde wegen der Typänderung entfernt.");
+                result.Parameters.Add(f);
+                continue;
+            }
+
+            f.Type = old.Type;
+            f.Format = old.Format;
+            f.Fixed = old.Fixed;
+            f.AllowMultiple = old.AllowMultiple;
+            if (f.Choices.Count == 0) f.Choices = old.Choices;
+            if (string.IsNullOrWhiteSpace(f.Pattern)) f.Pattern = old.Pattern;
+            f.Min ??= old.Min;
+            f.Max ??= old.Max;
+
+            // Without a recorded script default (definitions from v2.31.0, or a script that had none)
+            // a stored value can only be an admin override → keep it; otherwise compare with the script.
+            var scriptDefaultChanged = old.ScriptDefaultValue != null || old.DefaultValue == null
+                ? !string.Equals(old.ScriptDefaultValue ?? old.DefaultValue, f.ScriptDefaultValue, StringComparison.Ordinal)
+                : false;
+            if (scriptDefaultChanged)
+            {
+                result.Notes.Add($"'{f.Name}': Standardwert im Skript geändert ({Show(old.ScriptDefaultValue)} → {Show(f.ScriptDefaultValue)}) – übernommen.");
+            }
+            else
+            {
+                f.DefaultValue = old.DefaultValue;
+            }
+            result.Parameters.Add(f);
         }
+
+        foreach (var removed in existing.Where(e => fresh.All(f => !f.Name.Equals(e.Name, StringComparison.OrdinalIgnoreCase))))
+            result.Notes.Add($"'{removed.Name}' ist nicht mehr im Skript und wurde entfernt.");
         return result;
+
+        static string Show(string? v) => string.IsNullOrEmpty(v) ? "leer" : $"„{v.Replace("\n", ", ")}“";
     }
 
     /// <summary>
@@ -143,7 +177,7 @@ internal static class PowerShellScriptParser
         {
             def.Type = ScriptParameterType.Switch;
         }
-        else if (NumberTypes.Contains(baseType) && !isArray)
+        else if (PowerShellTypes.IsNumber(baseType) && !isArray)
         {
             def.Type = ScriptParameterType.Number;
         }
@@ -179,6 +213,7 @@ internal static class PowerShellScriptParser
         {
             def.DefaultValue = p.DefaultValue;
         }
+        def.ScriptDefaultValue = def.DefaultValue;
 
         return def;
     }
@@ -249,7 +284,6 @@ internal static class PowerShellScriptParser
             "int64" => "long",
             "boolean" => "bool",
             "switchparameter" => "switch",
-            "string" or "string[]" => t,
             _ => t
         };
     }
@@ -394,8 +428,9 @@ internal static class PowerShellScriptParser
     }
 
     /// <summary>
-    /// Parses a PowerShell literal: quoted strings (without variable expansion), numbers,
-    /// <c>$true</c>/<c>$false</c>/<c>$null</c> and bare words.
+    /// Parses a PowerShell literal: quoted strings (without variable expansion), numbers and
+    /// <c>$true</c>/<c>$false</c>/<c>$null</c>. Bare words (<c>Get-Date</c>) are commands, not strings,
+    /// and therefore no literal.
     /// </summary>
     internal static bool TryParseLiteral(string expr, out string? value)
     {
@@ -438,11 +473,10 @@ internal static class PowerShellScriptParser
         if (expr.Equals("$false", StringComparison.OrdinalIgnoreCase)) { value = "false"; return true; }
         if (expr.Equals("$null", StringComparison.OrdinalIgnoreCase)) { value = null; return true; }
         if (NumberLiteral.IsMatch(expr)) { value = expr; return true; }
-        if (Regex.IsMatch(expr, @"^[A-Za-z_][\w\-\.]*$")) { value = expr; return true; }
         return false;
     }
 
-    private static bool IsSingleQuote(char c) => c is '\'' or '‘' or '’';
+    private static bool IsSingleQuote(char c) => PowerShellLiteral.IsSingleQuote(c);
 
     private static bool HasUnescaped(string inner, char quote)
     {
@@ -715,6 +749,15 @@ internal static class PowerShellScriptParser
         }
         return sb.ToString();
     }
+}
+
+/// <summary>Result of <see cref="PowerShellScriptParser.MergeParameters"/>.</summary>
+internal sealed class MergeResult
+{
+    public List<ScriptParameterDefinition> Parameters { get; } = new();
+
+    /// <summary>German, one entry per change (new/removed parameter, changed type or default).</summary>
+    public List<string> Notes { get; } = new();
 }
 
 /// <summary>Result of <see cref="PowerShellScriptParser.Parse"/>.</summary>

@@ -10,8 +10,17 @@ public sealed class ScriptRunnerOptions
 {
     public const string SectionName = "ScriptRunner";
 
-    /// <summary>Master switch (default on; a host can opt out with <c>false</c>).</summary>
+    /// <summary>
+    /// Master switch (default on; a host can opt out with <c>false</c>). Forced off while the WebUI
+    /// runs without authentication, unless <see cref="AllowWithoutAuthentication"/> is set.
+    /// </summary>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Keep the runner on even with <c>Authentication:Enabled=false</c> (isolated dev/test hosts only —
+    /// then anyone reaching the WebUI can run scripts).
+    /// </summary>
+    public bool AllowWithoutAuthentication { get; set; }
 
     /// <summary>PowerShell executable (default: <c>powershell.exe</c> on Windows, <c>pwsh</c> elsewhere).</summary>
     public string? PowerShellPath { get; set; }
@@ -43,6 +52,37 @@ public sealed class ScriptRunnerOptions
 
     /// <summary>Number of runs kept in the history (default 200).</summary>
     public int HistorySize { get; set; } = 200;
+
+    /// <summary>Why the runner is off (shown on the Scripts page); null when enabled.</summary>
+    internal string? DisabledReason { get; set; }
+
+    /// <summary>How long a finished run's output stays in memory for live viewers before only the log file is used.</summary>
+    internal static readonly TimeSpan FinishedRunMemoryRetention = TimeSpan.FromMinutes(2);
+
+    /// <summary>Lines longer than this are cut (one huge line would otherwise be held in memory whole).</summary>
+    internal const int MaxLineLength = 8 * 1024;
+
+    /// <summary>Lines the Output page loads initially (tail) and keeps at most in the browser.</summary>
+    internal const int TailLines = 2000;
+
+    /// <summary>
+    /// Reads the <c>ScriptRunner</c> section and applies the authentication rule: without
+    /// authentication the runner is switched off unless explicitly allowed.
+    /// </summary>
+    internal static ScriptRunnerOptions Resolve(IConfiguration configuration, bool authenticationEnabled)
+    {
+        var options = configuration.GetSection(SectionName).Get<ScriptRunnerOptions>() ?? new ScriptRunnerOptions();
+        if (!options.Enabled)
+        {
+            options.DisabledReason = "Die Skript-Ausführung ist auf diesem Host abgeschaltet (\"ScriptRunner\": { \"Enabled\": false } in der appsettings.json der WebUI).";
+        }
+        else if (!authenticationEnabled && !options.AllowWithoutAuthentication)
+        {
+            options.Enabled = false;
+            options.DisabledReason = "Die Skript-Ausführung ist automatisch abgeschaltet, weil die WebUI ohne Anmeldung läuft (\"Authentication\": { \"Enabled\": false }) — sonst könnte jeder, der die WebUI erreicht, Skripte starten. Nur für isolierte Test-Hosts: \"ScriptRunner\": { \"AllowWithoutAuthentication\": true }.";
+        }
+        return options;
+    }
 
     internal string EffectivePowerShellPath =>
         !string.IsNullOrWhiteSpace(PowerShellPath) ? PowerShellPath! : OperatingSystem.IsWindows() ? "powershell.exe" : "pwsh";

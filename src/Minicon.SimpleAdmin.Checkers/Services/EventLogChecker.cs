@@ -251,6 +251,9 @@ public class EventLogChecker : IEventLogChecker
     internal static bool MatchesWildcard(string value, string pattern)
         => EventLogIgnoreMatcher.MatchesWildcard(value, pattern);
 
+    /// <summary>Upper bound for one Get-WinEvent query (incl. PowerShell start-up).</summary>
+    internal static readonly TimeSpan QueryTimeout = TimeSpan.FromMinutes(2);
+
     /// <summary>
     /// Builds the Get-WinEvent query. Level must be inside the hashtable, not as a standalone
     /// -Level parameter (which Get-WinEvent does not support). The log name comes from config.json
@@ -274,20 +277,9 @@ $events | ForEach-Object {{
     }
 
     /// <summary>
-    /// Single-quoted PowerShell literal: every quote character PowerShell accepts as a single quote
-    /// (incl. the typographic variants) is doubled; control characters are removed.
+    /// Single-quoted PowerShell literal (see <see cref="PowerShellLiteral.Quote"/>).
     /// </summary>
-    internal static string QuotePowerShellLiteral(string value)
-    {
-        var sb = new System.Text.StringBuilder(value.Length + 2).Append('\'');
-        foreach (var c in value)
-        {
-            if (char.IsControl(c)) continue;
-            if (c is '\'' or '\u2018' or '\u2019' or '\u201A' or '\u201B') sb.Append(c);
-            sb.Append(c);
-        }
-        return sb.Append('\'').ToString();
-    }
+    internal static string QuotePowerShellLiteral(string value) => PowerShellLiteral.Quote(value);
 
     /// <summary>
     /// Gets events from a specific Event Log using PowerShell
@@ -330,8 +322,26 @@ $events | ForEach-Object {{
                 return events;
             }
 
-            var output = process.StandardOutput.ReadToEndAsync().GetAwaiter().GetResult();
-            process.WaitForExitAsync().GetAwaiter().GetResult();
+            // Drain stdout AND stderr concurrently: an unread stderr pipe fills up (~4 KB) and
+            // blocks PowerShell, which would hang this checker and the whole worker cycle.
+            using var timeout = new CancellationTokenSource(QueryTimeout);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
+            string output;
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+                output = await stdoutTask;
+                var stderr = await stderrTask;
+                if (!string.IsNullOrWhiteSpace(stderr))
+                    _logger.LogDebug("Get-WinEvent for {LogName} wrote to stderr: {Stderr}", logName, stderr.Trim());
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* already gone */ }
+                _logger.LogWarning("Event log query for {LogName} timed out after {Timeout} and was killed", logName, QueryTimeout);
+                return events;
+            }
 
             if (string.IsNullOrWhiteSpace(output))
             {

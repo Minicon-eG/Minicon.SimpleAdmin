@@ -233,7 +233,9 @@ public class PowerShellScriptParserTests
             param([Parameter(Mandatory)][string]$SourceDate, [string]$LogPath = "C:\Temp\x.csv", [switch]$DryRun)
             """).Parameters;
 
-        var merged = PowerShellScriptParser.MergeParameters(existing, fresh);
+        existing[0].ScriptDefaultValue = null;
+        existing[1].ScriptDefaultValue = @"C:\Temp\x.csv";
+        var merged = PowerShellScriptParser.MergeParameters(existing, fresh).Parameters;
 
         merged.Select(p => p.Name).Should().Equal("SourceDate", "LogPath", "DryRun");
         merged[0].Label.Should().Be("Archivdatum");
@@ -243,6 +245,63 @@ public class PowerShellScriptParserTests
         merged[1].Fixed.Should().BeTrue();
         merged[1].DefaultValue.Should().Be(@"D:\Logs\copy.csv");
         merged[2].Type.Should().Be(ScriptParameterType.Switch);
+    }
+
+    [Fact]
+    public void Merge_TypeChangedInScript_RedetectsControl_AndReportsIt()
+    {
+        var existing = PowerShellScriptParser.CreateDefinition("x.ps1", "param([string]$Mode, [int]$Wait = 5)").Parameters;
+        existing[0].Fixed = true;
+        existing[0].DefaultValue = "fest";
+        existing[0].Label = "Modus";
+
+        var merge = PowerShellScriptParser.MergeParameters(existing,
+            PowerShellScriptParser.CreateDefinition("x.ps1", "param([switch]$Mode, [int]$Wait = 10)").Parameters);
+
+        var mode = merge.Parameters.Single(p => p.Name == "Mode");
+        mode.Type.Should().Be(ScriptParameterType.Switch);
+        mode.Fixed.Should().BeFalse("a fixed value of the old type would break binding");
+        mode.DefaultValue.Should().BeNull();
+        mode.Label.Should().Be("Modus");
+        merge.Parameters.Single(p => p.Name == "Wait").DefaultValue.Should().Be("10", "the script default changed");
+        merge.Notes.Should().Contain(n => n.Contains("Typ im Skript geändert")).And.Contain(n => n.Contains("Standardwert im Skript geändert"));
+    }
+
+    [Fact]
+    public void Merge_AdminDefault_IsKeptWhileScriptDefaultIsUnchanged()
+    {
+        var existing = PowerShellScriptParser.CreateDefinition("x.ps1", "param([int]$Wait = 5)").Parameters;
+        existing[0].DefaultValue = "30"; // admin override
+
+        var merge = PowerShellScriptParser.MergeParameters(existing,
+            PowerShellScriptParser.CreateDefinition("x.ps1", "param([int]$Wait = 5)").Parameters);
+
+        merge.Parameters.Single().DefaultValue.Should().Be("30");
+        merge.Notes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BareWordDefault_IsAnExpression_NotAString()
+    {
+        var p = PowerShellScriptParser.CreateDefinition("x.ps1", "param([string]$Host = hostname, [string]$Day = Get-Date)").Parameters;
+        p.Should().OnlyContain(x => x.DefaultValue == null && x.DefaultExpression != null);
+    }
+
+    [Fact]
+    public void SwitchDefaultingToTrue_IsStoredAsOn()
+    {
+        var p = PowerShellScriptParser.CreateDefinition("x.ps1", "param([switch]$Verify = $true)").Parameters.Single();
+        p.DefaultValue.Should().Be("true");
+        p.DefaultIsOn.Should().BeTrue();
+    }
+
+    [Fact]
+    public void MinMaxText_BindsCultureInvariant()
+    {
+        var p = new ScriptParameterDefinition { MinText = "0.5", MaxText = "2,5" };
+        p.Min.Should().Be(0.5);
+        p.Max.Should().Be(2.5);
+        p.MinText.Should().Be("0.5");
     }
 
     [Theory]

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 
 namespace Minicon.SimpleAdmin.WebUI.Models.Scripts;
@@ -80,6 +81,12 @@ public sealed class ScriptParameterDefinition
     /// <summary>Default value (lists: one entry per line).</summary>
     public string? DefaultValue { get; set; }
 
+    /// <summary>
+    /// Default value as declared in the script when the parameters were last read. Lets
+    /// "Parameter neu einlesen" tell an admin override apart from a changed script default.
+    /// </summary>
+    public string? ScriptDefaultValue { get; set; }
+
     /// <summary>Non-literal default expression of the script (informational only).</summary>
     public string? DefaultExpression { get; set; }
 
@@ -117,6 +124,26 @@ public sealed class ScriptParameterDefinition
         set => Choices = SplitLines(value);
     }
 
+    /// <summary>Form binding for <see cref="Min"/>, culture-invariant (a de-DE server would read "0.5" as 5).</summary>
+    [JsonIgnore]
+    public string? MinText
+    {
+        get => Min?.ToString(CultureInfo.InvariantCulture);
+        set => Min = ParseInvariant(value);
+    }
+
+    /// <summary>Form binding for <see cref="Max"/>, culture-invariant.</summary>
+    [JsonIgnore]
+    public string? MaxText
+    {
+        get => Max?.ToString(CultureInfo.InvariantCulture);
+        set => Max = ParseInvariant(value);
+    }
+
+    /// <summary>Whether the switch is on unless the user turns it off.</summary>
+    [JsonIgnore]
+    public bool DefaultIsOn => string.Equals(DefaultValue, "true", StringComparison.OrdinalIgnoreCase);
+
     [JsonIgnore]
     public string EffectiveFormat => !string.IsNullOrWhiteSpace(Format) ? Format! : Type switch
     {
@@ -140,6 +167,9 @@ public sealed class ScriptParameterDefinition
         }
         return sb.ToString();
     }
+
+    internal static double? ParseInvariant(string? value) =>
+        double.TryParse(value?.Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : null;
 
     internal static List<string> SplitLines(string? value) =>
         (value ?? string.Empty)

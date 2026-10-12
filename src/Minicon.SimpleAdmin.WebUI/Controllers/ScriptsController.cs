@@ -11,7 +11,7 @@ namespace Minicon.SimpleAdmin.WebUI.Controllers;
 /// detected parameters, start runs and follow their output.
 /// </summary>
 [ScriptRunnerGate]
-public class ScriptsController : Controller
+public sealed class ScriptsController : Controller
 {
     private const long MaxUploadBytes = 2 * 1024 * 1024;
     private static readonly Regex ValidParameterName = new(@"^[A-Za-z_][A-Za-z0-9_]*$");
@@ -34,7 +34,8 @@ public class ScriptsController : Controller
         var model = new ScriptsIndexViewModel
         {
             Scripts = _store.GetAll().ToList(),
-            RecentRuns = _runs.GetHistory(max: 30).ToList()
+            RecentRuns = _runs.GetHistory(max: 30).ToList(),
+            StoreError = _store.LoadError
         };
         return View(model);
     }
@@ -60,7 +61,7 @@ public class ScriptsController : Controller
         }
 
         var definition = PowerShellScriptParser.CreateDefinition(Path.GetFullPath(path), await ReadScriptAsync(path));
-        _store.Save(definition);
+        if (!TrySave(definition)) return RedirectToAction(nameof(Create));
         TempData["Success"] = DetectedMessage(definition);
         return RedirectToAction(nameof(Edit), new { id = definition.Id });
     }
@@ -102,20 +103,19 @@ public class ScriptsController : Controller
         _logger.LogInformation("Script uploaded to {Path} by {User}", target, CurrentUser);
 
         var content = await ReadScriptAsync(target);
-        ScriptDefinition definition;
         if (existing != null)
         {
             // Same file uploaded again → update the parameters of the existing definition.
-            var fresh = PowerShellScriptParser.CreateDefinition(target, content);
-            existing.Parameters = PowerShellScriptParser.MergeParameters(existing.Parameters, fresh.Parameters);
+            var merge = PowerShellScriptParser.MergeParameters(existing.Parameters, PowerShellScriptParser.CreateDefinition(target, content).Parameters);
+            existing.Parameters = merge.Parameters;
             existing.ParametersReadAt = DateTime.UtcNow;
-            definition = existing;
+            if (!TrySave(existing)) return RedirectToAction(nameof(Create));
+            TempData["Success"] = MergeMessage("Neue Version hochgeladen", existing, merge);
+            return RedirectToAction(nameof(Edit), new { id = existing.Id });
         }
-        else
-        {
-            definition = PowerShellScriptParser.CreateDefinition(target, content);
-        }
-        _store.Save(definition);
+
+        var definition = PowerShellScriptParser.CreateDefinition(target, content);
+        if (!TrySave(definition)) return RedirectToAction(nameof(Create));
         TempData["Success"] = DetectedMessage(definition);
         return RedirectToAction(nameof(Edit), new { id = definition.Id });
     }
@@ -168,6 +168,10 @@ public class ScriptsController : Controller
         }
         foreach (var p in model.Parameters.Where(p => p.Fixed && p.Required && string.IsNullOrWhiteSpace(p.DefaultValue) && p.Type != ScriptParameterType.Switch))
             errors.Add($"'{p.DisplayLabel}': Ein fester Pflichtparameter braucht einen Standardwert.");
+        foreach (var p in model.Parameters.Where(p => p.Hidden && p.Required))
+            errors.Add($"'{p.DisplayLabel}': Pflichtparameter können nicht ausgeblendet werden — stattdessen „Fest“ mit Standardwert verwenden.");
+        foreach (var p in model.Parameters.Where(p => p.Min.HasValue && p.Max.HasValue && p.Min > p.Max))
+            errors.Add($"'{p.DisplayLabel}': Min ist größer als Max.");
 
         if (errors.Count > 0)
         {
@@ -176,7 +180,11 @@ public class ScriptsController : Controller
             return View(model);
         }
 
-        _store.Save(model);
+        if (!TrySave(model))
+        {
+            await FillSourceAsync(model);
+            return View(model);
+        }
         TempData["Success"] = "Skript gespeichert.";
         return RedirectToAction(nameof(Edit), new { id });
     }
@@ -194,15 +202,12 @@ public class ScriptsController : Controller
         }
 
         var fresh = PowerShellScriptParser.CreateDefinition(definition.Path, await ReadScriptAsync(definition.Path));
-        var before = definition.Parameters.Select(p => p.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        definition.Parameters = PowerShellScriptParser.MergeParameters(definition.Parameters, fresh.Parameters);
+        var merge = PowerShellScriptParser.MergeParameters(definition.Parameters, fresh.Parameters);
+        definition.Parameters = merge.Parameters;
         definition.ParametersReadAt = DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(definition.Description)) definition.Description = fresh.Description;
-        _store.Save(definition);
-
-        var added = definition.Parameters.Count(p => !before.Contains(p.Name));
-        var removed = before.Count(n => definition.Parameters.All(p => !p.Name.Equals(n, StringComparison.OrdinalIgnoreCase)));
-        TempData["Success"] = $"Parameter neu eingelesen: {definition.Parameters.Count} Parameter ({added} neu, {removed} entfernt). Eigene Anpassungen wurden beibehalten.";
+        if (TrySave(definition))
+            TempData["Success"] = MergeMessage("Parameter neu eingelesen", definition, merge);
         return RedirectToAction(nameof(Edit), new { id });
     }
 
@@ -211,8 +216,15 @@ public class ScriptsController : Controller
     public IActionResult Delete(string id)
     {
         var definition = _store.Get(id);
-        if (definition != null && _store.Delete(id))
-            TempData["Success"] = $"'{definition.Name}' wurde entfernt (die Skriptdatei bleibt erhalten).";
+        try
+        {
+            if (definition != null && _store.Delete(id))
+                TempData["Success"] = $"'{definition.Name}' wurde entfernt (die Skriptdatei bleibt erhalten).";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
         return RedirectToAction(nameof(Index));
     }
 
@@ -238,23 +250,15 @@ public class ScriptsController : Controller
         return View(run);
     }
 
-    /// <summary>Complete output of a run as a text file.</summary>
+    /// <summary>Complete output of a run: the log file itself, streamed (no re-parsing, any size).</summary>
     public IActionResult Log(string id)
     {
         var run = _runs.GetRun(id);
         if (run == null) return NotFound();
-        var sb = new StringBuilder();
-        int from = 0;
-        while (true)
-        {
-            var (lines, next, _) = _runs.GetOutput(id, from);
-            foreach (var l in lines)
-                sb.Append(l.Timestamp.ToLocalTime().ToString("HH:mm:ss")).Append(l.IsError ? " ! " : "   ").AppendLine(l.Text);
-            if (lines.Count == 0 || next == from) break;
-            from = next;
-        }
+        var path = _runs.LogPath(run.Id);
+        if (!System.IO.File.Exists(path)) return NotFound();
         var name = $"{SanitizeFileName(run.ScriptName)}_{run.StartedAt.ToLocalTime():yyyyMMdd_HHmmss}.log";
-        return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray(), "text/plain; charset=utf-8", name);
+        return PhysicalFile(path, "text/plain; charset=utf-8", name);
     }
 
     // ── helpers ────────────────────────────────────────────────────────────
@@ -283,6 +287,26 @@ public class ScriptsController : Controller
         }
     }
 
+    /// <summary>Saves; on a blocked store (unreadable scripts.json) sets the error message and returns false.</summary>
+    private bool TrySave(ScriptDefinition definition)
+    {
+        try
+        {
+            _store.Save(definition);
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+            return false;
+        }
+    }
+
+    private static string MergeMessage(string action, ScriptDefinition d, MergeResult merge) =>
+        merge.Notes.Count == 0
+            ? $"{action}: {d.Parameters.Count} Parameter, keine Änderungen im Skript."
+            : $"{action}: {d.Parameters.Count} Parameter. Änderungen: {string.Join(" ", merge.Notes)} Eigene Anpassungen unveränderter Parameter wurden beibehalten.";
+
     private static string DetectedMessage(ScriptDefinition d)
     {
         var visible = d.Parameters.Count;
@@ -304,6 +328,9 @@ public sealed class ScriptsIndexViewModel
 {
     public List<ScriptDefinition> Scripts { get; set; } = new();
     public List<ScriptRun> RecentRuns { get; set; } = new();
+
+    /// <summary>scripts.json could not be read (shown as banner; saving is blocked).</summary>
+    public string? StoreError { get; set; }
 }
 
 public sealed class ScriptRunFormViewModel

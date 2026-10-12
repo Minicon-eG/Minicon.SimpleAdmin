@@ -62,6 +62,7 @@
                             var on = p.Fixed ? p.DefaultValue == "true" : values.Any(v => v.Equals("true", StringComparison.OrdinalIgnoreCase));
                             <div class="form-check form-switch mt-md-4">
                                 <input type="checkbox" class="form-check-input" id="@id" data-param="@p.Name" data-kind="switch"
+                                       data-default-on="@(p.DefaultIsOn ? "true" : "false")"
                                        @(on ? "checked" : "") @(p.Fixed ? "disabled" : "") />
                                 <label class="form-check-label fw-semibold" for="@id">
                                     @p.DisplayLabel @if (p.Fixed) { <i class="bi bi-lock text-muted" title="Fest vorgegeben"></i> }
@@ -193,7 +194,9 @@
         return values;
     }
 
-    function quote(v) { if (/^-?\d+(\.\d+)?$/.test(v)) return v; return /^[\w.:\\\/-]+$/.test(v) ? `"${v}"` : `'${String(v).replace(/'/g, "''")}'`; }
+    // Same rules as ScriptArgumentBuilder.QuoteForDisplay / ToPowerShell (display only).
+    function quote(v) { return /^[\w.:\\\/-]+$/.test(v) ? `"${v}"` : `'${String(v).replace(/[\u0000-\u001f]/g, '').replace(/['\u2018\u2019\u201a\u201b]/g, c => c + c)}'`; }
+    function isNumber(v) { return /^-?\d+(\.\d+)?$/.test(v); }
 
     function preview() {
         const parts = ['.\\' + scriptName];
@@ -201,12 +204,17 @@
         form.querySelectorAll('[data-param]').forEach(el => {
             const name = el.dataset.param;
             const v = values[name];
-            if (el.dataset.kind === 'switch') { if (v[0] === 'true') parts.push('-' + name); return; }
+            if (el.dataset.kind === 'switch') {
+                if (v[0] === 'true') parts.push('-' + name);
+                else if (el.dataset.defaultOn === 'true') parts.push('-' + name + ':$false');
+                return;
+            }
             let items = el.dataset.kind === 'multi' ? v : (el.tagName === 'TEXTAREA' ? v[0].split(/[\n,;]/) : v);
             items = items.map(s => s.trim()).filter(s => s);
             if (items.length === 0) return;
-            parts.push('-' + name + ' ' + (items.length > 1 || el.tagName === 'TEXTAREA' || el.dataset.kind === 'multi'
-                ? '@@(' + items.map(quote).join(', ') + ')' : quote(items[0])));
+            const list = items.length > 1 || el.tagName === 'TEXTAREA' || el.dataset.kind === 'multi';
+            parts.push('-' + name + ' ' + (list ? '@@(' + items.map(quote).join(', ') + ')'
+                : (el.type === 'number' && isNumber(items[0]) ? items[0] : quote(items[0]))));
         });
         fixedArgs.forEach(f => {
             if (f.type === 'Switch') { if (f.value === 'true') parts.push('-' + f.name); }

@@ -1665,15 +1665,21 @@ $.version != deprecated</code></pre>
                 </table>
                 <p>
                     Alles ist danach anpassbar (Bezeichnung, Feldtyp, Übergabeformat, Auswahlwerte). <strong>Fest</strong> gibt einen
-                    Wert unveränderlich vor, <strong>Ausblenden</strong> lässt einen Parameter weg. „Parameter neu einlesen“ übernimmt
-                    Änderungen am Skript und behält die eigenen Anpassungen.
+                    Wert unveränderlich vor, <strong>Ausblenden</strong> lässt einen Parameter weg (nicht bei Pflichtparametern — dafür
+                    „Fest“ mit Standardwert nutzen). „Parameter neu einlesen“ übernimmt Änderungen am Skript: Neue Parameter kommen dazu,
+                    entfernte fallen weg; hat sich der <strong>Typ</strong> eines Parameters geändert, wird das Eingabefeld neu erkannt;
+                    hat sich der <strong>Standardwert im Skript</strong> geändert, gilt der neue. Ansonsten bleiben die eigenen Anpassungen
+                    erhalten. Jede Änderung wird nach dem Einlesen aufgelistet.
                 </p>
 
                 <h4>Ausführen</h4>
                 <p>
-                    Das Formular zeigt den entsprechenden Aufruf als Vorschau. Nach dem Start erscheint die Ausgabe live
-                    (Fehlerausgabe rot), der Lauf kann abgebrochen werden. Jeder Lauf wird mit Benutzer, Parametern, Dauer,
-                    Exit-Code und vollständigem Log protokolliert (<code>&lt;ConfigPath&gt;/script-runs</code>); „Mit diesen Werten
+                    Das Formular zeigt den entsprechenden Aufruf als Vorschau. Ein Schalter, der im Skript standardmäßig an ist
+                    (<code>[switch]$X = $true</code>), wird beim Abschalten als <code>-X:$false</code> übergeben. Nach dem Start erscheint
+                    die Ausgabe live (Fehlerausgabe rot, die Seite zeigt die neuesten Zeilen), der Lauf kann abgebrochen werden.
+                    Startet ein Skript Hintergrundprozesse, gilt der Lauf trotzdem mit dem Ende des Skripts als beendet. Jeder Lauf wird mit Benutzer, Parametern, Dauer,
+                    Exit-Code und vollständigem Log protokolliert (<code>&lt;ConfigPath&gt;/script-runs</code>, eine lesbare Textdatei pro Lauf —
+                    der Download liefert sie unverändert); „Mit diesen Werten
                     erneut“ startet ihn mit denselben Eingaben. Exit-Code ≠ 0 gilt als fehlgeschlagen — nutzt ein Skript native
                     Tools wie <code>robocopy</code> (Exit-Code 1 = Erfolg), sollte es am Ende explizit <code>exit 0</code> setzen.
                 </p>
@@ -1687,7 +1693,10 @@ $.version != deprecated</code></pre>
                 <table class="table table-bordered table-sm">
                     <thead class="table-light"><tr><th>Einstellung</th><th>Beschreibung</th><th>Standard</th></tr></thead>
                     <tbody>
-                        <tr><td><code>ScriptRunner:Enabled</code></td><td>Schaltet die Funktion ab (<code>false</code>). Bewusst nicht über config.json schaltbar.</td><td><code>true</code></td></tr>
+                        <tr><td><code>ScriptRunner:Enabled</code></td><td>Schaltet die Funktion ab (<code>false</code>). Bewusst nicht über config.json schaltbar.
+                            Läuft die WebUI ohne Anmeldung (<code>Authentication:Enabled=false</code>), ist sie automatisch aus.</td><td><code>true</code></td></tr>
+                        <tr><td><code>ScriptRunner:AllowWithoutAuthentication</code></td><td>Nur für isolierte Test-Hosts: Skripte auch ohne Anmeldung erlauben.</td><td><code>false</code></td></tr>
+                        <tr><td><code>ScriptRunner:MaxOutputLines</code> / <code>HistorySize</code></td><td>Zeilen pro Lauf im Speicher (die Log-Datei enthält immer alles) bzw. Anzahl Läufe im Verlauf.</td><td><code>20000</code> / <code>200</code></td></tr>
                         <tr><td><code>ScriptRunner:RequiredRole</code></td><td>AD-Gruppe, die Skripte anlegen und starten darf.</td><td>–</td></tr>
                         <tr><td><code>ScriptRunner:AllowedDirectories</code></td><td>Nur Skripte aus diesen Verzeichnissen (Upload-Ordner immer erlaubt). Leer = beliebig.</td><td>–</td></tr>
                         <tr><td><code>ScriptRunner:BrowseRoots</code></td><td>Verzeichnisse, die die Datei-/Ordnerauswahl zeigen darf. Leer = alle Laufwerke.</td><td>–</td></tr>

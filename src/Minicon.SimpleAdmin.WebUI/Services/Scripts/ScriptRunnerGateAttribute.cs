@@ -20,7 +20,7 @@ public sealed class ScriptRunnerGateAttribute : Attribute, IAuthorizationFilter
 
         if (!options.Enabled)
         {
-            reason = "Die Skript-Ausführung ist auf diesem Host deaktiviert. Sie wurde in der appsettings.json der WebUI abgeschaltet (\"ScriptRunner\": { \"Enabled\": false }).";
+            reason = options.DisabledReason ?? "Die Skript-Ausführung ist auf diesem Host abgeschaltet.";
         }
         else if (!string.IsNullOrWhiteSpace(options.RequiredRole))
         {

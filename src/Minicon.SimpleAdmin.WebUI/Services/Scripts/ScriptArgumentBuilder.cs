@@ -11,11 +11,21 @@ namespace Minicon.SimpleAdmin.WebUI.Services.Scripts;
 /// <param name="Kind">s = string, a = string[], b = bool, i = integer, n = number.</param>
 internal sealed record ScriptArgument(string Name, char Kind, IReadOnlyList<string> Values)
 {
+    /// <summary>Value as shown in the run details (lists joined with ", ").</summary>
     public string Display => Kind switch
     {
         'b' => Values[0] == "1" ? "$true" : "$false",
         'a' => string.Join(", ", Values),
         _ => Values.Count > 0 ? Values[0] : string.Empty
+    };
+
+    /// <summary>The argument as it would be typed in PowerShell (see <see cref="ScriptArgumentBuilder.FormatCommandLine"/>).</summary>
+    public string ToPowerShell() => Kind switch
+    {
+        'b' => Values[0] == "1" ? $"-{Name}" : $"-{Name}:$false",
+        'a' => $"-{Name} @({string.Join(", ", Values.Select(ScriptArgumentBuilder.QuoteForDisplay))})",
+        'i' or 'n' => $"-{Name} {Values[0]}",
+        _ => $"-{Name} {ScriptArgumentBuilder.QuoteForDisplay(Values[0])}"
     };
 }
 
@@ -82,7 +92,12 @@ internal static class ScriptArgumentBuilder
 
         foreach (var p in definition.Parameters)
         {
-            if (p.Hidden) continue;
+            if (p.Hidden)
+            {
+                // A hidden mandatory parameter is never passed → PowerShell would fail on every start.
+                if (p.Required) errors.Add($"'{p.DisplayLabel}' ist ein Pflichtparameter und darf nicht ausgeblendet sein (stattdessen „Fest“ mit Standardwert verwenden).");
+                continue;
+            }
             if (!ValidName.IsMatch(p.Name))
             {
                 errors.Add($"Ungültiger Parametername '{p.Name}'.");
@@ -107,11 +122,15 @@ internal static class ScriptArgumentBuilder
                     var on = raw.Any(v => v.Equals("true", StringComparison.OrdinalIgnoreCase)
                                           || v.Equals("on", StringComparison.OrdinalIgnoreCase)
                                           || v == "1");
-                    var isBool = p.PsType is "bool" or "boolean";
-                    if (on || (isBool && raw.Count > 0))
+                    // Pass the value whenever leaving it out would not mean "off": the user turned on
+                    // a switch, turned off a switch that defaults to $true (-X:$false), a [bool]
+                    // parameter got a value, or the parameter is mandatory.
+                    var mustPass = on
+                                   || p.DefaultIsOn
+                                   || p.Required
+                                   || (PowerShellTypes.IsBoolean(p.PsType) && raw.Count > 0);
+                    if (mustPass)
                         args.Add(new ScriptArgument(p.Name, 'b', new[] { on ? "1" : "0" }));
-                    else if (p.Required && !isBool)
-                        args.Add(new ScriptArgument(p.Name, 'b', new[] { "0" }));
                     break;
                 }
 
@@ -180,6 +199,21 @@ internal static class ScriptArgumentBuilder
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Human-readable equivalent call, e.g. <c>.\Copy.ps1 -SourceDate "2025-07-20" -DryRun</c>.
+    /// Display only — execution never goes through a command line. The run form's live preview
+    /// (Views/Scripts/Run.cshtml, <c>quote()</c>) follows the same rules.
+    /// </summary>
+    public static string FormatCommandLine(string scriptPath, IEnumerable<ScriptArgument> arguments)
+    {
+        var fileName = scriptPath[(scriptPath.LastIndexOfAny(new[] { '\\', '/' }) + 1)..];
+        return string.Join(" ", arguments.Select(a => a.ToPowerShell()).Prepend(".\\" + fileName));
+    }
+
+    /// <summary>Simple values in double quotes, everything else as single-quoted literal.</summary>
+    internal static string QuoteForDisplay(string value) =>
+        Regex.IsMatch(value, @"^[\w.:\\/-]+$") ? $"\"{value}\"" : Minicon.SimpleAdmin.Services.PowerShellLiteral.Quote(value);
+
     private static string B64(string value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
 
     private static List<string>? FindInput(IReadOnlyDictionary<string, List<string>> input, string name)
@@ -234,7 +268,7 @@ internal static class ScriptArgumentBuilder
                     kind = 'i';
                     return l.ToString(inv);
                 }
-                if (IsIntegerType(p.PsType)) { error = $"'{value}' ist keine ganze Zahl."; return null; }
+                if (PowerShellTypes.IsInteger(p.PsType)) { error = $"'{value}' ist keine ganze Zahl."; return null; }
                 kind = 'n';
                 return d.ToString("R", inv);
             }
@@ -261,9 +295,6 @@ internal static class ScriptArgumentBuilder
                 return value;
         }
     }
-
-    private static bool IsIntegerType(string? psType) =>
-        psType is "int" or "long" or "short" or "byte" or "sbyte" or "int16" or "uint" or "uint16" or "uint32" or "uint64" or "ulong" or "ushort";
 
     private static string? ParseDate(string value, string outputFormat, string[] inputFormats, string what, out string? error)
     {

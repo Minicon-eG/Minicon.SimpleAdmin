@@ -12,7 +12,7 @@ namespace Minicon.SimpleAdmin.WebUI.Controllers.Api;
 [ApiController]
 [Route("api/scripts")]
 [ScriptRunnerGate]
-public class ScriptsApiController : ControllerBase
+public sealed class ScriptsApiController : ControllerBase
 {
     private const int MaxBrowseEntries = 2000;
 
@@ -56,12 +56,17 @@ public class ScriptsApiController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Output of a run. Without <paramref name="from"/>: the last lines (initial load, also for old runs
+    /// read from the log file); with <paramref name="from"/>: new lines since that index (live polling).
+    /// <c>resync</c> = the position is no longer in memory → the client reloads without <c>from</c>.
+    /// </summary>
     [HttpGet("runs/{runId}")]
-    public IActionResult Output(string runId, [FromQuery] int from = 0)
+    public IActionResult Output(string runId, [FromQuery] int? from = null)
     {
         var run = _runs.GetRun(runId);
         if (run == null) return NotFound(new { message = "Lauf nicht gefunden." });
-        var (lines, next, skipped) = _runs.GetOutput(runId, Math.Max(0, from));
+        var page = _runs.GetOutput(runId, from is null ? null : Math.Max(0, from.Value));
         return Ok(new
         {
             status = run.Status.ToString(),
@@ -71,9 +76,10 @@ public class ScriptsApiController : ControllerBase
             error = run.Error,
             finishedAt = run.FinishedAt,
             durationSeconds = (int)run.Duration.TotalSeconds,
-            next,
-            skipped,
-            lines = lines.Select(l => new { t = l.Timestamp, e = l.IsError, x = l.Text })
+            next = page.Next,
+            skipped = page.Skipped,
+            resync = page.Resync,
+            lines = page.Lines.Select(l => new { t = l.Timestamp, e = l.IsError, x = l.Text })
         });
     }
 
@@ -93,7 +99,7 @@ public class ScriptsApiController : ControllerBase
     /// <paramref name="extension"/> optionally filters files (e.g. <c>.ps1</c>).
     /// </summary>
     [HttpGet("browse")]
-    public IActionResult Browse([FromQuery] string? path, [FromQuery] string mode = "file", [FromQuery] string? extension = null)
+    public async Task<IActionResult> Browse([FromQuery] string? path, [FromQuery] string mode = "file", [FromQuery] string? extension = null)
     {
         var roots = _pathPolicy.GetRoots();
         if (string.IsNullOrWhiteSpace(path))
@@ -130,27 +136,12 @@ public class ScriptsApiController : ControllerBase
 
         try
         {
-            var dir = new DirectoryInfo(full);
-            var entries = new List<object>();
-            foreach (var d in dir.EnumerateDirectories().OrderBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase))
-            {
-                if ((d.Attributes & (FileAttributes.Hidden | FileAttributes.System)) == (FileAttributes.Hidden | FileAttributes.System)) continue;
-                entries.Add(new { name = d.Name, fullPath = d.FullName, isDirectory = true });
-                if (entries.Count >= MaxBrowseEntries) break;
-            }
-            if (!mode.Equals("folder", StringComparison.OrdinalIgnoreCase) && entries.Count < MaxBrowseEntries)
-            {
-                foreach (var f in dir.EnumerateFiles().OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase))
-                {
-                    if (!string.IsNullOrEmpty(extension) && !f.Extension.Equals(extension, StringComparison.OrdinalIgnoreCase)) continue;
-                    entries.Add(new { name = f.Name, fullPath = f.FullName, isDirectory = false, size = f.Length, modified = f.LastWriteTime });
-                    if (entries.Count >= MaxBrowseEntries) break;
-                }
-            }
-
-            var parent = dir.Parent?.FullName;
+            // Off the request thread and abortable: a share with 100 000s of files must not block a worker thread.
+            var listing = await Task.Run(() => ListDirectory(full, !mode.Equals("folder", StringComparison.OrdinalIgnoreCase), extension, HttpContext.RequestAborted),
+                                         HttpContext.RequestAborted);
+            var parent = Directory.GetParent(full)?.FullName;
             if (parent != null && !_pathPolicy.CanBrowse(parent)) parent = null;
-            return Ok(new { path = dir.FullName, parent, roots, entries, truncated = entries.Count >= MaxBrowseEntries });
+            return Ok(new { path = full, parent, roots, entries = listing.Entries, truncated = listing.Truncated });
         }
         catch (UnauthorizedAccessException)
         {
@@ -160,5 +151,44 @@ public class ScriptsApiController : ControllerBase
         {
             return BadRequest(new { message = ex.Message, roots });
         }
+    }
+
+    /// <summary>
+    /// Directory listing for the chooser: filters while enumerating and stops at
+    /// <see cref="MaxBrowseEntries"/> — only that subset is sorted, so huge folders stay cheap.
+    /// </summary>
+    internal static (List<object> Entries, bool Truncated) ListDirectory(string directory, bool includeFiles, string? extension, CancellationToken ct)
+    {
+        var options = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = FileAttributes.System, RecurseSubdirectories = false };
+        var dir = new DirectoryInfo(directory);
+
+        var dirs = dir.EnumerateDirectories("*", options).Take(MaxBrowseEntries + 1).ToList();
+        ct.ThrowIfCancellationRequested();
+        var truncated = dirs.Count > MaxBrowseEntries;
+        if (truncated) dirs.RemoveAt(dirs.Count - 1);
+
+        var files = new List<FileInfo>();
+        if (includeFiles && !truncated)
+        {
+            var pattern = string.IsNullOrEmpty(extension) ? "*" : "*" + extension;
+            files = dir.EnumerateFiles(pattern, options)
+                // "*.ps1" also matches e.g. ".ps1xml" on Windows (8.3 legacy) — check exactly.
+                .Where(f => string.IsNullOrEmpty(extension) || f.Extension.Equals(extension, StringComparison.OrdinalIgnoreCase))
+                .Take(MaxBrowseEntries - dirs.Count + 1)
+                .ToList();
+            ct.ThrowIfCancellationRequested();
+            if (files.Count > MaxBrowseEntries - dirs.Count)
+            {
+                truncated = true;
+                files.RemoveAt(files.Count - 1);
+            }
+        }
+
+        var entries = new List<object>(dirs.Count + files.Count);
+        entries.AddRange(dirs.OrderBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(d => (object)new { name = d.Name, fullPath = d.FullName, isDirectory = true }));
+        entries.AddRange(files.OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(f => (object)new { name = f.Name, fullPath = f.FullName, isDirectory = false, size = f.Length, modified = f.LastWriteTime }));
+        return (entries, truncated);
     }
 }

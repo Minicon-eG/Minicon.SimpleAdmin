@@ -27,12 +27,18 @@ public sealed class ScriptRun
     /// <summary>Parameter values as passed (lists joined with ", "). Switches that are off are omitted.</summary>
     public Dictionary<string, string> Arguments { get; set; } = new();
 
+    /// <summary>Equivalent PowerShell call, e.g. <c>.\Copy.ps1 -SourceDate "2025-07-20" -DryRun</c>.</summary>
+    public string? CommandLine { get; set; }
+
     /// <summary>Raw form values, used for "erneut ausführen".</summary>
     public Dictionary<string, List<string>> InputValues { get; set; } = new();
 
     public string? StartedBy { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? FinishedAt { get; set; }
+
+    /// <summary>Last status change; decides which copy wins when two WebUI processes merge history.json.</summary>
+    public DateTime? UpdatedAt { get; set; }
     public ScriptRunStatus Status { get; set; }
     public int? ExitCode { get; set; }
     public string? Error { get; set; }
@@ -44,6 +50,15 @@ public sealed class ScriptRun
 
     [JsonIgnore]
     public TimeSpan Duration => (FinishedAt ?? DateTime.UtcNow) - StartedAt;
+
+    /// <summary>Independent copy (callers must not see later status changes of the live object).</summary>
+    public ScriptRun Clone()
+    {
+        var copy = (ScriptRun)MemberwiseClone();
+        copy.Arguments = new Dictionary<string, string>(Arguments);
+        copy.InputValues = InputValues.ToDictionary(kv => kv.Key, kv => kv.Value.ToList());
+        return copy;
+    }
 }
 
 /// <summary>

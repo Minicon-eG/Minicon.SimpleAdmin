@@ -158,3 +158,44 @@ public class ScriptArgumentBuilderTests
         ScriptArgumentBuilder.Bootstrap.Should().Contain("& $__saScript @__saArgs");
     }
 }
+
+public class ScriptArgumentBuilderSwitchAndDisplayTests
+{
+    private static Dictionary<string, List<string>> Input(string name, string value) => new() { [name] = new List<string> { value } };
+
+    [Fact]
+    public void SwitchDefaultingToTrue_TurnedOff_IsPassedAsFalse()
+    {
+        var d = new ScriptDefinition { Parameters = { new ScriptParameterDefinition { Name = "Verify", Type = ScriptParameterType.Switch, DefaultValue = "true" } } };
+
+        var (args, errors) = ScriptArgumentBuilder.Build(d, Input("Verify", "false"));
+
+        errors.Should().BeEmpty();
+        var arg = args.Should().ContainSingle().Subject;
+        arg.Values.Should().Equal("0");
+        arg.ToPowerShell().Should().Be("-Verify:$false");
+    }
+
+    [Fact]
+    public void HiddenMandatoryParameter_IsRejected()
+    {
+        var d = new ScriptDefinition { Parameters = { new ScriptParameterDefinition { Name = "Datum", Required = true, Hidden = true } } };
+        ScriptArgumentBuilder.Build(d, new Dictionary<string, List<string>>()).Errors.Should().ContainSingle()
+            .Which.Should().Contain("nicht ausgeblendet");
+    }
+
+    [Fact]
+    public void FormatCommandLine_QuotesLikePowerShell()
+    {
+        var args = new[]
+        {
+            new ScriptArgument("SourceDate", 's', new[] { "2025-07-20" }),
+            new ScriptArgument("Comment", 's', new[] { "it's ok" }),
+            new ScriptArgument("Codes", 'a', new[] { "R1", "R2" }),
+            new ScriptArgument("Wait", 'i', new[] { "5" }),
+            new ScriptArgument("DryRun", 'b', new[] { "1" })
+        };
+        ScriptArgumentBuilder.FormatCommandLine(@"D:\Skripte\Copy.ps1", args).Should().Be(
+            ".\\Copy.ps1 -SourceDate \"2025-07-20\" -Comment 'it''s ok' -Codes @(\"R1\", \"R2\") -Wait 5 -DryRun");
+    }
+}

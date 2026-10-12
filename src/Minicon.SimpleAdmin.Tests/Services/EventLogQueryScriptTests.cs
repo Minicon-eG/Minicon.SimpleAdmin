@@ -13,6 +13,7 @@ public class EventLogQueryScriptTests
     [InlineData("Microsoft-Windows-PowerShell/Operational", "'Microsoft-Windows-PowerShell/Operational'")]
     [InlineData("it's", "'it''s'")]
     [InlineData("a’b", "'a’’b'")]
+    [InlineData("a‚b‛c", "'a‚‚b‛‛c'")]
     [InlineData("a\nb", "'ab'")]
     public void QuotePowerShellLiteral_EscapesQuotes(string input, string expected) =>
         EventLogChecker.QuotePowerShellLiteral(input).Should().Be(expected);
@@ -26,11 +27,10 @@ public class EventLogQueryScriptTests
     }
 
     /// <summary>With PowerShell available, the escaped literal must evaluate back to the raw string without side effects.</summary>
-    [Fact]
+    [PowerShellFact]
     public void QuotedLiteral_RoundTripsInRealPowerShell()
     {
-        var pwsh = Environment.GetEnvironmentVariable("SIMPLEADMIN_TEST_PWSH");
-        if (string.IsNullOrEmpty(pwsh) || !File.Exists(pwsh)) return;
+        var pwsh = TestPowerShell.Path!;
 
         var psi = new ProcessStartInfo(pwsh) { RedirectStandardOutput = true, UseShellExecute = false };
         foreach (var a in new[] { "-NoProfile", "-NonInteractive", "-Command",

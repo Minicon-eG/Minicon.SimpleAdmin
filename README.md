@@ -36,7 +36,7 @@ return await SimpleAdminWorkerHost.RunAsync(args);
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.31.0" />
+<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.31.1" />
 ```
 
 ### Admin UI
@@ -53,7 +53,7 @@ app.Run();
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.31.0" />
+<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.31.1" />
 ```
 
 The host's `appsettings.json` supplies deployment specifics:
@@ -125,7 +125,8 @@ service types, feature toggles and the PRTG/NetScaler endpoints. Supported featu
   all-clear notices, HA via two coordinated instances) — testable end-to-end via
   the "Test-Mail senden" button in the admin UI
 - Problem acknowledgement with expiry — single or multi-select ("Auswahl quittieren")
-- **PowerShell script runner** (on by default, opt-out via `ScriptRunner:Enabled=false`): upload or
+- **PowerShell script runner** (on by default, opt-out via `ScriptRunner:Enabled=false`; automatically off
+  while the WebUI runs without authentication): upload or
   register `.ps1` scripts, parameters are detected automatically (date/time pickers,
   dropdowns, server-side file/folder chooser, switches, lists), live output, cancel and
   an audit history of every run
