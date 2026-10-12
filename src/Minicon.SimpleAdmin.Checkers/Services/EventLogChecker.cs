@@ -252,6 +252,44 @@ public class EventLogChecker : IEventLogChecker
         => EventLogIgnoreMatcher.MatchesWildcard(value, pattern);
 
     /// <summary>
+    /// Builds the Get-WinEvent query. Level must be inside the hashtable, not as a standalone
+    /// -Level parameter (which Get-WinEvent does not support). The log name comes from config.json
+    /// and is embedded as an escaped single-quoted literal so it can never break out of the string.
+    /// </summary>
+    internal static string BuildEventQueryScript(string logName, int timeWindowMinutes, string levelFilter)
+    {
+        var filterHashTable = $"@{{LogName={QuotePowerShellLiteral(logName)};StartTime=(Get-Date).AddMinutes(-{timeWindowMinutes});Level=@({levelFilter})}}";
+        return $@"
+$events = Get-WinEvent -FilterHashtable {filterHashTable} -ErrorAction SilentlyContinue | Select-Object -First 500
+$events | ForEach-Object {{
+    [PSCustomObject]@{{
+        TimeCreated = $_.TimeCreated.ToString('o')
+        Level = $_.LevelDisplayName
+        ProviderName = $_.ProviderName
+        Message = $_.Message
+        Id = $_.Id
+    }}
+}} | ConvertTo-Json -Compress
+";
+    }
+
+    /// <summary>
+    /// Single-quoted PowerShell literal: every quote character PowerShell accepts as a single quote
+    /// (incl. the typographic variants) is doubled; control characters are removed.
+    /// </summary>
+    internal static string QuotePowerShellLiteral(string value)
+    {
+        var sb = new System.Text.StringBuilder(value.Length + 2).Append('\'');
+        foreach (var c in value)
+        {
+            if (char.IsControl(c)) continue;
+            if (c is '\'' or '\u2018' or '\u2019' or '\u201A' or '\u201B') sb.Append(c);
+            sb.Append(c);
+        }
+        return sb.Append('\'').ToString();
+    }
+
+    /// <summary>
     /// Gets events from a specific Event Log using PowerShell
     /// </summary>
     private async Task<List<EventInfo>> GetEventsAsync(string logName, int timeWindowMinutes, List<string> levels)
@@ -270,32 +308,21 @@ public class EventLogChecker : IEventLogChecker
                 _ => "2" // Default to Error
             }));
 
-            // Build filter hash table for Get-WinEvent — Level must be inside the hashtable,
-            // not as a standalone -Level parameter (which Get-WinEvent does not support)
-            var filterHashTable = $"@{{LogName='{logName}';StartTime=(Get-Date).AddMinutes(-{timeWindowMinutes});Level=@({levelFilter})}}";
+            var script = BuildEventQueryScript(logName, timeWindowMinutes, levelFilter);
 
-            var script = $@"
-$events = Get-WinEvent -FilterHashtable {filterHashTable} -ErrorAction SilentlyContinue | Select-Object -First 500
-$events | ForEach-Object {{
-    [PSCustomObject]@{{
-        TimeCreated = $_.TimeCreated.ToString('o')
-        Level = $_.LevelDisplayName
-        ProviderName = $_.ProviderName
-        Message = $_.Message
-        Id = $_.Id
-    }}
-}} | ConvertTo-Json -Compress
-";
-
+            // -EncodedCommand + ArgumentList: the script never passes through command-line quoting,
+            // and the log name (from config.json) is embedded only as an escaped single-quoted literal.
             var psi = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{script.Replace("\"", "\\\"")}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-OutputFormat", "Text", "-EncodedCommand",
+                                        Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script)) })
+                psi.ArgumentList.Add(arg);
 
             using var process = Process.Start(psi);
             if (process == null)

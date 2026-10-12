@@ -1,0 +1,104 @@
+@model Minicon.SimpleAdmin.WebUI.Models.Scripts.ScriptParameterDefinition
+@using Minicon.SimpleAdmin.WebUI.Models.Scripts
+@using Minicon.SimpleAdmin.WebUI.Services.Scripts
+@{
+    var idx = (string)ViewData["Index"]!;
+    var prefix = $"Parameters[{idx}]";
+}
+<div class="card mb-3 param-editor" data-index="@idx">
+    <input type="hidden" name="Parameters.Index" value="@idx" />
+    <input type="hidden" name="@(prefix).PsType" value="@Model.PsType" />
+    <input type="hidden" name="@(prefix).DefaultExpression" value="@Model.DefaultExpression" />
+    <div class="card-body py-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Parameter</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text">-</span>
+                    <input type="text" name="@(prefix).Name" value="@Model.Name" class="form-control font-monospace" required />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Bezeichnung</label>
+                <input type="text" name="@(prefix).Label" value="@Model.Label" class="form-control form-control-sm"
+                       placeholder="@ScriptParameterDefinition.HumanizeName(Model.Name)" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Eingabefeld</label>
+                <select name="@(prefix).Type" class="form-select form-select-sm param-type">
+                    @foreach (var t in Enum.GetValues<ScriptParameterType>())
+                    {
+                        <option value="@t" selected="@(t == Model.Type)">@ScriptFormValues.TypeLabel(t)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-3 flex-wrap pb-1">
+                <div class="form-check form-check-inline m-0">
+                    <input type="checkbox" class="form-check-input" name="@(prefix).Required" value="true" id="req_@idx" @(Model.Required ? "checked" : "") />
+                    <input type="hidden" name="@(prefix).Required" value="false" />
+                    <label class="form-check-label small" for="req_@idx">Pflicht</label>
+                </div>
+                <div class="form-check form-check-inline m-0" title="Wert ist fest vorgegeben (Standardwert) und beim Start nicht änderbar">
+                    <input type="checkbox" class="form-check-input" name="@(prefix).Fixed" value="true" id="fix_@idx" @(Model.Fixed ? "checked" : "") />
+                    <input type="hidden" name="@(prefix).Fixed" value="false" />
+                    <label class="form-check-label small" for="fix_@idx">Fest</label>
+                </div>
+                <div class="form-check form-check-inline m-0" title="Parameter wird nicht angezeigt und nicht übergeben">
+                    <input type="checkbox" class="form-check-input" name="@(prefix).Hidden" value="true" id="hid_@idx" @(Model.Hidden ? "checked" : "") />
+                    <input type="hidden" name="@(prefix).Hidden" value="false" />
+                    <label class="form-check-label small" for="hid_@idx">Ausblenden</label>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger ms-auto btn-remove-param" title="Parameter entfernen"><i class="bi bi-trash"></i></button>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label small mb-1">Beschreibung</label>
+                <textarea name="@(prefix).Description" rows="1" class="form-control form-control-sm">@Model.Description</textarea>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small mb-1">
+                    Standardwert
+                    <span class="text-muted" data-show-for="List">(ein Wert pro Zeile)</span>
+                    <span class="text-muted" data-show-for="Switch">(<code>true</code> = eingeschaltet)</span>
+                </label>
+                <textarea name="@(prefix).DefaultValue" rows="1" class="form-control form-control-sm font-monospace">@Model.DefaultValue</textarea>
+                @if (!string.IsNullOrWhiteSpace(Model.DefaultExpression))
+                {
+                    <div class="form-text">Im Skript: <code>@Model.DefaultExpression</code> (wird verwendet, wenn kein Wert übergeben wird)</div>
+                }
+            </div>
+
+            <div class="col-md-6" data-show-for="Choice">
+                <label class="form-label small mb-1">Auswahlwerte (einer pro Zeile)</label>
+                <textarea name="@(prefix).ChoicesText" rows="3" class="form-control form-control-sm font-monospace">@Model.ChoicesText</textarea>
+                <div class="form-check mt-1">
+                    <input type="checkbox" class="form-check-input" name="@(prefix).AllowMultiple" value="true" id="multi_@idx" @(Model.AllowMultiple ? "checked" : "") />
+                    <input type="hidden" name="@(prefix).AllowMultiple" value="false" />
+                    <label class="form-check-label small" for="multi_@idx">Mehrfachauswahl</label>
+                </div>
+            </div>
+            <div class="col-md-3" data-show-for="Date Time DateTime">
+                <label class="form-label small mb-1">Übergabeformat</label>
+                <input type="text" name="@(prefix).Format" value="@Model.Format" class="form-control form-control-sm font-monospace"
+                       placeholder="@Model.EffectiveFormat" />
+            </div>
+            <div class="col-md-3" data-show-for="Text List File Folder Number">
+                <label class="form-label small mb-1">Muster (Regex)</label>
+                <input type="text" name="@(prefix).Pattern" value="@Model.Pattern" class="form-control form-control-sm font-monospace" placeholder="optional" />
+            </div>
+            <div class="col-md-3" data-show-for="Number">
+                <label class="form-label small mb-1">Min / Max</label>
+                <div class="input-group input-group-sm">
+                    <input type="number" step="any" name="@(prefix).Min" value="@Model.Min?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="form-control" />
+                    <input type="number" step="any" name="@(prefix).Max" value="@Model.Max?.ToString(System.Globalization.CultureInfo.InvariantCulture)" class="form-control" />
+                </div>
+            </div>
+            @if (!string.IsNullOrEmpty(Model.PsType))
+            {
+                <div class="col-12">
+                    <span class="small text-muted">Typ im Skript: <code>[@Model.PsType]</code></span>
+                </div>
+            }
+        </div>
+    </div>
+</div>

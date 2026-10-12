@@ -125,6 +125,7 @@
                     <li><a href="#monitoring-badges">Monitoring-Badges</a></li>
                     <li><a href="#acknowledges">Acknowledge-System</a></li>
                     <li><a href="#notifications">Benachrichtigungen</a></li>
+                    <li><a href="#scripts">Skripte (PowerShell)</a></li>
                     <li><a href="#authentication">Sicherheit &amp; Authentifizierung</a></li>
                     <li><a href="#rest-api">REST API</a></li>
                     <li><a href="#console-app">Konsolenanwendung</a></li>
@@ -1634,6 +1635,76 @@ $.version != deprecated</code></pre>
             </section>
 
             <!-- Sicherheit & Authentifizierung -->
+            <section id="scripts" class="doc-section">
+                <h2><i class="bi bi-terminal me-2"></i>Skripte (PowerShell)</h2>
+                <p>
+                    Unter <strong>Skripte</strong> lassen sich PowerShell-Skripte direkt aus der WebUI starten — z.&nbsp;B. ein
+                    Kopierskript, das Dateien aus dem Archiv zurück in die Eingangsverzeichnisse legt. Die Skripte laufen
+                    <strong>auf dem Rechner der WebUI</strong> unter deren Konto (bei IIS: Identität des Anwendungspools).
+                </p>
+
+                <h4>Skript hinzufügen</h4>
+                <p>
+                    Entweder die <code>.ps1</code>-Datei hochladen (Ablage unter <code>&lt;ConfigPath&gt;/scripts</code>) oder einen
+                    vorhandenen Pfad auf dem Server auswählen. Die Parameter werden aus dem <code>param()</code>-Block und der
+                    Comment-Based-Help (<code>.SYNOPSIS</code>, <code>.PARAMETER</code>) gelesen, ohne das Skript auszuführen:
+                </p>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light"><tr><th>Erkannt an</th><th>Eingabefeld</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>[switch]</code>, <code>[bool]</code></td><td>Schalter</td></tr>
+                        <tr><td><code>[ValidateSet(...)]</code></td><td>Auswahlliste (bei <code>[string[]]</code> Mehrfachauswahl)</td></tr>
+                        <tr><td><code>[int]</code>, <code>[double]</code> … (+ <code>[ValidateRange]</code>)</td><td>Zahl mit Min/Max</td></tr>
+                        <tr><td><code>[string[]]</code></td><td>Liste (ein Wert pro Zeile)</td></tr>
+                        <tr><td><code>[datetime]</code>, Name <code>…Date</code>, Hilfe „YYYY-MM-DD“/„DD.MM.YYYY“</td><td>Datumsauswahl (Übergabe im erkannten Format)</td></tr>
+                        <tr><td>Name <code>Time…</code>/<code>…Time</code>, Hilfe „HH:mm“</td><td>Uhrzeit</td></tr>
+                        <tr><td><code>[IO.FileInfo]</code>, Name <code>…Path</code>/<code>…File</code></td><td>Dateiauswahl (Server)</td></tr>
+                        <tr><td><code>[IO.DirectoryInfo]</code>, Name <code>…Folder</code>/<code>…Directory</code></td><td>Ordnerauswahl (Server)</td></tr>
+                        <tr><td><code>[Parameter(Mandatory)]</code>, Standardwerte, <code>[ValidatePattern]</code></td><td>Pflichtfeld, Vorbelegung, Prüfung</td></tr>
+                    </tbody>
+                </table>
+                <p>
+                    Alles ist danach anpassbar (Bezeichnung, Feldtyp, Übergabeformat, Auswahlwerte). <strong>Fest</strong> gibt einen
+                    Wert unveränderlich vor, <strong>Ausblenden</strong> lässt einen Parameter weg. „Parameter neu einlesen“ übernimmt
+                    Änderungen am Skript und behält die eigenen Anpassungen.
+                </p>
+
+                <h4>Ausführen</h4>
+                <p>
+                    Das Formular zeigt den entsprechenden Aufruf als Vorschau. Nach dem Start erscheint die Ausgabe live
+                    (Fehlerausgabe rot), der Lauf kann abgebrochen werden. Jeder Lauf wird mit Benutzer, Parametern, Dauer,
+                    Exit-Code und vollständigem Log protokolliert (<code>&lt;ConfigPath&gt;/script-runs</code>); „Mit diesen Werten
+                    erneut“ startet ihn mit denselben Eingaben. Exit-Code ≠ 0 gilt als fehlgeschlagen — nutzt ein Skript native
+                    Tools wie <code>robocopy</code> (Exit-Code 1 = Erfolg), sollte es am Ende explizit <code>exit 0</code> setzen.
+                </p>
+                <p>
+                    Die Werte werden nie in eine Befehlszeile eingesetzt, sondern Base64-kodiert übergeben und per Splatting an das
+                    Skript gebunden — Anführungszeichen oder <code>;</code> in Eingaben können nichts ausführen. Das Skript läuft mit
+                    <code>-NonInteractive</code>: ein <code>Read-Host</code> bricht mit Fehler ab, statt zu hängen.
+                </p>
+
+                <h4>Einstellungen (appsettings.json der WebUI)</h4>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light"><tr><th>Einstellung</th><th>Beschreibung</th><th>Standard</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>ScriptRunner:Enabled</code></td><td>Schaltet die Funktion ab (<code>false</code>). Bewusst nicht über config.json schaltbar.</td><td><code>true</code></td></tr>
+                        <tr><td><code>ScriptRunner:RequiredRole</code></td><td>AD-Gruppe, die Skripte anlegen und starten darf.</td><td>–</td></tr>
+                        <tr><td><code>ScriptRunner:AllowedDirectories</code></td><td>Nur Skripte aus diesen Verzeichnissen (Upload-Ordner immer erlaubt). Leer = beliebig.</td><td>–</td></tr>
+                        <tr><td><code>ScriptRunner:BrowseRoots</code></td><td>Verzeichnisse, die die Datei-/Ordnerauswahl zeigen darf. Leer = alle Laufwerke.</td><td>–</td></tr>
+                        <tr><td><code>ScriptRunner:PowerShellPath</code></td><td>PowerShell-Programm, z.&nbsp;B. <code>pwsh.exe</code>.</td><td><code>powershell.exe</code></td></tr>
+                        <tr><td><code>ScriptRunner:MaxConcurrentRuns</code></td><td>Maximal gleichzeitig laufende Skripte.</td><td><code>4</code></td></tr>
+                        <tr><td><code>ScriptRunner:UploadDirectory</code> / <code>RunLogDirectory</code></td><td>Ablage für hochgeladene Skripte bzw. Verlauf + Logs.</td><td><code>&lt;ConfigPath&gt;/scripts</code>, <code>&lt;ConfigPath&gt;/script-runs</code></td></tr>
+                    </tbody>
+                </table>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Unter IIS sind die Skripte Kindprozesse des Anwendungspools: Ein Recycle oder Leerlauf-Timeout beendet laufende
+                    Skripte (im Verlauf als „Unterbrochen“ markiert). Für lange Läufe Leerlauf-Timeout und periodisches Recycling
+                    des Pools entsprechend einstellen. Da die WebUI Windows-Anmeldedaten automatisch sendet, sollte
+                    <code>RequiredRole</code> gesetzt werden.
+                </div>
+            </section>
+
             <section id="authentication" class="doc-section">
                 <h2><i class="bi bi-shield-lock me-2"></i>Sicherheit &amp; Authentifizierung</h2>
                 <p>

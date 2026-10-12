@@ -1,0 +1,178 @@
+@model Minicon.SimpleAdmin.WebUI.Models.Scripts.ScriptDefinition
+@using Minicon.SimpleAdmin.WebUI.Models.Scripts
+@{
+    ViewData["Title"] = $"Skript: {Model.Name}";
+    var source = ViewData["Source"] as string;
+    var sourceError = ViewData["SourceError"] as string;
+}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="Index">Skripte</a></li>
+        <li class="breadcrumb-item active">@Model.Name</li>
+    </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h1 class="mb-0"><i class="bi bi-filetype-ps1 me-2"></i>@Model.Name</h1>
+    <div class="d-flex gap-2">
+        <a class="btn btn-success" asp-action="Run" asp-route-id="@Model.Id"><i class="bi bi-play-fill me-1"></i>Ausführen</a>
+        <form asp-action="Reparse" asp-route-id="@Model.Id" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-primary"
+                    title="Parameter erneut aus der Skriptdatei lesen — eigene Anpassungen bleiben erhalten">
+                <i class="bi bi-arrow-repeat me-1"></i>Parameter neu einlesen
+            </button>
+        </form>
+    </div>
+</div>
+
+@if (sourceError != null)
+{
+    <div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>@sourceError</div>
+}
+
+<form asp-action="Edit" asp-route-id="@Model.Id" method="post" id="scriptForm">
+    @Html.AntiForgeryToken()
+
+    <div class="card mb-4">
+        <div class="card-header"><i class="bi bi-gear me-2"></i>Allgemein</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Name</label>
+                    <input type="text" name="Name" value="@Model.Name" class="form-control" required />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Skriptpfad (WebUI-Server)</label>
+                    <div class="input-group">
+                        <input type="text" name="Path" id="scriptPath" value="@Model.Path" class="form-control font-monospace" required />
+                        <button type="button" class="btn btn-outline-secondary" data-path-browse="file" data-target="#scriptPath" data-extension=".ps1">
+                            <i class="bi bi-folder2-open"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Beschreibung</label>
+                    <textarea name="Description" rows="2" class="form-control">@Model.Description</textarea>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Arbeitsverzeichnis</label>
+                    <div class="input-group">
+                        <input type="text" name="WorkingDirectory" id="workingDirectory" value="@Model.WorkingDirectory"
+                               class="form-control font-monospace" placeholder="Verzeichnis des Skripts" />
+                        <button type="button" class="btn btn-outline-secondary" data-path-browse="folder" data-target="#workingDirectory">
+                            <i class="bi bi-folder2-open"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Zeitlimit (Minuten)</label>
+                    <input type="number" min="0" name="TimeoutMinutes" value="@Model.TimeoutMinutes" class="form-control" />
+                    <div class="form-text">0 = unbegrenzt</div>
+                </div>
+                <div class="col-md-4 d-flex align-items-center">
+                    <div class="form-check form-switch">
+                        <input type="checkbox" class="form-check-input" name="AllowParallelRuns" value="true" id="allowParallel" @(Model.AllowParallelRuns ? "checked" : "") />
+                        <input type="hidden" name="AllowParallelRuns" value="false" />
+                        <label class="form-check-label" for="allowParallel">Mehrere Läufe gleichzeitig erlauben</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="mb-0"><i class="bi bi-sliders me-2"></i>Parameter</h4>
+        <span class="small text-muted">
+            @if (Model.ParametersReadAt.HasValue)
+            {
+                <span>Zuletzt aus dem Skript gelesen: @Model.ParametersReadAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+            }
+        </span>
+    </div>
+    <p class="text-muted small">
+        <strong>Fest</strong>: der Standardwert wird immer übergeben und ist beim Start nicht änderbar (z.&nbsp;B. ein Log-Pfad).
+        <strong>Ausblenden</strong>: der Parameter wird weder angezeigt noch übergeben — das Skript nutzt seinen eigenen Standard.
+    </p>
+
+    <div id="paramList">
+        @for (var i = 0; i < Model.Parameters.Count; i++)
+        {
+            <partial name="_ParameterEditor" model="Model.Parameters[i]" view-data='new ViewDataDictionary(ViewData) { ["Index"] = i.ToString() }' />
+        }
+    </div>
+    @if (Model.Parameters.Count == 0)
+    {
+        <p class="text-muted" id="noParams">Keine Parameter. Das Skript wird ohne Argumente gestartet.</p>
+    }
+
+    <template id="paramTemplate">
+        <partial name="_ParameterEditor" model="new ScriptParameterDefinition()" view-data='new ViewDataDictionary(ViewData) { ["Index"] = "__IDX__" }' />
+    </template>
+
+    <div class="d-flex gap-2 mb-4">
+        <button type="button" class="btn btn-outline-secondary" id="btnAddParam"><i class="bi bi-plus-lg me-1"></i>Parameter hinzufügen</button>
+        <button type="submit" class="btn btn-primary ms-auto"><i class="bi bi-save me-1"></i>Speichern</button>
+    </div>
+</form>
+
+@if (source != null)
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <a class="text-decoration-none" data-bs-toggle="collapse" href="#sourceView"><i class="bi bi-code-slash me-2"></i>Skriptinhalt anzeigen</a>
+        </div>
+        <div class="collapse" id="sourceView">
+            <pre class="script-source mb-0">@source</pre>
+        </div>
+    </div>
+}
+
+<div class="card border-danger mb-4">
+    <div class="card-body d-flex justify-content-between align-items-center">
+        <span class="text-muted small">Entfernt nur den Eintrag aus der WebUI. Die Skriptdatei und der Verlauf bleiben erhalten.</span>
+        <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('Skript-Eintrag wirklich entfernen?');">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash me-1"></i>Entfernen</button>
+        </form>
+    </div>
+</div>
+
+<partial name="_PathBrowserModal" />
+
+@section Scripts {
+<script>
+(function () {
+    const list = document.getElementById('paramList');
+
+    function applyType(card) {
+        const type = card.querySelector('.param-type').value;
+        card.querySelectorAll('[data-show-for]').forEach(el => {
+            el.classList.toggle('d-none', !el.dataset.showFor.split(' ').includes(type));
+        });
+    }
+
+    list.querySelectorAll('.param-editor').forEach(applyType);
+    list.addEventListener('change', ev => {
+        if (ev.target.classList.contains('param-type')) applyType(ev.target.closest('.param-editor'));
+    });
+    list.addEventListener('click', ev => {
+        const btn = ev.target.closest('.btn-remove-param');
+        if (btn) btn.closest('.param-editor').remove();
+    });
+
+    let next = 1000;
+    document.getElementById('btnAddParam').addEventListener('click', () => {
+        const html = document.getElementById('paramTemplate').innerHTML.replaceAll('__IDX__', String(next++));
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html.trim();
+        const card = wrapper.firstElementChild;
+        list.appendChild(card);
+        applyType(card);
+        document.getElementById('noParams')?.remove();
+        card.querySelector('input[name$=".Name"]').focus();
+    });
+})();
+</script>
+}

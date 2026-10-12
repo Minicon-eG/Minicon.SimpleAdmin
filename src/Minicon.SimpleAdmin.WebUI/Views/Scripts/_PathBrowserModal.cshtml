@@ -1,0 +1,144 @@
+@* Server-side file/folder chooser. Buttons with data-path-browse="file|folder" and
+   data-target="#inputId" (optional data-extension=".ps1") open it and write the chosen
+   path into the target input. Lists the WebUI host's file system via /api/scripts/browse. *@
+<div class="modal fade" id="pathBrowserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-folder2-open me-2"></i><span id="pbTitle">Datei auswählen</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group input-group-sm mb-2">
+                    <button class="btn btn-outline-secondary" type="button" id="pbUp" title="Übergeordnetes Verzeichnis"><i class="bi bi-arrow-up"></i></button>
+                    <button class="btn btn-outline-secondary" type="button" id="pbRoots" title="Laufwerke"><i class="bi bi-hdd"></i></button>
+                    <input type="text" class="form-control font-monospace" id="pbPath" placeholder="Pfad eingeben und Enter" />
+                    <button class="btn btn-outline-secondary" type="button" id="pbGo">Öffnen</button>
+                </div>
+                <div class="alert alert-danger py-2 small d-none" id="pbError"></div>
+                <div class="list-group list-group-flush small path-browser-list" id="pbList"></div>
+                <div class="text-muted small mt-2">Es wird das Dateisystem des WebUI-Servers angezeigt — dort läuft auch das Skript.</div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <div class="small text-muted font-monospace text-truncate" style="max-width: 60%;" id="pbSelection"></div>
+                <div>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-primary" id="pbChoose" disabled>Übernehmen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const browseUrl = '@Url.Content("~/api/scripts/browse")';
+    const modalEl = document.getElementById('pathBrowserModal');
+    let modal = null;
+    let state = { mode: 'file', extension: '', path: null, parent: null, selection: null, onSelect: null };
+
+    const el = id => document.getElementById(id);
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    function select(path) {
+        state.selection = path;
+        el('pbSelection').textContent = path || '';
+        el('pbChoose').disabled = !path;
+    }
+
+    async function load(path) {
+        el('pbError').classList.add('d-none');
+        const params = new URLSearchParams({ mode: state.mode });
+        if (path) params.set('path', path);
+        if (state.extension) params.set('extension', state.extension);
+        el('pbList').innerHTML = '<div class="text-muted p-2">Lade …</div>';
+        try {
+            const res = await fetch(browseUrl + '?' + params.toString());
+            const data = await res.json();
+            if (!res.ok) {
+                el('pbError').textContent = data.message || 'Fehler beim Lesen des Verzeichnisses.';
+                el('pbError').classList.remove('d-none');
+                if (!state.path) render({ path: null, parent: null, entries: (data.roots || []).map(r => ({ name: r, fullPath: r, isDirectory: true })) });
+                return;
+            }
+            render(data);
+        } catch (e) {
+            el('pbError').textContent = 'Fehler: ' + e.message;
+            el('pbError').classList.remove('d-none');
+        }
+    }
+
+    function render(data) {
+        state.path = data.path;
+        state.parent = data.parent;
+        el('pbPath').value = data.path || '';
+        el('pbUp').disabled = !data.parent;
+        if (state.mode === 'folder') select(data.path);
+        else if (state.selection && data.path && !state.selection.startsWith(data.path)) select(null);
+
+        const list = el('pbList');
+        if (!data.entries || data.entries.length === 0) {
+            list.innerHTML = '<div class="text-muted p-2">(leer)</div>';
+            return;
+        }
+        list.innerHTML = data.entries.map(e => `
+            <button type="button" class="list-group-item list-group-item-action d-flex align-items-center gap-2 py-1"
+                    data-path="${esc(e.fullPath)}" data-dir="${e.isDirectory}">
+                <i class="bi ${e.isDirectory ? 'bi-folder-fill text-warning' : 'bi-file-earmark'}"></i>
+                <span class="text-truncate">${esc(e.name)}</span>
+                ${e.isDirectory ? '' : `<span class="ms-auto text-muted">${e.modified ? new Date(e.modified).toLocaleString('de-DE') : ''}</span>`}
+            </button>`).join('') + (data.truncated ? '<div class="text-muted p-2">… Liste gekürzt</div>' : '');
+    }
+
+    el('pbList').addEventListener('click', ev => {
+        const item = ev.target.closest('[data-path]');
+        if (!item) return;
+        el('pbList').querySelectorAll('.active').forEach(a => a.classList.remove('active'));
+        if (item.dataset.dir === 'true') {
+            if (state.mode === 'folder') { item.classList.add('active'); select(item.dataset.path); }
+            else load(item.dataset.path);
+        } else {
+            item.classList.add('active');
+            select(item.dataset.path);
+        }
+    });
+    el('pbList').addEventListener('dblclick', ev => {
+        const item = ev.target.closest('[data-path]');
+        if (!item) return;
+        if (item.dataset.dir === 'true') { if (state.mode === 'folder') load(item.dataset.path); }
+        else { select(item.dataset.path); el('pbChoose').click(); }
+    });
+    el('pbUp').addEventListener('click', () => state.parent && load(state.parent));
+    el('pbRoots').addEventListener('click', () => load(null));
+    el('pbGo').addEventListener('click', () => load(el('pbPath').value.trim()));
+    el('pbPath').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); load(el('pbPath').value.trim()); } });
+    el('pbChoose').addEventListener('click', () => {
+        if (!state.selection) return;
+        state.onSelect && state.onSelect(state.selection);
+        modal.hide();
+    });
+
+    window.SaPathBrowser = {
+        open(opts) {
+            state = { mode: opts.mode || 'file', extension: opts.extension || '', path: null, parent: null, selection: null, onSelect: opts.onSelect };
+            el('pbTitle').textContent = state.mode === 'folder' ? 'Ordner auswählen' : 'Datei auswählen';
+            select(state.mode === 'file' && opts.start ? opts.start : null);
+            modal = modal || new bootstrap.Modal(modalEl);
+            modal.show();
+            load(opts.start || null);
+        }
+    };
+
+    document.addEventListener('click', ev => {
+        const btn = ev.target.closest('[data-path-browse]');
+        if (!btn) return;
+        const target = document.querySelector(btn.dataset.target);
+        window.SaPathBrowser.open({
+            mode: btn.dataset.pathBrowse,
+            extension: btn.dataset.extension,
+            start: target ? target.value.trim() : '',
+            onSelect: p => { if (target) { target.value = p; target.dispatchEvent(new Event('change', { bubbles: true })); } }
+        });
+    });
+})();
+</script>

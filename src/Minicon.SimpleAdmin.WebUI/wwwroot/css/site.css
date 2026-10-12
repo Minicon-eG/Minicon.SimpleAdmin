@@ -534,3 +534,34 @@ footer {
     font-size: 2.5rem;
     margin-bottom: 0.5rem;
 }
+
+/* ---------- Scripts (PowerShell runner) ---------- */
+.script-console {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-family: SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    padding: 0.75rem;
+    min-height: 420px;
+    max-height: 70vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-bottom-left-radius: var(--bs-card-inner-border-radius);
+    border-bottom-right-radius: var(--bs-card-inner-border-radius);
+}
+.script-console .line-time {
+    color: #6a6a6a;
+    margin-right: 0.75rem;
+    user-select: none;
+}
+.script-console .line-error { color: #f48771; }
+.script-source {
+    background: #f8f9fa;
+    font-size: 0.8rem;
+    max-height: 60vh;
+    overflow: auto;
+    padding: 1rem;
+}
+.path-browser-list { max-height: 50vh; overflow: auto; }

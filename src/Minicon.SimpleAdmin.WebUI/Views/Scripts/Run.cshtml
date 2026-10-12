@@ -1,0 +1,251 @@
+@model Minicon.SimpleAdmin.WebUI.Controllers.ScriptRunFormViewModel
+@using Minicon.SimpleAdmin.WebUI.Models.Scripts
+@using Minicon.SimpleAdmin.WebUI.Services.Scripts
+@{
+    var script = Model.Script;
+    ViewData["Title"] = $"Ausführen: {script.Name}";
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="Index">Skripte</a></li>
+        <li class="breadcrumb-item"><a asp-action="Edit" asp-route-id="@script.Id">@script.Name</a></li>
+        <li class="breadcrumb-item active">Ausführen</li>
+    </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+    <h1 class="mb-0"><i class="bi bi-play-circle me-2"></i>@script.Name</h1>
+    <a class="btn btn-outline-secondary btn-sm" asp-action="Edit" asp-route-id="@script.Id"><i class="bi bi-pencil me-1"></i>Parameter anpassen</a>
+</div>
+@if (!string.IsNullOrWhiteSpace(script.Description))
+{
+    <p class="lead fs-6">@script.Description</p>
+}
+<div class="small text-muted font-monospace mb-3">@script.Path</div>
+
+@if (!Model.ScriptExists)
+{
+    <div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Die Skriptdatei wurde nicht gefunden.</div>
+}
+@if (Model.ActiveRun != null && !script.AllowParallelRuns)
+{
+    <div class="alert alert-info">
+        <i class="bi bi-arrow-repeat me-2"></i>Das Skript läuft gerade (gestartet von @(Model.ActiveRun.StartedBy ?? "–") um @Model.ActiveRun.StartedAt.ToLocalTime().ToString("HH:mm:ss")).
+        <a asp-action="Output" asp-route-id="@Model.ActiveRun.Id" class="alert-link">Ausgabe ansehen</a>
+    </div>
+}
+@if (Model.PreviousValues != null)
+{
+    <div class="alert alert-secondary py-2 small"><i class="bi bi-arrow-counterclockwise me-2"></i>Die Werte des vorherigen Laufs wurden übernommen.</div>
+}
+
+<form id="runForm" novalidate>
+    <div class="card mb-3">
+        <div class="card-header"><i class="bi bi-sliders me-2"></i>Parameter</div>
+        <div class="card-body">
+            @if (!script.Parameters.Any(p => !p.Hidden))
+            {
+                <p class="text-muted mb-0">Dieses Skript hat keine Parameter.</p>
+            }
+            <div class="row g-3">
+                @foreach (var p in script.Parameters.Where(p => !p.Hidden))
+                {
+                    var values = ScriptFormValues.Initial(p, Model.PreviousValues);
+                    var value = values.FirstOrDefault() ?? "";
+                    var id = "p_" + p.Name;
+                    var wide = p.Type is ScriptParameterType.List or ScriptParameterType.File or ScriptParameterType.Folder or ScriptParameterType.Text;
+                    <div class="@(wide ? "col-lg-6" : "col-md-6 col-lg-3")">
+                        @if (p.Type == ScriptParameterType.Switch)
+                        {
+                            var on = p.Fixed ? p.DefaultValue == "true" : values.Any(v => v.Equals("true", StringComparison.OrdinalIgnoreCase));
+                            <div class="form-check form-switch mt-md-4">
+                                <input type="checkbox" class="form-check-input" id="@id" data-param="@p.Name" data-kind="switch"
+                                       @(on ? "checked" : "") @(p.Fixed ? "disabled" : "") />
+                                <label class="form-check-label fw-semibold" for="@id">
+                                    @p.DisplayLabel @if (p.Fixed) { <i class="bi bi-lock text-muted" title="Fest vorgegeben"></i> }
+                                </label>
+                            </div>
+                        }
+                        else
+                        {
+                            <label class="form-label fw-semibold mb-1" for="@id">
+                                @p.DisplayLabel@(p.Required ? " *" : "")
+                                @if (p.Fixed) { <i class="bi bi-lock text-muted" title="Fest vorgegeben"></i> }
+                                <span class="text-muted fw-normal small font-monospace ms-1">-@p.Name</span>
+                            </label>
+                            @if (p.Fixed)
+                            {
+                                <input type="text" class="form-control font-monospace" value="@p.DefaultValue" readonly />
+                            }
+                            else
+                            {
+                                switch (p.Type)
+                                {
+                                    case ScriptParameterType.Number:
+                                        <input type="number" step="any" class="form-control" id="@id" data-param="@p.Name" value="@value"
+                                               min="@p.Min?.ToString(inv)" max="@p.Max?.ToString(inv)" @(p.Required ? "required" : "") />
+                                        break;
+                                    case ScriptParameterType.Date:
+                                        <input type="date" class="form-control" id="@id" data-param="@p.Name" value="@value" @(p.Required ? "required" : "") />
+                                        break;
+                                    case ScriptParameterType.Time:
+                                        <input type="time" class="form-control" id="@id" data-param="@p.Name" value="@value" @(p.Required ? "required" : "") />
+                                        break;
+                                    case ScriptParameterType.DateTime:
+                                        <input type="datetime-local" class="form-control" id="@id" data-param="@p.Name" value="@value" @(p.Required ? "required" : "") />
+                                        break;
+                                    case ScriptParameterType.Choice when p.AllowMultiple:
+                                        <select class="form-select" id="@id" data-param="@p.Name" data-kind="multi" multiple size="@Math.Min(8, Math.Max(3, p.Choices.Count))">
+                                            @foreach (var c in p.Choices)
+                                            {
+                                                <option value="@c" selected="@values.Contains(c, StringComparer.OrdinalIgnoreCase)">@c</option>
+                                            }
+                                        </select>
+                                        <div class="form-text">Mehrfachauswahl mit Strg/Shift.</div>
+                                        break;
+                                    case ScriptParameterType.Choice:
+                                        <select class="form-select" id="@id" data-param="@p.Name" @(p.Required ? "required" : "")>
+                                            <option value="">@(p.Required ? "– bitte wählen –" : "– Standard des Skripts –")</option>
+                                            @foreach (var c in p.Choices)
+                                            {
+                                                <option value="@c" selected="@(c.Equals(value, StringComparison.OrdinalIgnoreCase))">@c</option>
+                                            }
+                                        </select>
+                                        break;
+                                    case ScriptParameterType.List:
+                                        <textarea class="form-control font-monospace" id="@id" data-param="@p.Name" rows="3"
+                                                  placeholder="Ein Wert pro Zeile (oder durch Komma getrennt)" @(p.Required ? "required" : "")>@string.Join("\n", values)</textarea>
+                                        break;
+                                    case ScriptParameterType.File:
+                                    case ScriptParameterType.Folder:
+                                        <div class="input-group">
+                                            <input type="text" class="form-control font-monospace" id="@id" data-param="@p.Name" value="@value" @(p.Required ? "required" : "") />
+                                            <button type="button" class="btn btn-outline-secondary" data-path-browse="@(p.Type == ScriptParameterType.Folder ? "folder" : "file")"
+                                                    data-target="#@id" title="@(p.Type == ScriptParameterType.Folder ? "Ordner" : "Datei") auf dem Server auswählen">
+                                                <i class="bi bi-folder2-open"></i>
+                                            </button>
+                                        </div>
+                                        break;
+                                    default:
+                                        <input type="text" class="form-control" id="@id" data-param="@p.Name" value="@value" @(p.Required ? "required" : "") />
+                                        break;
+                                }
+                            }
+                        }
+                        @if (!string.IsNullOrWhiteSpace(p.Description))
+                        {
+                            <div class="form-text">@p.Description</div>
+                        }
+                        @if (!p.Fixed && string.IsNullOrEmpty(p.DefaultValue) && !string.IsNullOrWhiteSpace(p.DefaultExpression))
+                        {
+                            <div class="form-text">Leer = Standard des Skripts: <code>@p.DefaultExpression</code></div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="small text-muted mb-1">Entspricht dem Aufruf:</div>
+            <code id="cmdPreview" class="d-block text-break"></code>
+        </div>
+    </div>
+
+    <div class="alert alert-danger d-none" id="runErrors"></div>
+
+    <div class="d-flex gap-2 mb-4">
+        <button type="submit" class="btn btn-success btn-lg" id="btnRun" @(Model.ScriptExists ? "" : "disabled")>
+            <i class="bi bi-play-fill me-1"></i>Skript starten
+        </button>
+        <a class="btn btn-outline-secondary btn-lg" asp-action="Index">Abbrechen</a>
+    </div>
+</form>
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-clock-history me-2"></i>Letzte Läufe dieses Skripts</div>
+    <div class="card-body">
+        <partial name="_RunHistoryTable" model="Model.RecentRuns" view-data='new ViewDataDictionary(ViewData) { ["ShowScript"] = false }' />
+    </div>
+</div>
+
+<partial name="_PathBrowserModal" />
+
+@section Scripts {
+<script>
+(function () {
+    const form = document.getElementById('runForm');
+    const startUrl = '@Url.Content($"~/api/scripts/{Uri.EscapeDataString(script.Id)}/runs")';
+    const scriptName = @Json.Serialize(System.IO.Path.GetFileName(script.Path));
+    const fixedArgs = @Json.Serialize(script.Parameters.Where(p => p.Fixed && !p.Hidden).Select(p => new { name = p.Name, type = p.Type.ToString(), value = p.DefaultValue }));
+
+    function collect() {
+        const values = {};
+        form.querySelectorAll('[data-param]').forEach(el => {
+            const name = el.dataset.param;
+            if (el.dataset.kind === 'switch') values[name] = [el.checked ? 'true' : 'false'];
+            else if (el.dataset.kind === 'multi') values[name] = Array.from(el.selectedOptions).map(o => o.value);
+            else values[name] = [el.value];
+        });
+        return values;
+    }
+
+    function quote(v) { if (/^-?\d+(\.\d+)?$/.test(v)) return v; return /^[\w.:\\\/-]+$/.test(v) ? `"${v}"` : `'${String(v).replace(/'/g, "''")}'`; }
+
+    function preview() {
+        const parts = ['.\\' + scriptName];
+        const values = collect();
+        form.querySelectorAll('[data-param]').forEach(el => {
+            const name = el.dataset.param;
+            const v = values[name];
+            if (el.dataset.kind === 'switch') { if (v[0] === 'true') parts.push('-' + name); return; }
+            let items = el.dataset.kind === 'multi' ? v : (el.tagName === 'TEXTAREA' ? v[0].split(/[\n,;]/) : v);
+            items = items.map(s => s.trim()).filter(s => s);
+            if (items.length === 0) return;
+            parts.push('-' + name + ' ' + (items.length > 1 || el.tagName === 'TEXTAREA' || el.dataset.kind === 'multi'
+                ? '@@(' + items.map(quote).join(', ') + ')' : quote(items[0])));
+        });
+        fixedArgs.forEach(f => {
+            if (f.type === 'Switch') { if (f.value === 'true') parts.push('-' + f.name); }
+            else if (f.value) parts.push('-' + f.name + ' ' + quote(f.value));
+        });
+        document.getElementById('cmdPreview').textContent = parts.join(' ');
+    }
+
+    form.addEventListener('input', preview);
+    form.addEventListener('change', preview);
+    preview();
+
+    form.addEventListener('submit', async ev => {
+        ev.preventDefault();
+        const errors = document.getElementById('runErrors');
+        errors.classList.add('d-none');
+        if (!form.checkValidity()) { form.classList.add('was-validated'); return; }
+
+        const btn = document.getElementById('btnRun');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Wird gestartet …';
+        try {
+            const res = await fetch(startUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ values: collect() })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.outputUrl) { window.location.href = data.outputUrl; return; }
+            const list = (data.errors || []).map(e => `<li>${e.replace(/</g, '&lt;')}</li>`).join('');
+            errors.innerHTML = `<strong>${(data.message || 'Fehler beim Starten.').replace(/</g, '&lt;')}</strong>${list ? `<ul class="mb-0 mt-2">${list}</ul>` : ''}`;
+            errors.classList.remove('d-none');
+        } catch (e) {
+            errors.textContent = 'Fehler: ' + e.message;
+            errors.classList.remove('d-none');
+        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Skript starten';
+    });
+})();
+</script>
+}

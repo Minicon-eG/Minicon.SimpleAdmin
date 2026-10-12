@@ -521,6 +521,7 @@
                 </li>
                 <li><a href="#biztalk" class="toc-level-1">15. BizTalk-Überwachung</a></li>
                 <li><a href="#filemonitoring" class="toc-level-1">16. Datei-/Protokollüberwachung</a></li>
+                <li><a href="#scripts" class="toc-level-1">17. Skripte (PowerShell, WebUI)</a></li>
             </ul>
         </aside>
 
@@ -3032,6 +3033,26 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     Mit <em>Betriebszeiten</em> (<code>schedule</code>) wird außerhalb des Fensters nicht geprüft. Das Tool
                     meldet nur — es verschiebt oder löscht keine Dateien.
                 </div>
+            </section>
+
+            <section id="scripts">
+                <h2>17. Skripte (PowerShell, WebUI)</h2>
+                <p>Über den Menüpunkt <strong>Skripte</strong> der WebUI lassen sich PowerShell-Skripte starten (z.&nbsp;B. das Zurückkopieren von Dateien aus dem Archiv). Die Skripte laufen auf dem Rechner der WebUI unter deren Konto (IIS: Anwendungspool-Identität); der Worker ist nicht beteiligt.</p>
+                <ul>
+                    <li><strong>Hinzufügen:</strong> <code>.ps1</code> hochladen oder einen Pfad auf dem Server wählen. Parameter werden aus <code>param()</code> und der Hilfe (<code>.PARAMETER</code>) gelesen, ohne das Skript auszuführen.</li>
+                    <li><strong>Eingabefelder:</strong> Datum (Datumsauswahl), Uhrzeit, Schalter (<code>[switch]</code>), Auswahlliste (<code>[ValidateSet]</code>), Liste (<code>[string[]]</code>), Zahl, Datei-/Ordnerauswahl auf dem Server. Alles nachträglich anpassbar; Parameter können fest vorgegeben oder ausgeblendet werden.</li>
+                    <li><strong>Ausführen:</strong> Live-Ausgabe, Abbrechen, erneut mit gleichen Werten, Log-Download. Jeder Lauf wird mit Benutzer, Parametern, Dauer und Exit-Code protokolliert. Exit-Code ≠ 0 = fehlgeschlagen.</li>
+                </ul>
+                <p>Die Funktion ist <strong>standardmäßig aktiv</strong> und wird in der <code>appsettings.json</code> der WebUI gesteuert, nicht in <code>config.json</code>:</p>
+                <pre><code>"ScriptRunner": {
+  "Enabled": true,
+  "RequiredRole": "DOMAIN\\SimpleAdmin-Skripte",
+  "AllowedDirectories": [ "D:\\Skripte" ],
+  "BrowseRoots": [ "D:\\" ],
+  "PowerShellPath": "powershell.exe",
+  "MaxConcurrentRuns": 4
+}</code></pre>
+                <p>Skriptdefinitionen liegen in <code>scripts.json</code> neben der <code>config.json</code>, hochgeladene Skripte unter <code>scripts/</code>, Verlauf und Logs unter <code>script-runs/</code>.</p>
             </section>
 
             <a href="./" class="back-link">← Zurück zur Übersicht</a>

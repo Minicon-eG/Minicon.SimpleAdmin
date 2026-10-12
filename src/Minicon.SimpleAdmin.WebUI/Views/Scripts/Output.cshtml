@@ -1,0 +1,154 @@
+@model Minicon.SimpleAdmin.WebUI.Models.Scripts.ScriptRun
+@{
+    ViewData["Title"] = $"Lauf: {Model.ScriptName}";
+    var scriptExists = ViewData["ScriptExists"] as bool? ?? false;
+}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="Index">Skripte</a></li>
+        @if (scriptExists)
+        {
+            <li class="breadcrumb-item"><a asp-action="Run" asp-route-id="@Model.ScriptId">@Model.ScriptName</a></li>
+        }
+        <li class="breadcrumb-item active">Lauf @Model.StartedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</li>
+    </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h1 class="mb-0 d-flex align-items-center gap-3">
+        <span><i class="bi bi-terminal me-2"></i>@Model.ScriptName</span>
+        <span id="statusBadge" class="fs-6"><partial name="_RunStatusBadge" model="Model.Status" /></span>
+    </h1>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-danger @(Model.IsRunning ? "" : "d-none")" id="btnCancel"><i class="bi bi-stop-fill me-1"></i>Abbrechen</button>
+        @if (scriptExists)
+        {
+            <a class="btn btn-outline-primary" asp-action="Run" asp-route-id="@Model.ScriptId" asp-route-fromRun="@Model.Id">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Mit diesen Werten erneut
+            </a>
+        }
+        <a class="btn btn-outline-secondary" asp-action="Log" asp-route-id="@Model.Id"><i class="bi bi-download me-1"></i>Log</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-xl-3 mb-3">
+        <div class="card h-100">
+            <div class="card-body small">
+                <dl class="mb-0">
+                    <dt>Gestartet von</dt>
+                    <dd>@(Model.StartedBy ?? "–")</dd>
+                    <dt>Start</dt>
+                    <dd>@Model.StartedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</dd>
+                    <dt>Dauer</dt>
+                    <dd id="duration">@Model.Duration.ToString(@"hh\:mm\:ss")</dd>
+                    <dt>Exit-Code</dt>
+                    <dd id="exitCode">@(Model.ExitCode?.ToString() ?? "–")</dd>
+                    @if (!string.IsNullOrEmpty(Model.CancelledBy))
+                    {
+                        <dt>Abgebrochen von</dt>
+                        <dd>@Model.CancelledBy</dd>
+                    }
+                    <dt>Skript</dt>
+                    <dd class="font-monospace text-break">@Model.ScriptPath</dd>
+                    <dt>Parameter</dt>
+                    <dd class="mb-0">
+                        @if (!Model.Arguments.Any())
+                        {
+                            <span class="text-muted">keine</span>
+                        }
+                        @foreach (var a in Model.Arguments)
+                        {
+                            <div class="font-monospace text-break">-@a.Key <span class="text-primary">@a.Value</span></div>
+                        }
+                    </dd>
+                </dl>
+                <div class="alert alert-danger small mt-3 mb-0 @(string.IsNullOrEmpty(Model.Error) ? "d-none" : "")" id="runError">@Model.Error</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-9 mb-3">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center py-1">
+                <span class="small"><i class="bi bi-terminal me-2"></i>Ausgabe <span class="text-muted" id="lineCount"></span></span>
+                <div class="form-check form-switch m-0 small">
+                    <input class="form-check-input" type="checkbox" id="autoScroll" checked />
+                    <label class="form-check-label" for="autoScroll">Automatisch scrollen</label>
+                </div>
+            </div>
+            <div class="script-console" id="console"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const outputUrl = '@Url.Content($"~/api/scripts/runs/{Uri.EscapeDataString(Model.Id)}")';
+    const consoleEl = document.getElementById('console');
+    const badges = {
+        Running: ['bg-primary', 'bi-arrow-repeat'], Succeeded: ['bg-success', 'bi-check-circle'],
+        Failed: ['bg-danger', 'bi-x-circle'], Cancelled: ['bg-secondary', 'bi-slash-circle'],
+        TimedOut: ['bg-warning text-dark', 'bi-hourglass-bottom'], Interrupted: ['bg-warning text-dark', 'bi-exclamation-circle']
+    };
+    let next = 0, total = 0, running = true;
+
+    function fmtDuration(s) {
+        const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+        return [h, m, sec].map(n => String(n).padStart(2, '0')).join(':');
+    }
+
+    function append(lines, skipped) {
+        const frag = document.createDocumentFragment();
+        if (skipped > 0) {
+            const d = document.createElement('div');
+            d.className = 'text-warning';
+            d.textContent = `… ${skipped} ältere Zeilen nur im Log (Download)`;
+            frag.appendChild(d);
+        }
+        for (const l of lines) {
+            const d = document.createElement('div');
+            if (l.e) d.className = 'line-error';
+            const ts = document.createElement('span');
+            ts.className = 'line-time';
+            ts.textContent = new Date(l.t).toLocaleTimeString('de-DE');
+            d.appendChild(ts);
+            d.appendChild(document.createTextNode(l.x));
+            frag.appendChild(d);
+        }
+        consoleEl.appendChild(frag);
+        total += lines.length;
+        document.getElementById('lineCount').textContent = `(${total} Zeilen)`;
+        if (document.getElementById('autoScroll').checked) consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    async function poll() {
+        try {
+            const res = await fetch(outputUrl + '?from=' + next, { cache: 'no-store' });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.lines.length || data.skipped) append(data.lines, data.skipped);
+                next = data.next;
+                document.getElementById('duration').textContent = fmtDuration(data.durationSeconds);
+                document.getElementById('exitCode').textContent = data.exitCode ?? '–';
+                if (data.error) { const e = document.getElementById('runError'); e.textContent = data.error; e.classList.remove('d-none'); }
+                const [css, icon] = badges[data.status] || badges.Interrupted;
+                document.getElementById('statusBadge').innerHTML = `<span class="badge ${css}"><i class="bi ${icon} me-1"></i>${data.statusText}</span>`;
+                running = data.running;
+                document.getElementById('btnCancel').classList.toggle('d-none', !running);
+                if (data.lines.length >= 5000) { setTimeout(poll, 50); return; }
+            }
+        } catch (e) { /* retry */ }
+        if (running) setTimeout(poll, 1000);
+    }
+
+    document.getElementById('btnCancel').addEventListener('click', async () => {
+        if (!confirm('Skript wirklich abbrechen? Der Prozess wird sofort beendet.')) return;
+        await fetch(outputUrl + '/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    });
+
+    poll();
+})();
+</script>
+}

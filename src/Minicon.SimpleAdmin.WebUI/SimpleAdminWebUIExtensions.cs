@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Minicon.SimpleAdmin.Services;
 using Minicon.SimpleAdmin.WebUI.Services;
+using Minicon.SimpleAdmin.WebUI.Services.Scripts;
 
 namespace Minicon.SimpleAdmin.WebUI;
 
@@ -92,7 +93,34 @@ public static class SimpleAdminWebUIExtensions
         services.AddSingleton<IAcknowledgeService>(sp =>
             new AcknowledgeService(acknowledgeDirectory, sp.GetRequiredService<ILogger<AcknowledgeService>>()));
 
+        AddScriptRunner(services, configuration, acknowledgeDirectory);
+
         return services;
+    }
+
+    /// <summary>
+    /// PowerShell script runner ("Skripte"). Definitions live in scripts.json next to config.json,
+    /// uploads in &lt;ConfigPath&gt;/scripts, run history + logs in &lt;ConfigPath&gt;/script-runs.
+    /// On by default; a host opts out with <c>ScriptRunner:Enabled = false</c>.
+    /// </summary>
+    private static void AddScriptRunner(IServiceCollection services, IConfiguration configuration, string configDirectory)
+    {
+        var options = configuration.GetSection(ScriptRunnerOptions.SectionName).Get<ScriptRunnerOptions>() ?? new ScriptRunnerOptions();
+        var uploadDirectory = Path.GetFullPath(string.IsNullOrWhiteSpace(options.UploadDirectory)
+            ? Path.Combine(configDirectory, "scripts")
+            : options.UploadDirectory);
+        var logDirectory = Path.GetFullPath(string.IsNullOrWhiteSpace(options.RunLogDirectory)
+            ? Path.Combine(configDirectory, "script-runs")
+            : options.RunLogDirectory);
+
+        services.AddSingleton(options);
+        services.AddSingleton(new ScriptPathPolicy(uploadDirectory, options.AllowedDirectories, options.BrowseRoots));
+        services.AddSingleton(new ScriptDefinitionStore(Path.Combine(configDirectory, "scripts.json")));
+        services.AddSingleton(sp => new ScriptRunService(
+            options,
+            sp.GetRequiredService<ScriptPathPolicy>(),
+            logDirectory,
+            sp.GetRequiredService<ILogger<ScriptRunService>>()));
     }
 
     /// <summary>
@@ -189,6 +217,19 @@ public static class SimpleAdminWebUIExtensions
         }
 
         app.UseAuthorization();
+
+        var scriptRunner = app.Services.GetRequiredService<ScriptRunnerOptions>();
+        if (scriptRunner.Enabled)
+        {
+            app.Logger.LogInformation(
+                "SimpleAdmin WebUI: PowerShell script runner is ENABLED ({PowerShell}, allowed directories: {Allowed}, required role: {Role}).",
+                scriptRunner.EffectivePowerShellPath,
+                scriptRunner.AllowedDirectories.Count == 0 ? "any" : string.Join(", ", scriptRunner.AllowedDirectories),
+                string.IsNullOrWhiteSpace(scriptRunner.RequiredRole) ? "-" : scriptRunner.RequiredRole);
+            if (!IsAuthenticationEnabled(app.Configuration))
+                app.Logger.LogWarning(
+                    "SimpleAdmin WebUI: the script runner is enabled while authentication is DISABLED — anyone reaching the WebUI can run the registered scripts.");
+        }
 
         app.MapControllerRoute(
             name: "default",

@@ -1,0 +1,15 @@
+@model Minicon.SimpleAdmin.WebUI.Models.Scripts.ScriptRunStatus
+@using Minicon.SimpleAdmin.WebUI.Models.Scripts
+@using Minicon.SimpleAdmin.WebUI.Services.Scripts
+@{
+    var (css, icon) = Model switch
+    {
+        ScriptRunStatus.Running => ("bg-primary", "bi-arrow-repeat"),
+        ScriptRunStatus.Succeeded => ("bg-success", "bi-check-circle"),
+        ScriptRunStatus.Failed => ("bg-danger", "bi-x-circle"),
+        ScriptRunStatus.Cancelled => ("bg-secondary", "bi-slash-circle"),
+        ScriptRunStatus.TimedOut => ("bg-warning text-dark", "bi-hourglass-bottom"),
+        _ => ("bg-warning text-dark", "bi-exclamation-circle")
+    };
+}
+<span class="badge @css script-status-badge" data-status="@Model"><i class="bi @icon me-1"></i>@ScriptRunService.StatusText(Model)</span>

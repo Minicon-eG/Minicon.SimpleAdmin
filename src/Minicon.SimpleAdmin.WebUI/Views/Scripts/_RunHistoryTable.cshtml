@@ -1,0 +1,47 @@
+@model IEnumerable<Minicon.SimpleAdmin.WebUI.Models.Scripts.ScriptRun>
+@{
+    var showScript = ViewData["ShowScript"] as bool? ?? true;
+}
+@if (!Model.Any())
+{
+    <p class="text-muted mb-0">Noch keine Läufe.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead>
+                <tr class="small text-muted">
+                    <th>Status</th>
+                    @if (showScript) { <th>Skript</th> }
+                    <th>Parameter</th>
+                    <th>Gestartet von</th>
+                    <th>Start</th>
+                    <th>Dauer</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var run in Model)
+                {
+                    <tr>
+                        <td><partial name="_RunStatusBadge" model="run.Status" /></td>
+                        @if (showScript) { <td>@run.ScriptName</td> }
+                        <td class="small font-monospace text-truncate" style="max-width: 420px;"
+                            title="@string.Join(" ", run.Arguments.Select(a => $"-{a.Key} {a.Value}"))">
+                            @string.Join(" ", run.Arguments.Select(a => $"-{a.Key} {a.Value}"))
+                        </td>
+                        <td class="small">@(run.StartedBy ?? "–")</td>
+                        <td class="small text-nowrap">@run.StartedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</td>
+                        <td class="small text-nowrap">@(run.Duration.TotalHours >= 1 ? run.Duration.ToString(@"h\:mm\:ss") : run.Duration.ToString(@"m\:ss"))</td>
+                        <td class="text-end text-nowrap">
+                            <a class="btn btn-sm btn-outline-secondary" asp-action="Output" asp-route-id="@run.Id" title="Ausgabe anzeigen">
+                                <i class="bi bi-card-text"></i>
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

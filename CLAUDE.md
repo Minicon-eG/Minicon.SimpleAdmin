@@ -28,7 +28,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.20.1`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.31.0`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
@@ -143,6 +143,7 @@ Razor Class Library. The host application provides only the entry point + appset
 | `/Servers` | `ServersController` | CRUD for server config + service types |
 | `/Settings` | `SettingsController` | History, Output, Features, Time Profile settings |
 | `/Documentation` | `DocumentationController` | Built-in docs page |
+| `/Scripts` | `ScriptsController` | PowerShell script runner (v2.31.0, see below) |
 
 ### REST API (all under `/api/...`)
 - `GET /api/status[/{id}][/metrics|/apppools|/services]` — `Api/StatusController`
@@ -150,11 +151,20 @@ Razor Class Library. The host application provides only the entry point + appset
 - `GET|POST|PUT|DELETE /api/acknowledges[/{id}|/server/{id}|/{id}/extend]` — `Api/AcknowledgesController`; `POST /api/acknowledges/bulk` (v2.28.0, `BulkAcknowledgeRequest`: `items[{serverId, problemId}]` + shared duration/comment/expiresAt, duplicates ignored, publishes once) backs the multi-select "Auswahl quittieren" on `Views/Problems/Index.cshtml`. Problems page (v2.30.0): default filter = open (unacknowledged); client-side filters status/severity/server/text kept in the query string (`?status=all&severity=Critical&server=…&q=…`), KPI tiles set filters, select-all/bulk act on visible rows only; styles under "Problems page" in `wwwroot/css/site.css`
 - `POST /api/sqlquerytest/{connection|query}` — `Api/SqlQueryTestController`
 - `POST /api/emailtest/{smtp|imap}` — `Api/EmailTestController`
+- `POST /api/scripts/{id}/runs`, `GET /api/scripts/runs/{runId}?from=n`, `POST /api/scripts/runs/{runId}/cancel`, `GET /api/scripts/browse?path=&mode=file|folder&extension=` — `Api/ScriptsApiController` (script runner, JSON-only POSTs)
 - `POST /api/notificationtest/send` — `Api/NotificationTestController` (resolves the notifier's `smtpRef` exactly like `NotificationService` and sends a test mail; accepts current form values so it works before saving)
 
 ### WebUI Services
 - **`StatusReaderService`** (10 s cache) — reads from `output.centralOutputPath` (if set) or `StatusDirectory` and **merges** all sources (v2.23.1): single `RuntimeStatus` files in the folder and its `status/` subfolder plus combined `*.status.json` files; per server/service the newest `LastUpdate` wins (tie: single file, it has history). Before v2.23.1 the first non-empty source won, so a central host whose local worker writes into the push folder only showed itself. **HTTP pull (v2.24.0)**: with `output.pullStatusOverHttp` (default true) it additionally fetches `{baseUrl}/status/{name}.status.json` of every active server from config.json in parallel (named HttpClient `SimpleAdminStatus`, 5 s timeout) and merges it the same way; an active server with neither HTTP nor file data gets a placeholder entry (service `erreichbarkeit`, status Unknown). A central WebUI thus shows all servers with no shared folder. **Empty-state diagnostics (v2.29.0)**: `GetDiagnostics()` → `StatusSourceDiagnostics` (config load state/path, `StatusDirectory` vs `centralOutputPath`, scanned dirs with file counts, pull setting, server counts + German reasons); `StatusController.Index` passes it via `ViewData["Diagnostics"]` only when no server is found. It merges active acknowledges into problem derivation, supplies `BaseUrl` from config for static HTML links. `CalculateServiceStatus` and `CalculateOverallStatus` consider all checker types (incl. certificates) for the no-metrics-fallback and the severity escalation.
 - **`ConfigurationService`** — in-memory config management with `HasChanges`, full CRUD, atomic save (temp file + `File.Move`), `MutateAndSaveAsync` wraps every mutation in a `SemaphoreSlim` write-lock + reverts via `ReloadFromFileAsync` if the save fails. Encryption is applied to a clone so `_config` is never mutated by the save path. Edit POST stays on the same page (does NOT redirect).
+
+### PowerShell Script Runner (v2.31.0)
+Start admin-registered PowerShell scripts from the WebUI (e.g. an archive copy script). Everything lives in the WebUI package (`Models/Scripts`, `Services/Scripts`, `Controllers/ScriptsController`, `Api/ScriptsApiController`, `Views/Scripts`); the worker is not involved.
+- **Host gate**: `appsettings.json` section `ScriptRunner` (`ScriptRunnerOptions`): `Enabled` (default **true**, opt-out per host), `RequiredRole`, `AllowedDirectories` (upload dir always allowed), `BrowseRoots`, `PowerShellPath` (default `powershell.exe` / `pwsh`), `MaxConcurrentRuns` (4), `MaxOutputLines`, `HistorySize`, `UploadDirectory` (`<ConfigPath>/scripts`), `RunLogDirectory` (`<ConfigPath>/script-runs`). Deliberately not in config.json — UI config editors must not be able to widen the limits or re-enable it on a host that opted out. `[ScriptRunnerGate]` enforces Enabled + role on MVC and API; the nav item only shows when enabled.
+- **Definitions** in `scripts.json` next to config.json (`ScriptDefinitionStore`, atomic write). Created by upload or server path; `PowerShellScriptParser` (pure C#, no PowerShell needed, never executes the script) reads the script-level `param()` block + comment-based help and infers the control (`ScriptParameterType`): switch/bool → Switch, ValidateSet → Choice (array → multi), numbers (+ValidateRange) → Number, arrays → List, datetime / `…Date` / help "YYYY-MM-DD" → Date (format detected, e.g. `dd.MM.yyyy`), `Time…`/"HH:mm" → Time, FileInfo/`…Path`/`…File` → File, DirectoryInfo/`…Folder`/`…Directory` → Folder; Mandatory, literal defaults, ValidatePattern. `MergeParameters` re-reads while keeping admin overrides (label/type/format/fixed/hidden/default). Per parameter `Fixed` (admin value, not editable) and `Hidden` (never passed).
+- **Execution** (`ScriptRunService`, singleton): `ScriptArgumentBuilder` validates the form values (required, choices, pattern, ranges, date/time formats) and encodes them Base64 into env `SIMPLEADMIN_SCRIPT_ARGS`; a fixed bootstrap (`-NoProfile -NonInteractive -ExecutionPolicy Bypass -OutputFormat Text -EncodedCommand`) decodes and splats them (`& $script @args`) → no command-line injection; arrays/int/switch keep their types. Exit code ≠ 0 → Failed. stdout/stderr captured line-wise (ANSI stripped), in memory (ring) + log file; timeout per script, cancel kills the process tree, one run per script unless `AllowParallelRuns`. Audit history `script-runs/history.json` (user, parameters, exit code); runs still "Running" at startup become `Interrupted` (IIS recycle kills child processes).
+- **UI**: Index (cards + recent runs), Create (upload / server path with file chooser), Edit (parameter editor, re-read, source preview), Run (generated form with date/time pickers, dropdowns, server file/folder chooser `_PathBrowserModal`, command preview), Output (live polling console, cancel, re-run with same values, log download).
+- **Tests**: parser/builder/run-service unit tests (`/bin/sh` via the `StartInfoFactory` seam); `ScriptRunPowerShellIntegrationTests` runs end-to-end when `pwsh` is on PATH or `SIMPLEADMIN_TEST_PWSH` points to it (no-op otherwise).
 
 ## Important Models (Shared)
 
@@ -200,6 +210,7 @@ Central long-term suppression of known event log noise, configured in `features.
 - Ignored events do **not** count against `warningCount`/`criticalCount` but are counted separately (`EventLogState.IgnoredCount`, badge "N Events (M ignoriert)").
 - The worker pre-filters rules by hostname (`EventLogChecker.RuleAppliesToServer`) and passes them to `CheckEventLogsAsync`. Matching helpers (`MatchesWildcard`, `IsEventIgnored`, `MatchesSourceFilters`) are `internal static` and unit-tested.
 - Per-log `includeSources`/`excludeSources` (wildcards, exclude wins) are applied before the ignore rules. PowerShell fetch limit is 500 events per log.
+- **Query hardening (v2.31.0)**: `EventLogChecker.BuildEventQueryScript` embeds the log name from config.json only via `QuotePowerShellLiteral` (single-quoted, all quote variants doubled, control chars dropped) and runs PowerShell with `-EncodedCommand` via `ArgumentList` — a crafted `logName` can no longer inject code into the worker's PowerShell call.
 - Empty form rows are dropped in the Features POST handler; `EventIdsText`/`ServersText` are `[JsonIgnore]` form-binding helpers on `EventLogIgnoreRule`.
 
 ### Connection String Encryption

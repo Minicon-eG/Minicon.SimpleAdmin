@@ -1,0 +1,73 @@
+@{
+    ViewData["Title"] = "Skript hinzufügen";
+    var allowed = ViewData["AllowedDirectories"] as IReadOnlyList<string> ?? Array.Empty<string>();
+}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="Index">Skripte</a></li>
+        <li class="breadcrumb-item active">Hinzufügen</li>
+    </ol>
+</nav>
+
+<h1 class="mb-3"><i class="bi bi-plus-square me-2"></i>Skript hinzufügen</h1>
+<p class="text-muted">
+    Die Parameter werden automatisch aus dem <code>param()</code>-Block und der Hilfe (<code>.PARAMETER</code>) des Skripts gelesen
+    und passenden Eingabefeldern zugeordnet: Datum → Datumsauswahl, Uhrzeit → Zeitauswahl, <code>[switch]</code> → Schalter,
+    <code>[ValidateSet()]</code> → Auswahlliste, <code>[string[]]</code> → Liste, Pfade → Datei-/Ordnerauswahl.
+    Alles lässt sich danach anpassen. Das Skript wird dabei nicht ausgeführt.
+</p>
+
+<div class="row">
+    <div class="col-xl-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><i class="bi bi-upload me-2"></i>Skriptdatei hochladen</div>
+            <div class="card-body">
+                <form asp-action="Upload" method="post" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <input type="file" name="file" accept=".ps1" class="form-control" required />
+                        <div class="form-text">
+                            Wird gespeichert unter <code>@ViewData["UploadDirectory"]</code>.
+                            Eine erneut hochgeladene Version aktualisiert die Parameter des vorhandenen Eintrags.
+                        </div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" name="overwrite" value="true" id="overwrite" />
+                        <label class="form-check-label" for="overwrite">Vorhandene Datei überschreiben</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-upload me-1"></i>Hochladen und Parameter einlesen</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><i class="bi bi-hdd me-2"></i>Vorhandenes Skript auf dem Server</div>
+            <div class="card-body">
+                <form asp-action="CreateFromPath" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <input type="text" name="path" id="scriptPath" class="form-control font-monospace" placeholder="D:\Skripte\CopyFilesFromArchiv.ps1" required />
+                            <button type="button" class="btn btn-outline-secondary" data-path-browse="file" data-target="#scriptPath" data-extension=".ps1">
+                                <i class="bi bi-folder2-open"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">
+                            Pfad auf dem WebUI-Server. Das Skript bleibt dort liegen; Änderungen daran wirken sofort.
+                            @if (allowed.Count > 0)
+                            {
+                                <br /><span>Freigegebene Verzeichnisse: <code>@string.Join(", ", allowed)</code></span>
+                            }
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>Parameter einlesen</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<partial name="_PathBrowserModal" />

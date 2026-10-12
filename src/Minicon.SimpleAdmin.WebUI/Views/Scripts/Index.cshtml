@@ -1,0 +1,78 @@
+@model Minicon.SimpleAdmin.WebUI.Controllers.ScriptsIndexViewModel
+@{
+    ViewData["Title"] = "Skripte";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <h1 class="mb-0"><i class="bi bi-terminal me-2"></i>Skripte</h1>
+    <a class="btn btn-primary" asp-action="Create"><i class="bi bi-plus-lg me-1"></i>Skript hinzufügen</a>
+</div>
+
+<p class="text-muted">
+    PowerShell-Skripte, die direkt aus der WebUI gestartet werden können. Sie laufen auf diesem Rechner unter dem Konto der WebUI;
+    jeder Lauf wird mit Benutzer, Parametern und Ausgabe protokolliert.
+</p>
+
+@if (!Model.Scripts.Any())
+{
+    <div class="card mb-4">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-filetype-ps1 display-5 text-muted"></i>
+            <p class="mt-3 mb-3">Noch keine Skripte eingerichtet.</p>
+            <a class="btn btn-primary" asp-action="Create"><i class="bi bi-upload me-1"></i>Skript hochladen oder Pfad angeben</a>
+        </div>
+    </div>
+}
+else
+{
+    <div class="row">
+        @foreach (var script in Model.Scripts)
+        {
+            var running = Model.RecentRuns.FirstOrDefault(r => r.ScriptId == script.Id && r.IsRunning);
+            var last = Model.RecentRuns.FirstOrDefault(r => r.ScriptId == script.Id);
+            <div class="col-lg-6 col-xxl-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold"><i class="bi bi-filetype-ps1 me-2"></i>@script.Name</span>
+                        @if (running != null)
+                        {
+                            <a asp-action="Output" asp-route-id="@running.Id"><partial name="_RunStatusBadge" model="running.Status" /></a>
+                        }
+                        else if (last != null)
+                        {
+                            <a asp-action="Output" asp-route-id="@last.Id" title="Letzter Lauf @last.StartedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")">
+                                <partial name="_RunStatusBadge" model="last.Status" />
+                            </a>
+                        }
+                    </div>
+                    <div class="card-body">
+                        @if (!string.IsNullOrWhiteSpace(script.Description))
+                        {
+                            <p class="mb-2">@script.Description</p>
+                        }
+                        <div class="small text-muted font-monospace text-break mb-2">@script.Path</div>
+                        <div class="small">
+                            @foreach (var p in script.Parameters.Where(p => !p.Hidden))
+                            {
+                                <span class="badge bg-light text-dark border me-1 mb-1" title="@p.Description">
+                                    @p.Name@(p.Required ? " *" : "")@(p.Fixed ? " 🔒" : "")
+                                </span>
+                            }
+                        </div>
+                    </div>
+                    <div class="card-footer d-flex gap-2">
+                        <a class="btn btn-sm btn-success" asp-action="Run" asp-route-id="@script.Id"><i class="bi bi-play-fill me-1"></i>Ausführen</a>
+                        <a class="btn btn-sm btn-outline-secondary" asp-action="Edit" asp-route-id="@script.Id"><i class="bi bi-pencil me-1"></i>Bearbeiten</a>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-clock-history me-2"></i>Letzte Läufe</div>
+    <div class="card-body">
+        <partial name="_RunHistoryTable" model="Model.RecentRuns" />
+    </div>
+</div>

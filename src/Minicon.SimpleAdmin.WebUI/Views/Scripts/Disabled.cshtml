@@ -1,0 +1,24 @@
+@{
+    ViewData["Title"] = "Skripte";
+}
+
+<h1 class="mb-4"><i class="bi bi-terminal me-2"></i>Skripte</h1>
+
+<div class="alert alert-warning">
+    <i class="bi bi-lock me-2"></i>@ViewData["Reason"]
+</div>
+
+<div class="card">
+    <div class="card-header">Aktivierung (appsettings.json der WebUI)</div>
+    <div class="card-body">
+        <pre class="mb-0 small">"ScriptRunner": {
+  "Enabled": true,   // oder Eintrag entfernen (Standard = an)
+  "RequiredRole": "DOMAIN\\SimpleAdmin-Skripte",
+  "AllowedDirectories": [ "D:\\Skripte" ]
+}</pre>
+        <p class="text-muted small mt-3 mb-0">
+            Die Skripte laufen auf diesem Rechner unter dem Konto der WebUI (z.&nbsp;B. der IIS-Anwendungspool-Identität).
+            Bewusst nicht über config.json schaltbar: Wer die Konfiguration bearbeiten darf, soll eine abgeschaltete Skript-Ausführung nicht wieder freischalten können.
+        </p>
+    </div>
+</div>
