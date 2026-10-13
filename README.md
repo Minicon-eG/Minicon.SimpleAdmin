@@ -36,7 +36,7 @@ return await SimpleAdminWorkerHost.RunAsync(args);
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.31.1" />
+<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.32.0" />
 ```
 
 ### Admin UI
@@ -53,7 +53,7 @@ app.Run();
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.31.1" />
+<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.32.0" />
 ```
 
 The host's `appsettings.json` supplies deployment specifics:
@@ -87,6 +87,31 @@ anonymously.
   `status/*.json` files, which are served *before* the auth middleware and
   therefore stay reachable.
 
+### Getting the source code into your project
+
+Every package also ships its complete source code. On build, a host project that
+references the packages automatically extracts it to `SimpleAdmin.Sources/` (one
+folder per package, including the `.csproj` files). The folder is excluded from the
+host's compilation — the host keeps using the package DLLs until you switch to
+`ProjectReference`s on the extracted projects.
+
+```xml
+<PropertyGroup>
+  <!-- Optional: rename "Minicon.SimpleAdmin" to your own namespace while extracting
+       (namespaces, project/file/folder names, view paths, logger categories). -->
+  <SimpleAdminSourcesNamespace>Contoso.Monitoring</SimpleAdminSourcesNamespace>
+
+  <!-- Optional: different target folder. -->
+  <SimpleAdminSourcesDirectory>SimpleAdmin.Sources</SimpleAdminSourcesDirectory>
+</PropertyGroup>
+```
+
+To switch extraction off, set `<SimpleAdminExtractSources>false</SimpleAdminExtractSources>`.
+
+Extraction runs again only when the package version or the namespace changes — local
+edits in the folder are then overwritten. `LICENSE` (MIT copyright notice) stays
+unchanged and must be kept. When the namespace changes, delete the old folders by hand.
+
 ## Building locally
 
 ```bash
@@ -119,7 +144,10 @@ service types, feature toggles and the PRTG/NetScaler endpoints. Supported featu
   specific servers (wildcards), with reason and optional expiry
 - SQL query checks (row-count and column assertions)
 - Email monitoring (SMTP probes + IMAP delivery checks)
-- BizTalk monitoring (management API) and file/log monitoring
+- BizTalk monitoring (management API) and file/log monitoring (stuck files on shares,
+  error signatures in logs) — with a **setup assistant** in the admin UI that tests
+  paths and regex signatures against the real files before saving, offers templates
+  and suggests common error signatures with their hit counts
 - **Central e-mail notifier**: designated servers aggregate all statuses over HTTP
   and send summary mails with acknowledge deep-links (HTML + plaintext, reminders,
   all-clear notices, HA via two coordinated instances) — testable end-to-end via

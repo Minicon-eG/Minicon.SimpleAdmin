@@ -1,0 +1,137 @@
+<Project>
+
+  <!--
+    Wird von jedem Minicon.SimpleAdmin-Paket als buildTransitive/<PackageId>.targets
+    ausgeliefert. Beim Build des Host-Projekts entpackt es den mitgelieferten
+    Quellcode (Ordner "sources" im Paket) nach
+      <Projektordner>/SimpleAdmin.Sources/<PackageId>/
+    Der Ordner wird aus allen Standard-Globs (Compile, Content, None, Razor)
+    ausgeschlossen - der Host kompiliert weiterhin gegen die Paket-DLLs.
+
+    Steuerung im Host-csproj:
+      <SimpleAdminExtractSources>false</SimpleAdminExtractSources>        abschalten
+      <SimpleAdminSourcesDirectory>pfad</SimpleAdminSourcesDirectory>     Zielordner
+      <SimpleAdminSourcesNamespace>Kunde.Monitoring</SimpleAdminSourcesNamespace>
+          ersetzt beim Entpacken "Minicon.SimpleAdmin" durch den eigenen Namen -
+          in Namespaces, Projekt-/Datei-/Ordnernamen, Views (_content-Pfade),
+          Logger-Kategorien und Texten. LICENSE bleibt unveraendert (MIT verlangt
+          den Copyright-Hinweis), Repository-URLs ebenfalls.
+
+    Entpackt wird nur, wenn sich Paketversion oder Namespace geaendert haben
+    (Marker-Datei); lokale Aenderungen an den entpackten Dateien werden dann
+    ueberschrieben.
+
+    Mehrere Pakete importieren diese Datei unter verschiedenen Namen. Jede Kopie
+    registriert ihr Paket als Item; das (gleichnamige, identische) Target
+    verarbeitet alle Items per Batching.
+  -->
+
+  <PropertyGroup>
+    <SimpleAdminExtractSources Condition="'$(SimpleAdminExtractSources)' == ''">true</SimpleAdminExtractSources>
+    <SimpleAdminSourcesDirectory Condition="'$(SimpleAdminSourcesDirectory)' == ''">SimpleAdmin.Sources</SimpleAdminSourcesDirectory>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(_SimpleAdminSourcesExcluded)' != 'true'">
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(SimpleAdminSourcesDirectory)/**</DefaultItemExcludes>
+    <_SimpleAdminSourcesExcluded>true</_SimpleAdminSourcesExcluded>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SimpleAdminSourcePackage Include="$(MSBuildThisFileName)"
+                              PackageRoot="$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..'))" />
+  </ItemGroup>
+
+  <!-- Kopiert einen Ordner rekursiv und ersetzt dabei optional das Praefix
+       "Minicon.SimpleAdmin" in Pfaden und in Textdateien. -->
+  <UsingTask TaskName="SimpleAdminCopySources"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SourceDirectory ParameterType="System.String" Required="true" />
+      <TargetDirectory ParameterType="System.String" Required="true" />
+      <Namespace ParameterType="System.String" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        // Nicht hinter "Minicon-eG/" (Repository-URL) und nicht als Teil eines laengeren Bezeichners.
+        var token = new Regex(@"(?<!Minicon-eG/)(?<![\w])Minicon\.SimpleAdmin(?![\w])");
+        var textExtensions = new[] { ".cs", ".cshtml", ".razor", ".csproj", ".props", ".targets", ".json",
+                                     ".js", ".css", ".md", ".txt", ".xml", ".config", ".ps1", ".editorconfig" };
+        var rename = !string.IsNullOrEmpty(Namespace);
+        if (!Directory.Exists(SourceDirectory)) return true;
+        // netstandard2.0 (RoslynCodeTaskFactory) kennt Path.GetRelativePath nicht.
+        var root = Path.GetFullPath(SourceDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                   + Path.DirectorySeparatorChar;
+
+        foreach (var file in Directory.EnumerateFiles(SourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetFullPath(file).Substring(root.Length);
+            var isLicense = Path.GetFileName(file).StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase);
+            if (rename && !isLicense) relative = token.Replace(relative, Namespace);
+
+            var destination = Path.Combine(TargetDirectory, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination));
+
+            var isText = Array.IndexOf(textExtensions, Path.GetExtension(file).ToLowerInvariant()) >= 0;
+            if (rename && isText && !isLicense)
+            {
+                var content = File.ReadAllText(file);
+                File.WriteAllText(destination, token.Replace(content, Namespace), new UTF8Encoding(false));
+            }
+            else
+            {
+                File.Copy(file, destination, true);
+            }
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="SimpleAdminExtractSources"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(SimpleAdminExtractSources)' == 'true'"
+          Outputs="%(SimpleAdminSourcePackage.Identity)">
+
+    <Error Condition="'$(SimpleAdminSourcesNamespace)' != '' And !$([System.Text.RegularExpressions.Regex]::IsMatch('$(SimpleAdminSourcesNamespace)', '^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$'))"
+           Text="SimpleAdminSourcesNamespace '$(SimpleAdminSourcesNamespace)' ist kein gueltiger Namespace (z. B. Kunde.Monitoring)." />
+
+    <PropertyGroup>
+      <_SaPackageRoot>%(SimpleAdminSourcePackage.PackageRoot)</_SaPackageRoot>
+      <_SaPackageName>%(SimpleAdminSourcePackage.Identity)</_SaPackageName>
+      <_SaPackageName Condition="'$(SimpleAdminSourcesNamespace)' != ''">$(_SaPackageName.Replace('Minicon.SimpleAdmin', '$(SimpleAdminSourcesNamespace)'))</_SaPackageName>
+      <_SaBaseDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(SimpleAdminSourcesDirectory)'))</_SaBaseDir>
+      <_SaTargetDir>$([MSBuild]::NormalizeDirectory('$(_SaBaseDir)', '$(_SaPackageName)'))</_SaTargetDir>
+      <_SaMarker>$(_SaTargetDir).simpleadmin-package</_SaMarker>
+      <_SaMarkerExpected>$(_SaPackageRoot)|$(SimpleAdminSourcesNamespace)</_SaMarkerExpected>
+      <_SaMarkerValue></_SaMarkerValue>
+    </PropertyGroup>
+
+    <ReadLinesFromFile File="$(_SaMarker)" Condition="Exists('$(_SaMarker)')">
+      <Output TaskParameter="Lines" PropertyName="_SaMarkerValue" />
+    </ReadLinesFromFile>
+
+    <PropertyGroup>
+      <_SaUpToDate>false</_SaUpToDate>
+      <_SaUpToDate Condition="'$(_SaMarkerValue)' == '$(_SaMarkerExpected)'">true</_SaUpToDate>
+    </PropertyGroup>
+
+    <RemoveDir Directories="$(_SaTargetDir)" Condition="'$(_SaUpToDate)' != 'true'" />
+    <SimpleAdminCopySources Condition="'$(_SaUpToDate)' != 'true'"
+                            SourceDirectory="$(_SaPackageRoot)sources"
+                            TargetDirectory="$(_SaTargetDir)"
+                            Namespace="$(SimpleAdminSourcesNamespace)" />
+    <SimpleAdminCopySources Condition="'$(_SaUpToDate)' != 'true'"
+                            SourceDirectory="$(_SaPackageRoot)sources-root"
+                            TargetDirectory="$(_SaBaseDir)"
+                            Namespace="$(SimpleAdminSourcesNamespace)" />
+    <WriteLinesToFile Condition="'$(_SaUpToDate)' != 'true'"
+                      File="$(_SaMarker)" Lines="$(_SaMarkerExpected)" Overwrite="true" />
+    <Message Condition="'$(_SaUpToDate)' != 'true'" Importance="high"
+             Text="SimpleAdmin: Quellcode von %(SimpleAdminSourcePackage.Identity) nach $(_SaTargetDir) entpackt." />
+  </Target>
+
+</Project>

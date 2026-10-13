@@ -28,12 +28,17 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.31.1`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.32.0`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
 ### Debug Symbols (v2.20.1)
 - `src/Directory.Build.props` sets `DebugType=embedded` + `EmbedAllSources=true` for every project, so each DLL carries an **embedded portable PDB including the full C# sources**. Consumers can debug and step into the original code without a symbol server. No separate `.snupkg` is produced (`IncludeSymbols=false`). Trade-off: larger DLLs and the source is visible inside every package.
+
+### Source Extraction in Consumers (v2.32.0)
+- Every package additionally ships its project files under `sources/` (copied via `obj/simpleadmin-sources/` because NuGet drops `Content` items with `Pack=false`, which Razor sets on all `.cshtml`) and the shared files (`Directory.Build.props`, `build/`, README, LICENSE) under `sources-root/`.
+- `src/build/Minicon.SimpleAdmin.Sources.targets` is packed as `buildTransitive/<PackageId>.targets`: on build, the host extracts every referenced SimpleAdmin package to `SimpleAdmin.Sources/<PackageId>/` (re-extracted only when the package path/version changes, marker `.simpleadmin-package`; local edits are overwritten on upgrade). The folder is added to `DefaultItemExcludes`, so the host keeps compiling against the package DLLs. Opt-out: `<SimpleAdminExtractSources>false</SimpleAdminExtractSources>`, target folder: `SimpleAdminSourcesDirectory`.
+- Customer namespace: `<SimpleAdminSourcesNamespace>Kunde.Monitoring</SimpleAdminSourcesNamespace>` replaces the token `Minicon.SimpleAdmin` (whole identifier, not after `Minicon-eG/`) in text files and in file/folder names during extraction (inline `RoslynCodeTaskFactory` task — netstandard2.0, so no `Path.GetRelativePath`). Namespaces, project names, `_content/<PackageId>` paths and logger categories stay consistent; LICENSE, `Authors` and repository URLs are kept. Keep `Minicon.SimpleAdmin` as the only spelling of the prefix in code so the rename stays complete.
 
 ### Publishing
 - Trusted Publishing to nuget.org is configured via GitHub Actions (`Add NuGet publish workflow (Trusted Publishing)` commit). The workflow publishes all seven packages on release.
@@ -49,7 +54,7 @@ The solution contains **seven projects**. All publishable libraries set `Generat
 | `Minicon.SimpleAdmin.Checkers` | Optional per-server checkers + central notifier | `AppPoolChecker`, `WindowsServiceChecker`, `EventLogChecker`, `CertificateChecker`, `BizTalkChecker`/`BizTalkApiClient`, `FileShareChecker`/`FileSystemAccess`, `SqlQueryChecker`, `EmailProbeSender`, `EmailDeliveryChecker`, `NotificationService`, `SmtpMailSender`, `HttpStatusReader`, `NotificationStateStore` |
 | `Minicon.SimpleAdmin.HtmlGenerator` | Static HTML rendering | `StaticHtmlGenerator` |
 | `Minicon.SimpleAdmin.Worker` | Console worker host + DI wiring | `SimpleAdminWorkerHost.RunAsync(args)`, `SimpleAdminWorker`, `ServiceConfigReader` |
-| `Minicon.SimpleAdmin.WebUI` | Razor Class Library — full admin UI (MVC + REST) | `SimpleAdminWebUIExtensions.AddSimpleAdminWebUI/UseSimpleAdminWebUI`, controllers, views, view models, `ConfigurationService`, `StatusReaderService` |
+| `Minicon.SimpleAdmin.WebUI` | Razor Class Library — full admin UI (MVC + REST); references Checkers | `SimpleAdminWebUIExtensions.AddSimpleAdminWebUI/UseSimpleAdminWebUI`, controllers, views, view models, `ConfigurationService`, `StatusReaderService` |
 | `Minicon.SimpleAdmin.Tests` | xUnit suite over Shared/Services/Checkers/HtmlGenerator/WebUI | not published |
 
 ### Dependency Graph
@@ -63,7 +68,7 @@ Checkers       (depends on Shared)
 HtmlGenerator  (depends on Shared)
   ↑
 Worker         (depends on Shared, Services, Checkers, HtmlGenerator)
-WebUI          (depends on Shared, Services)
+WebUI          (depends on Shared, Services, Checkers — the file monitoring assistant reuses FileShareChecker)
 Tests          (depends on everything)
 ```
 
@@ -152,6 +157,7 @@ Razor Class Library. The host application provides only the entry point + appset
 - `POST /api/sqlquerytest/{connection|query}` — `Api/SqlQueryTestController`
 - `POST /api/emailtest/{smtp|imap}` — `Api/EmailTestController`
 - `POST /api/scripts/{id}/runs`, `GET /api/scripts/runs/{runId}?from=n`, `POST /api/scripts/runs/{runId}/cancel`, `GET /api/scripts/browse?path=&mode=file|folder&extension=` — `Api/ScriptsApiController` (script runner, JSON-only POSTs)
+- `POST /api/filemonitoringtest/{directory|logscan}` — `Api/FileMonitoringTestController` (dry run for the file monitoring assistant, see below)
 - `POST /api/notificationtest/send` — `Api/NotificationTestController` (resolves the notifier's `smtpRef` exactly like `NotificationService` and sends a test mail; accepts current form values so it works before saving)
 
 ### WebUI Services
@@ -257,6 +263,7 @@ Detects **stuck files** ("hängengebliebene Dateien") on file shares and scans l
 - **Config**: global toggle `features.fileMonitoring.enabled` + `Defaults` (StuckFileAgeMinutesWarning/Critical, MaxReportedItems — caps the reported findings to keep the HTTP payload small). Per-server `server.checks.fileMonitoring`: `schedule`, `directories[] { name, path, includePatterns[], excludePatterns[], recursive, ageMinutesWarning/Critical, cutoffTime, cutoffSeverity, wikiUrl, remediationSteps[] }`, `logScans[] { name, path, maxFileAgeMinutes, maxLines, wikiUrl, remediationSteps[], patterns[] { name, regex, severity, wikiUrl, remediationSteps[] } }`.
 - **WebUI/HTML**: Servers/Edit „Datei-/Protokollüberwachung" card (`_FileMonitoringChecksPartial.cshtml`, client-side repeatable rows; log patterns entered as `Name :: Severity :: Regex` lines); Settings/Features global toggle + age defaults; Status/Details renders stuck-file + log-match tables with wiki links; HTML detail page shows a `📁 Dateiüberwachung` section + a `📁 N Fund(e)` badge.
 - Problems flow through the normal pipeline; `RuntimeStatus.FileMonitoring` is included in the per-server status JSON published over HTTP so the notifier sees it.
+- **Setup assistant (v2.32.0)**: Servers/Edit „Assistent“ (`_FileMonitoringAssistantPartial.cshtml`, modal inside the server form — inputs have no `name`, Enter is swallowed) guides through a directory (templates Übergabe-/Eingangs-/Fehlerordner, extension badges set the include filter) or a log scan (signature suggestions with hit counts, „Übernehmen“ appends `Name :: Severity :: Regex`) and fills a new form row. Dry run: `FileMonitoringPreviewService` (Checkers, uses `IFileSystemAccess` + `FileShareChecker.EvaluateDirectory`; size-limited output, 500 ms regex timeout, 20 s IO timeout, `SignatureTemplates`) behind `POST /api/filemonitoringtest/{directory|logscan}`. Request bodies are the form row view models, converted like a save. Files are read by the **WebUI process** (response names machine + account); reading is refused while `Authentication:Enabled=false`; pasted sample lines (`sampleText`) always work without file access.
 
 ### Central Notifications (config-driven, v2.16.0)
 A worker whose hostname is listed in `features.notifications.notifierServers` becomes a **central notifier** (no `--notify` flag): it aggregates the status of all servers over HTTP and sends one summary e-mail per cycle for unacknowledged problems, each with an acknowledge deep-link. Designed to run on **two servers in parallel** (HA) without double-sends — and **without a shared lock or UNC share**.

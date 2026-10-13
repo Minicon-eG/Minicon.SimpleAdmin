@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Minicon.SimpleAdmin.Checkers;
 using Minicon.SimpleAdmin.Services;
 using Minicon.SimpleAdmin.WebUI.Services;
 using Minicon.SimpleAdmin.WebUI.Services.Scripts;
@@ -94,6 +95,10 @@ public static class SimpleAdminWebUIExtensions
             new AcknowledgeService(acknowledgeDirectory, sp.GetRequiredService<ILogger<AcknowledgeService>>()));
 
         AddScriptRunner(services, configuration, ResolveConfigDirectory(configuration));
+
+        // Setup assistant for file/log monitoring: dry run against the real shares/logs.
+        services.AddSingleton<IFileSystemAccess, FileSystemAccess>();
+        services.AddSingleton<FileMonitoringPreviewService>();
 
         return services;
     }
@@ -249,7 +254,7 @@ public static class SimpleAdminWebUIExtensions
     /// Authentication is on unless a host explicitly opts out via
     /// <c>Authentication:Enabled = false</c> (secure by default).
     /// </summary>
-    private static bool IsAuthenticationEnabled(IConfiguration configuration) =>
+    internal static bool IsAuthenticationEnabled(IConfiguration configuration) =>
         configuration.GetValue<bool?>("Authentication:Enabled") ?? true;
 
     /// <summary>

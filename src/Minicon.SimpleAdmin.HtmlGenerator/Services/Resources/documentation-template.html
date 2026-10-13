@@ -2988,6 +2988,14 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     <code>Anzeigename :: Severity :: Regex</code>.
                 </p>
                 <h3 id="filemonitoring-config">16.3 Konfiguration</h3>
+                <p>
+                    In der WebUI geht das am schnellsten über den <strong>Einrichtungs-Assistenten</strong>
+                    (Server → Bearbeiten → Datei-/Protokollüberwachung → „Assistent"): Vorlagen für Übergabe-, Eingangs- und
+                    Fehlerordner, ein Probelauf gegen die echten Dateien (was würde jetzt gemeldet?) und für Log-Scans
+                    Trefferzahlen je Signatur sowie Vorschläge gängiger Fehlersignaturen. Der Probelauf liest die Dateien vom
+                    WebUI-Server aus – der überwachende Worker braucht dieselben Leserechte; ohne WebUI-Anmeldung lassen sich
+                    nur eingefügte Beispielzeilen testen. Alternativ direkt in <code>config.json</code>:
+                </p>
                 <pre><code>"features": { "fileMonitoring": { "enabled": true, "defaults": { "stuckFileAgeMinutesWarning": 60, "stuckFileAgeMinutesCritical": 240, "maxReportedItems": 50 } } }
 
 // pro Server unter checks:

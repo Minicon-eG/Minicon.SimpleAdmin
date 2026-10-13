@@ -22,10 +22,57 @@
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
+  <!-- README/LICENSE liegen im Repo eine Ebene hoeher, im entpackten Quellcode
+       (SimpleAdmin.Sources/) neben dieser Datei. -->
+  <PropertyGroup>
+    <_SimpleAdminRepoRoot Condition="Exists('$(MSBuildThisFileDirectory)../README.md')">$(MSBuildThisFileDirectory)../</_SimpleAdminRepoRoot>
+    <_SimpleAdminRepoRoot Condition="'$(_SimpleAdminRepoRoot)' == ''">$(MSBuildThisFileDirectory)</_SimpleAdminRepoRoot>
+    <_SimpleAdminIsPackage Condition="'$(MSBuildProjectName)' != 'Minicon.SimpleAdmin.Tests'">true</_SimpleAdminIsPackage>
+  </PropertyGroup>
+
   <!-- README shown on nuget.org for every package. -->
-  <ItemGroup Condition="'$(IsPackable)' != 'false'">
-    <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="\" Visible="false" />
+  <ItemGroup Condition="'$(_SimpleAdminIsPackage)' == 'true' And Exists('$(_SimpleAdminRepoRoot)README.md')">
+    <None Include="$(_SimpleAdminRepoRoot)README.md" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
+
+  <!-- Quellcode im Paket mitliefern: "sources/" enthaelt das Projekt (ohne bin/obj),
+       "sources-root/" die gemeinsamen Dateien (diese Datei, build/, README, LICENSE).
+       buildTransitive/<PackageId>.targets entpackt beides beim Build des Hosts nach
+       SimpleAdmin.Sources/ (siehe build/Minicon.SimpleAdmin.Sources.targets). -->
+  <ItemGroup Condition="'$(_SimpleAdminIsPackage)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)build/Minicon.SimpleAdmin.Sources.targets"
+          Pack="true" PackagePath="buildTransitive/$(PackageId).targets" Visible="false" />
+    <None Include="$(MSBuildThisFileFullPath)" Pack="true" PackagePath="sources-root/" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)build/Minicon.SimpleAdmin.Sources.targets" Pack="true" PackagePath="sources-root/build/" Visible="false" />
+    <None Include="$(_SimpleAdminRepoRoot)README.md" Pack="true" PackagePath="sources-root/" Visible="false" Condition="Exists('$(_SimpleAdminRepoRoot)README.md')" />
+    <None Include="$(_SimpleAdminRepoRoot)LICENSE" Pack="true" PackagePath="sources-root/" Visible="false" Condition="Exists('$(_SimpleAdminRepoRoot)LICENSE')" />
+  </ItemGroup>
+
+  <!-- Die Projektdateien erst beim Packen anhaengen: als None-Items im Projekt
+       wuerden sie z. B. den Razor-Compiler (scoped CSS) durcheinanderbringen.
+       Gepackt wird eine Kopie unter obj/, weil NuGet Dateien ausschliesst, die als
+       Content mit Pack=false markiert sind (Razor macht das fuer alle .cshtml). -->
+  <PropertyGroup Condition="'$(_SimpleAdminIsPackage)' == 'true'">
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_SimpleAdminPackSources</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Target Name="_SimpleAdminPackSources">
+    <ItemGroup>
+      <_SimpleAdminPackSource Include="$(MSBuildProjectDirectory)/**/*"
+                              Exclude="$(MSBuildProjectDirectory)/bin/**;$(MSBuildProjectDirectory)/obj/**;$(MSBuildProjectDirectory)/**/*.user;$(MSBuildProjectDirectory)/**/.DS_Store" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_SimpleAdminPackSourceDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'simpleadmin-sources'))</_SimpleAdminPackSourceDir>
+    </PropertyGroup>
+    <RemoveDir Directories="$(_SimpleAdminPackSourceDir)" />
+    <Copy SourceFiles="@(_SimpleAdminPackSource)"
+          DestinationFiles="@(_SimpleAdminPackSource->'$(_SimpleAdminPackSourceDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <ItemGroup>
+      <_SimpleAdminPackSourceCopy Include="$(_SimpleAdminPackSourceDir)**/*" />
+      <TfmSpecificPackageFile Include="@(_SimpleAdminPackSourceCopy)"
+                              PackagePath="sources/" />
+    </ItemGroup>
+  </Target>
 
   <!-- Expose internal members of every Minicon.SimpleAdmin.* library to the test
        project. The test project itself also picks this up, which is harmless. -->

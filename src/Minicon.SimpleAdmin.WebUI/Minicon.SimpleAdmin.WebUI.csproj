@@ -8,7 +8,7 @@
     <RootNamespace>Minicon.SimpleAdmin.WebUI</RootNamespace>
     <AssemblyName>Minicon.SimpleAdmin.WebUI</AssemblyName>
     <PackageId>Minicon.SimpleAdmin.WebUI</PackageId>
-    <Version>2.31.1</Version>
+    <Version>2.32.0</Version>
     <Authors>Minicon Contributors</Authors>
     <Description>Razor Class Library providing the full SimpleAdmin admin UI (controllers, views, REST API and services) for the Minicon SimpleAdmin monitoring platform. A host application only needs to call AddSimpleAdminWebUI / UseSimpleAdminWebUI.</Description>
     <PackageTags>monitoring;simpleadmin;webui;mvc;razor-class-library</PackageTags>
@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="../Minicon.SimpleAdmin.Shared/Minicon.SimpleAdmin.Shared.csproj" />
     <ProjectReference Include="../Minicon.SimpleAdmin.Services/Minicon.SimpleAdmin.Services.csproj" />
+    <ProjectReference Include="../Minicon.SimpleAdmin.Checkers/Minicon.SimpleAdmin.Checkers.csproj" />
   </ItemGroup>
 
   <ItemGroup>

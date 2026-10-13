@@ -1,0 +1,492 @@
+@inject Minicon.SimpleAdmin.WebUI.Services.ConfigurationService ConfigService
+@{
+    // Setup assistant for the file/log monitoring card. Lives inside the server form: the inputs
+    // deliberately carry no name attribute (never posted); "Übernehmen" fills a new form row.
+    var fmFeature = ConfigService.GetFeatures().FileMonitoring;
+    var fmDefaults = fmFeature?.Defaults ?? new Minicon.SimpleAdmin.Models.Config.FileMonitoringDefaults();
+}
+
+<div class="modal fade" id="fmAssistant" tabindex="-1" aria-labelledby="fmAssistantTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="fmAssistantTitle"><i class="bi bi-magic me-2"></i>Assistent: Datei-/Protokollüberwachung einrichten</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+            </div>
+            <div class="modal-body">
+                @if (fmFeature?.Enabled != true)
+                {
+                    <div class="alert alert-warning py-2 small">
+                        <i class="bi bi-exclamation-triangle me-1"></i>Die Datei-/Protokollüberwachung ist global noch ausgeschaltet
+                        (<em>Einstellungen → Features</em>). Die Einrichtung hier wird gespeichert, geprüft wird aber erst nach dem Einschalten.
+                    </div>
+                }
+
+                <!-- Schritt 1: Art -->
+                <div id="fmaStepKind">
+                    <p class="mb-3">Was möchten Sie überwachen?</p>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <button type="button" class="btn btn-outline-primary w-100 h-100 text-start p-3" onclick="fmaStart('dir')">
+                                <div class="fs-5"><i class="bi bi-folder2-open me-2"></i>Ordner auf hängende Dateien</div>
+                                <div class="small text-body-secondary mt-1">
+                                    Meldet Dateien, die zu lange liegen bleiben oder nach einer festen Uhrzeit noch im Ordner sind
+                                    (z. B. Übergabe-, Eingangs- oder Fehlerordner einer Schnittstelle).
+                                </div>
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <button type="button" class="btn btn-outline-primary w-100 h-100 text-start p-3" onclick="fmaStart('log')">
+                                <div class="fs-5"><i class="bi bi-file-earmark-text me-2"></i>Logdatei auf Fehlermeldungen</div>
+                                <div class="small text-body-secondary mt-1">
+                                    Durchsucht Logdateien nach Fehlersignaturen (Exception, Timeout, …). Der Assistent liest das Log
+                                    und zeigt, welche Signaturen wie oft treffen.
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Schritt 2a: Ordner -->
+                <div id="fmaStepDir" style="display:none;">
+                    <div class="row g-2">
+                        <div class="col-md-12">
+                            <label class="form-label small mb-0" for="fmaDirTemplate">Vorlage</label>
+                            <select id="fmaDirTemplate" class="form-select form-select-sm" onchange="fmaApplyDirTemplate()">
+                                <option value="">Eigene Einstellungen</option>
+                                <option value="handover">Übergabeordner – soll abends leer sein (Cutoff 21:45)</option>
+                                <option value="inbox">Eingangsordner – Dateien werden laufend abgeholt (30/120 min)</option>
+                                <option value="error">Fehlerordner – jede Datei ist ein Fehler</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-0" for="fmaDirName">Name</label>
+                            <input type="text" id="fmaDirName" class="form-control form-control-sm" placeholder="Eingang" />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small mb-0" for="fmaDirPath">Pfad (UNC möglich)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" id="fmaDirPath" class="form-control" placeholder="\\srv\d$\Daten\schnittstelle\eingang" />
+                                <button type="button" class="btn btn-primary" id="fmaDirTestBtn" onclick="fmaTestDir()">
+                                    <i class="bi bi-search me-1"></i>Ordner prüfen
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-0" for="fmaDirInclude">Einschließen</label>
+                            <input type="text" id="fmaDirInclude" class="form-control form-control-sm" placeholder="*.xml, *.dat (leer = alle)" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-0" for="fmaDirExclude">Ausschließen</label>
+                            <input type="text" id="fmaDirExclude" class="form-control form-control-sm" placeholder="*.tmp" />
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="form-check">
+                                <input type="checkbox" id="fmaDirRecursive" class="form-check-input" />
+                                <label class="form-check-label small" for="fmaDirRecursive">Unterordner einbeziehen</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0" for="fmaDirWarn">Warnung ab (min)</label>
+                            <input type="number" id="fmaDirWarn" class="form-control form-control-sm" placeholder="Standard: @fmDefaults.StuckFileAgeMinutesWarning" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0" for="fmaDirCrit">Kritisch ab (min)</label>
+                            <input type="number" id="fmaDirCrit" class="form-control form-control-sm" placeholder="Standard: @fmDefaults.StuckFileAgeMinutesCritical" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0" for="fmaDirCutoff">Muss leer sein ab (HH:mm)</label>
+                            <input type="text" id="fmaDirCutoff" class="form-control form-control-sm" placeholder="z. B. 21:45 (optional)" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0" for="fmaDirCutoffSeverity">Schweregrad dann</label>
+                            <select id="fmaDirCutoffSeverity" class="form-select form-select-sm">
+                                <option value="Critical">Critical</option>
+                                <option value="Warning">Warning</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="fmaDirResult" class="mt-3"></div>
+                </div>
+
+                <!-- Schritt 2b: Log -->
+                <div id="fmaStepLog" style="display:none;">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-0" for="fmaLogName">Name</label>
+                            <input type="text" id="fmaLogName" class="form-control form-control-sm" placeholder="Schnittstellen-Log" />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small mb-0" for="fmaLogPath">Logdatei oder Muster (UNC möglich)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" id="fmaLogPath" class="form-control" placeholder="\\srv\d$\Daten\schnittstelle\log\*.log" />
+                                <button type="button" class="btn btn-primary" id="fmaLogTestBtn" onclick="fmaTestLog(false)">
+                                    <i class="bi bi-search me-1"></i>Log lesen &amp; testen
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0" for="fmaLogMaxAge">Nur Dateien jünger als (min)</label>
+                            <input type="number" id="fmaLogMaxAge" class="form-control form-control-sm" placeholder="(alle)" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0" for="fmaLogMaxLines">Letzte Zeilen je Datei</label>
+                            <input type="number" id="fmaLogMaxLines" class="form-control form-control-sm" value="5000" />
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label small mb-0" for="fmaLogPatterns">
+                                Signaturen – eine pro Zeile: <code>Anzeigename :: Severity :: Regex</code>
+                                <span class="text-body-secondary">(Groß-/Kleinschreibung egal; Vorschläge unten per Klick übernehmen)</span>
+                            </label>
+                            <textarea id="fmaLogPatterns" class="form-control form-control-sm font-monospace" rows="4"
+                                      placeholder="Hängende Nachricht :: Critical :: Nachricht.*(haengt|stuck)&#10;Verbindungsfehler :: Warning :: connection (refused|timed out)"></textarea>
+                        </div>
+                        <div class="col-md-12">
+                            <a class="small" data-bs-toggle="collapse" href="#fmaLogSampleBox" role="button" aria-expanded="false">
+                                <i class="bi bi-clipboard me-1"></i>Kein Zugriff vom WebUI-Server? Beispielzeilen einfügen und damit testen
+                            </a>
+                            <div class="collapse mt-1" id="fmaLogSampleBox">
+                                <textarea id="fmaLogSample" class="form-control form-control-sm font-monospace" rows="5"
+                                          placeholder="Einige Zeilen aus dem Log hier einfügen …"></textarea>
+                                <button type="button" class="btn btn-sm btn-outline-primary mt-1" onclick="fmaTestLog(true)">
+                                    <i class="bi bi-play-fill me-1"></i>Mit Beispielzeilen testen
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="fmaLogResult" class="mt-3"></div>
+                </div>
+
+                <!-- Gemeinsam: Hinweise für den Fund -->
+                <div id="fmaStepCommon" style="display:none;" class="mt-3 border-top pt-3">
+                    <h6 class="small text-uppercase text-body-secondary">Was soll der Bearbeiter tun? (optional, erscheint im Dashboard und in der Mail)</h6>
+                    <div class="row g-2">
+                        <div class="col-md-12">
+                            <label class="form-label small mb-0" for="fmaWiki">Wiki-/Lösungs-Link</label>
+                            <input type="text" id="fmaWiki" class="form-control form-control-sm" placeholder="https://wiki.intern/…" />
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label small mb-0" for="fmaSteps">Nachbearbeitung (eine Zeile pro Schritt)</label>
+                            <textarea id="fmaSteps" class="form-control form-control-sm" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <span class="me-auto small text-body-secondary" id="fmaFooterHint"></span>
+                <button type="button" class="btn btn-outline-secondary" id="fmaBackBtn" style="display:none;" onclick="fmaShowKind()">
+                    <i class="bi bi-arrow-left me-1"></i>Zurück
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-success" id="fmaApplyBtn" style="display:none;" onclick="fmaApply()">
+                    <i class="bi bi-check2 me-1"></i>In Formular übernehmen
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        var kind = null;
+        var modal = null;
+        var el = function (id) { return document.getElementById(id); };
+        var esc = function (s) {
+            return String(s ?? '').replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        };
+        var ageText = function (min) {
+            if (min < 60) return Math.round(min) + ' min';
+            if (min < 1440) return (min / 60).toFixed(1).replace('.', ',') + ' h';
+            return (min / 1440).toFixed(1).replace('.', ',') + ' Tage';
+        };
+        var intOrNull = function (id) { var v = el(id).value.trim(); return v === '' ? null : parseInt(v, 10); };
+
+        // Enter in a modal field must not submit the surrounding server form.
+        el('fmAssistant').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+                e.preventDefault();
+                if (e.target.id === 'fmaDirPath') fmaTestDir();
+                if (e.target.id === 'fmaLogPath') fmaTestLog(false);
+            }
+        });
+
+        window.fmaOpen = function (startKind) {
+            modal = modal || new bootstrap.Modal(el('fmAssistant'));
+            ['fmaDirName', 'fmaDirPath', 'fmaDirInclude', 'fmaDirExclude', 'fmaDirWarn', 'fmaDirCrit', 'fmaDirCutoff',
+             'fmaLogName', 'fmaLogPath', 'fmaLogMaxAge', 'fmaLogPatterns', 'fmaLogSample', 'fmaWiki', 'fmaSteps']
+                .forEach(function (id) { el(id).value = ''; });
+            el('fmaDirTemplate').value = '';
+            el('fmaDirRecursive').checked = false;
+            el('fmaDirCutoffSeverity').value = 'Critical';
+            el('fmaLogMaxLines').value = '5000';
+            el('fmaDirResult').innerHTML = '';
+            el('fmaLogResult').innerHTML = '';
+            if (startKind) fmaStart(startKind); else fmaShowKind();
+            modal.show();
+        };
+
+        window.fmaShowKind = function () {
+            kind = null;
+            el('fmaStepKind').style.display = '';
+            ['fmaStepDir', 'fmaStepLog', 'fmaStepCommon', 'fmaBackBtn', 'fmaApplyBtn']
+                .forEach(function (id) { el(id).style.display = 'none'; });
+            el('fmaFooterHint').textContent = '';
+        };
+
+        window.fmaStart = function (k) {
+            kind = k;
+            el('fmaStepKind').style.display = 'none';
+            el('fmaStepDir').style.display = k === 'dir' ? '' : 'none';
+            el('fmaStepLog').style.display = k === 'log' ? '' : 'none';
+            ['fmaStepCommon', 'fmaBackBtn', 'fmaApplyBtn'].forEach(function (id) { el(id).style.display = ''; });
+            el('fmaFooterHint').textContent = 'Werte lassen sich nach dem Übernehmen im Formular weiter anpassen.';
+            el(k === 'dir' ? 'fmaDirPath' : 'fmaLogPath').focus();
+        };
+
+        window.fmaApplyDirTemplate = function () {
+            var t = el('fmaDirTemplate').value;
+            var set = function (warn, crit, cutoff, sev, exclude) {
+                el('fmaDirWarn').value = warn; el('fmaDirCrit').value = crit;
+                el('fmaDirCutoff').value = cutoff; el('fmaDirCutoffSeverity').value = sev;
+                if (exclude !== null) el('fmaDirExclude').value = exclude;
+            };
+            if (t === 'handover') set(60, 240, '21:45', 'Critical', '*.tmp');
+            else if (t === 'inbox') set(30, 120, '', 'Critical', '*.tmp');
+            else if (t === 'error') set(1, 1, '', 'Critical', null);
+        };
+
+        function dirRow() {
+            return {
+                name: el('fmaDirName').value.trim(),
+                path: el('fmaDirPath').value.trim(),
+                includePatterns: el('fmaDirInclude').value,
+                excludePatterns: el('fmaDirExclude').value,
+                recursive: el('fmaDirRecursive').checked,
+                ageMinutesWarning: intOrNull('fmaDirWarn'),
+                ageMinutesCritical: intOrNull('fmaDirCrit'),
+                cutoffTime: el('fmaDirCutoff').value.trim(),
+                cutoffSeverity: el('fmaDirCutoffSeverity').value,
+                wikiUrl: el('fmaWiki').value.trim(),
+                remediationSteps: el('fmaSteps').value
+            };
+        }
+
+        function logRow() {
+            return {
+                name: el('fmaLogName').value.trim(),
+                path: el('fmaLogPath').value.trim(),
+                maxFileAgeMinutes: intOrNull('fmaLogMaxAge'),
+                maxLines: intOrNull('fmaLogMaxLines') ?? 5000,
+                patterns: el('fmaLogPatterns').value,
+                wikiUrl: el('fmaWiki').value.trim(),
+                remediationSteps: el('fmaSteps').value
+            };
+        }
+
+        function post(url, body, btn, target, render) {
+            var original = btn ? btn.innerHTML : null;
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Prüfe …'; }
+            target.innerHTML = '';
+            return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                .then(function (r) { return r.json(); })
+                .then(render)
+                .catch(function (e) { target.innerHTML = '<div class="alert alert-danger py-2 small">Netzwerkfehler: ' + esc(e.message) + '</div>'; })
+                .finally(function () { if (btn) { btn.disabled = false; btn.innerHTML = original; } });
+        }
+
+        function checkedByHint(data) {
+            return data.checkedBy
+                ? '<div class="small text-body-secondary mb-2"><i class="bi bi-info-circle me-1"></i>Geprüft auf ' + esc(data.checkedBy) +
+                  '. Der Worker, der diesen Server überwacht, braucht dieselben Leserechte.</div>'
+                : '';
+        }
+
+        window.fmaTestDir = function () {
+            var target = el('fmaDirResult');
+            if (!el('fmaDirPath').value.trim()) { target.innerHTML = '<div class="text-warning small">Bitte einen Pfad eingeben.</div>'; return; }
+            post('@Url.Content("~/api/filemonitoringtest/directory")', { directory: dirRow() }, el('fmaDirTestBtn'), target, function (data) {
+                var r = data.result;
+                if (!data.success) {
+                    target.innerHTML = checkedByHint(data) + '<div class="alert alert-danger py-2 small"><i class="bi bi-x-circle me-1"></i>' + esc(data.error) + '</div>';
+                    return;
+                }
+                var html = checkedByHint(data);
+                var cls = r.flaggedCount > 0 ? 'warning' : 'success';
+                html += '<div class="alert alert-' + cls + ' py-2 small mb-2">' +
+                    '<i class="bi bi-' + (r.flaggedCount > 0 ? 'exclamation-triangle' : 'check-circle') + ' me-1"></i>' +
+                    '<strong>Erreichbar.</strong> ' + r.totalFiles + ' Datei(en), davon ' + r.matchingFiles + ' passend zu den Filtern. ' +
+                    (r.flaggedCount > 0
+                        ? '<strong>' + r.flaggedCount + (r.flaggedCount === 1 ? ' würde' : ' würden') + ' jetzt gemeldet.</strong>'
+                        : 'Mit diesen Einstellungen würde jetzt nichts gemeldet.') +
+                    ' (Warnung ab ' + r.warningMinutes + ' min, kritisch ab ' + r.criticalMinutes + ' min' +
+                    (r.cutoffActiveNow ? ', Cutoff ist gerade aktiv' : '') + ')</div>';
+
+                if (r.extensions.length > 0) {
+                    html += '<div class="small mb-2">Gefundene Dateitypen (Klick = nur diese einschließen): ';
+                    r.extensions.forEach(function (x) {
+                        var pattern = x.extension === '(ohne)' ? '' : '*' + x.extension;
+                        html += '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 me-1 mb-1" ' +
+                            (pattern ? 'onclick="fmaIncludeExt(\'' + esc(pattern) + '\')"' : 'disabled') + '>' +
+                            esc(x.extension) + ' <span class="badge text-bg-light">' + x.count + '</span></button>';
+                    });
+                    html += '</div>';
+                }
+
+                if (r.flagged.length > 0) {
+                    html += '<h6 class="small mt-2">Würde gemeldet' + (r.flaggedCount > r.flagged.length ? ' (die ersten ' + r.flagged.length + ')' : '') + '</h6>' +
+                        '<table class="table table-sm small mb-2"><thead><tr><th>Datei</th><th>Alter</th><th>Grund</th><th>Schwere</th></tr></thead><tbody>';
+                    r.flagged.forEach(function (f) {
+                        html += '<tr><td class="text-break">' + esc(f.filePath) + '</td><td>' + ageText(f.ageMinutes) + '</td><td>' +
+                            (f.reason === 'cutoff' ? 'nach Cutoff noch da' : 'zu alt') + '</td><td>' +
+                            (f.isCritical ? '<span class="badge text-bg-danger">Critical</span>' : '<span class="badge text-bg-warning">Warning</span>') + '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                } else if (r.oldestFiles.length > 0) {
+                    html += '<h6 class="small mt-2">Älteste passende Dateien</h6><table class="table table-sm small mb-2"><thead><tr><th>Datei</th><th>Alter</th></tr></thead><tbody>';
+                    r.oldestFiles.slice(0, 5).forEach(function (f) {
+                        html += '<tr><td class="text-break">' + esc(f.path) + '</td><td>' + ageText(f.ageMinutes) + '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                }
+                target.innerHTML = html;
+            });
+        };
+
+        window.fmaIncludeExt = function (pattern) {
+            el('fmaDirInclude').value = pattern;
+            fmaTestDir();
+        };
+
+        window.fmaTestLog = function (useSample) {
+            var target = el('fmaLogResult');
+            var sample = useSample ? el('fmaLogSample').value : null;
+            if (useSample && !sample.trim()) { target.innerHTML = '<div class="text-warning small">Bitte Beispielzeilen einfügen.</div>'; return; }
+            if (!useSample && !el('fmaLogPath').value.trim()) { target.innerHTML = '<div class="text-warning small">Bitte eine Logdatei oder ein Muster eingeben.</div>'; return; }
+            post('@Url.Content("~/api/filemonitoringtest/logscan")', { logScan: logRow(), sampleText: sample },
+                useSample ? null : el('fmaLogTestBtn'), target, function (data) {
+                var r = data.result;
+                var html = checkedByHint(data);
+                if (!data.success && (!r || !r.reachable)) {
+                    target.innerHTML = html + '<div class="alert alert-danger py-2 small"><i class="bi bi-x-circle me-1"></i>' + esc(data.error) + '</div>';
+                    return;
+                }
+                if (data.error) html += '<div class="alert alert-warning py-2 small">' + esc(data.error) + '</div>';
+                html += '<div class="small mb-2">' + (r.fromSample
+                    ? r.linesRead + ' Beispielzeile(n) getestet.'
+                    : r.filesScanned + ' Datei(en) gelesen, ' + r.linesRead + ' Zeile(n) ausgewertet.') + '</div>';
+
+                if (r.files.length > 0) {
+                    html += '<details class="small mb-2"><summary>Gefundene Dateien (' + r.files.length + ')</summary><ul class="mb-0">';
+                    r.files.forEach(function (f) {
+                        html += '<li class="text-break">' + esc(f.path) + ' – ' + ageText(f.ageMinutes) + ' alt' +
+                            (f.included ? '' : ' <span class="text-body-secondary">(zu alt, übersprungen)</span>') + '</li>';
+                    });
+                    html += '</ul></details>';
+                }
+
+                if (r.patterns.length > 0) {
+                    html += '<h6 class="small">Ihre Signaturen</h6>' + patternTable(r.patterns, false);
+                }
+
+                var hits = r.suggestions.filter(function (s) { return s.count > 0; });
+                html += '<h6 class="small mt-2">Vorschläge' + (hits.length === 0 ? ' – keine Standardsignatur trifft in den gelesenen Zeilen' : '') + '</h6>' +
+                    patternTable(r.suggestions, true);
+
+                if (r.tail.length > 0) {
+                    html += '<details class="small"><summary>Letzte Zeilen der neuesten Datei</summary>' +
+                        '<pre class="bg-body-tertiary border rounded p-2 mb-0" style="max-height:220px;overflow:auto;font-size:.75rem;">' +
+                        esc(r.tail.join('\n')) + '</pre></details>';
+                }
+                target.innerHTML = html;
+            });
+        };
+
+        function patternTable(list, offerAdd) {
+            var html = '<table class="table table-sm small mb-2"><thead><tr><th>Signatur</th><th>Schwere</th><th class="text-end">Treffer</th><th>Beispiel</th>' +
+                (offerAdd ? '<th></th>' : '') + '</tr></thead><tbody>';
+            list.forEach(function (p) {
+                html += '<tr' + (offerAdd && p.count === 0 ? ' class="text-body-secondary"' : '') + '><td>' + esc(p.name) +
+                    '<div class="font-monospace text-body-secondary" style="font-size:.7rem;">' + esc(p.regex) + '</div></td>' +
+                    '<td>' + (p.severity === 'Warning' ? '<span class="badge text-bg-warning">Warning</span>' : '<span class="badge text-bg-danger">Critical</span>') + '</td>' +
+                    '<td class="text-end">' + (p.error ? '–' : p.count) + '</td><td class="text-break">' +
+                    (p.error ? '<span class="text-danger">' + esc(p.error) + '</span>' : esc(p.samples[0] || '')) + '</td>' +
+                    (offerAdd ? '<td><button type="button" class="btn btn-sm btn-outline-primary py-0" data-line="' +
+                        esc(p.name + ' :: ' + p.severity + ' :: ' + p.regex) + '" onclick="fmaAddPattern(this)">Übernehmen</button></td>' : '') +
+                    '</tr>';
+            });
+            return html + '</tbody></table>';
+        }
+
+        window.fmaAddPattern = function (btn) {
+            var line = btn.getAttribute('data-line');
+            var box = el('fmaLogPatterns');
+            if (box.value.split('\n').some(function (l) { return l.trim() === line; })) return;
+            box.value = (box.value.trim() ? box.value.replace(/\s+$/, '') + '\n' : '') + line;
+            btn.disabled = true;
+            btn.textContent = 'Übernommen';
+        };
+
+        // Default display name: last path segment, or the folder for a glob like ...\log\*.log
+        function nameFromPath(path) {
+            var parts = path.split(/[\\/]/).filter(Boolean);
+            var last = parts.pop() || path;
+            return /[*?]/.test(last) && parts.length > 0 ? parts.pop() : last;
+        }
+
+        function setField(item, suffix, value) {
+            var input = item.querySelector('[name$=".' + suffix + '"]:not([type=hidden])');
+            if (!input) return;
+            if (input.type === 'checkbox') input.checked = !!value;
+            else input.value = value ?? '';
+        }
+
+        window.fmaApply = function () {
+            var row = kind === 'dir' ? dirRow() : logRow();
+            if (!row.path) {
+                el(kind === 'dir' ? 'fmaDirResult' : 'fmaLogResult').innerHTML =
+                    '<div class="text-warning small">Bitte zuerst einen Pfad eingeben.</div>';
+                return;
+            }
+            if (kind === 'log' && !row.patterns.trim()) {
+                el('fmaLogResult').innerHTML = '<div class="text-warning small">Bitte mindestens eine Signatur eintragen oder einen Vorschlag übernehmen – ohne Signatur prüft der Log-Scan nichts.</div>';
+                return;
+            }
+
+            var enabled = el('fileMonEnabled');
+            if (enabled && !enabled.checked) { enabled.checked = true; enabled.dispatchEvent(new Event('change')); }
+
+            var item;
+            if (kind === 'dir') {
+                addFmDir();
+                var dirs = document.querySelectorAll('#fmDirList .fm-dir-item');
+                item = dirs[dirs.length - 1];
+                setField(item, 'Name', row.name || nameFromPath(row.path));
+                setField(item, 'Path', row.path);
+                setField(item, 'IncludePatterns', row.includePatterns);
+                setField(item, 'ExcludePatterns', row.excludePatterns);
+                setField(item, 'Recursive', row.recursive);
+                setField(item, 'AgeMinutesWarning', row.ageMinutesWarning);
+                setField(item, 'AgeMinutesCritical', row.ageMinutesCritical);
+                setField(item, 'CutoffTime', row.cutoffTime);
+                setField(item, 'CutoffSeverity', row.cutoffSeverity);
+            } else {
+                addFmLog();
+                var logs = document.querySelectorAll('#fmLogList .fm-log-item');
+                item = logs[logs.length - 1];
+                setField(item, 'Name', row.name || nameFromPath(row.path));
+                setField(item, 'Path', row.path);
+                setField(item, 'MaxFileAgeMinutes', row.maxFileAgeMinutes);
+                setField(item, 'MaxLines', row.maxLines);
+                setField(item, 'Patterns', row.patterns);
+            }
+            setField(item, 'WikiUrl', row.wikiUrl);
+            setField(item, 'RemediationSteps', row.remediationSteps);
+
+            modal.hide();
+            item.classList.add('border-success');
+            item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        };
+    })();
+</script>

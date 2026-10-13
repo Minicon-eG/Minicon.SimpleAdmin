@@ -1483,6 +1483,34 @@ $.version != deprecated</code></pre>
                     <li>Ein <strong>zentraler Worker</strong> erreicht die Standort-Shares über UNC-Pfade
                         (z.B. <code>\\srv\d$\Daten\schnittstelle\kasse\eingang</code>); das Dienstkonto benötigt Leserechte.</li>
                 </ul>
+                <h4>Einrichtungs-Assistent</h4>
+                <p>
+                    Am schnellsten richtet man die Überwachung über den Button <strong>„Assistent"</strong> auf der Karte
+                    <em>Datei-/Protokollüberwachung</em> ein (Server → Bearbeiten). Der Assistent prüft die Einstellungen
+                    gegen die echten Dateien, <em>bevor</em> gespeichert wird:
+                </p>
+                <ul>
+                    <li><strong>Ordner auf hängende Dateien:</strong> Vorlage wählen (Übergabeordner mit Cutoff 21:45,
+                        Eingangsordner 30/120&nbsp;min, Fehlerordner – jede Datei ist ein Fehler), Pfad eintragen,
+                        <em>„Ordner prüfen"</em>. Angezeigt werden Anzahl der Dateien, gefundene Dateitypen (Klick = als Filter
+                        übernehmen) und welche Dateien <strong>jetzt</strong> gemeldet würden – mit Grund und Schweregrad.</li>
+                    <li><strong>Logdatei auf Fehlermeldungen:</strong> Logdatei oder Muster eintragen,
+                        <em>„Log lesen &amp; testen"</em>. Für jede eigene Signatur erscheinen Trefferzahl und Beispielzeilen;
+                        ungültige oder zu aufwendige reguläre Ausdrücke werden gemeldet. Zusätzlich zeigt der Assistent
+                        <strong>Vorschläge</strong> (Exception, ERROR, FATAL, Timeout, Verbindungsfehler, Zugriff verweigert,
+                        Speichermangel, Deadlock, WARN) mit ihrer Trefferzahl im eigenen Log – per Klick übernehmen.
+                        Die letzten Zeilen der neuesten Datei helfen beim Schreiben eigener Signaturen.</li>
+                    <li><strong>„In Formular übernehmen"</strong> legt eine neue Zeile im Formular an und schaltet die
+                        Überwachung für den Server ein; anschließend wie gewohnt speichern.</li>
+                </ul>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Der Assistent liest die Dateien vom <strong>WebUI-Server</strong> aus (Rechner und Konto werden im Ergebnis
+                    angezeigt). Der Worker, der den Server überwacht, braucht dieselben Leserechte. Ist die WebUI ohne
+                    Anmeldung betrieben (<code>Authentication:Enabled = false</code>), ist das Einlesen von Dateien gesperrt.
+                    Signaturen lassen sich dann – oder wenn der WebUI-Server keinen Zugriff hat – mit
+                    <em>eingefügten Beispielzeilen</em> testen.
+                </div>
                 <h4>Hängengebliebene Dateien</h4>
                 <p>
                     Eine Datei gilt je überwachtem Verzeichnis als hängend, wenn sie <strong>älter</strong> als die
@@ -1721,7 +1749,8 @@ $.version != deprecated</code></pre>
                     REST-API-Endpunkte — erfordert einen authentifizierten Windows-Benutzer
                     (<strong>Negotiate</strong>, also Kerberos/NTLM) über eine globale Fallback-Policy.
                     Damit sind insbesondere die Verbindungstests (<code>/api/sqlquerytest</code>,
-                    <code>/api/emailtest</code>, <code>/api/notificationtest</code>) und die
+                    <code>/api/emailtest</code>, <code>/api/notificationtest</code>), der Probelauf der
+                    Datei-/Protokollüberwachung (<code>/api/filemonitoringtest</code>) und die
                     Konfigurationsverwaltung nie anonym erreichbar.
                 </p>
 

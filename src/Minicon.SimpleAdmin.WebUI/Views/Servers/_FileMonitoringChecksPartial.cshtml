@@ -114,10 +114,15 @@
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-folder-check me-2"></i>Datei-/Protokollüberwachung</span>
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
-                data-bs-target="#fileMonHelp" aria-expanded="false">
-            <i class="bi bi-question-circle me-1"></i>Hilfe
-        </button>
+        <span>
+            <button type="button" class="btn btn-sm btn-primary me-1" onclick="fmaOpen()">
+                <i class="bi bi-magic me-1"></i>Assistent
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
+                    data-bs-target="#fileMonHelp" aria-expanded="false">
+                <i class="bi bi-question-circle me-1"></i>Hilfe
+            </button>
+        </span>
     </div>
     <div class="card-body">
         <div class="collapse mb-3" id="fileMonHelp">
@@ -162,9 +167,14 @@
                     await DirRow(i.ToString(), fm.Directories[i]);
                 }
             </div>
-            <button type="button" class="btn btn-sm btn-outline-primary mb-3" onclick="addFmDir()">
-                <i class="bi bi-plus-circle me-1"></i>Verzeichnis hinzufügen
-            </button>
+            <div class="mb-3">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="fmaOpen('dir')">
+                    <i class="bi bi-magic me-1"></i>Verzeichnis mit Assistent
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addFmDir()">
+                    <i class="bi bi-plus-circle me-1"></i>Leeres Verzeichnis
+                </button>
+            </div>
 
             <h6 class="mt-2"><i class="bi bi-file-earmark-text me-1"></i>Log-Scans</h6>
             <div id="fmLogList">
@@ -173,9 +183,14 @@
                     await LogRow(i.ToString(), fm.LogScans[i]);
                 }
             </div>
-            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addFmLog()">
-                <i class="bi bi-plus-circle me-1"></i>Log-Scan hinzufügen
-            </button>
+            <div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="fmaOpen('log')">
+                    <i class="bi bi-magic me-1"></i>Log-Scan mit Assistent
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addFmLog()">
+                    <i class="bi bi-plus-circle me-1"></i>Leerer Log-Scan
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -225,3 +240,5 @@
         });
     }
 </script>
+
+@await Html.PartialAsync("_FileMonitoringAssistantPartial")
