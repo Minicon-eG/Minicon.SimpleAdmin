@@ -28,7 +28,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.32.0`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.32.1`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
@@ -195,6 +195,9 @@ A server with no PRTG metrics but a failing email delivery check correctly retur
 
 ### Status Smoothing (Alert Fatigue Prevention)
 Status changes require N consecutive checks showing the same result (default `minConsecutiveChecks: 5`). `StatusEvaluator.GetConfirmedStatus()` re-evaluates each snapshot's value against current thresholds. If mixed → returns the most frequent; ties broken in favor of least severe. The same mechanism is applied to email probe/delivery via `ConsecutiveFailures` carry-forward.
+
+### Problem First/Last Occurrence (v2.32.1)
+Problems are re-derived on every read, so their start time is persisted separately: the worker carries `RuntimeStatus.ProblemsSince` (problem ID → first seen UTC) forward each cycle via `ProblemDerivationService.TrackFirstSeen` (resolved problems drop out; a severity change = new ID = new start). Every reader (HTML generator, `StatusReaderService` — earliest start across the server's service files —, `NotificationService`) calls `ApplyOccurrences(problems, status.ProblemsSince, status.LastUpdate)`; without an entry (older files) First = Last = `LastUpdate`. `StaticHtmlGenerator.WithoutHistory` is the single copy used for the HTTP/central status JSON — add new `RuntimeStatus` fields there.
 
 ### Feature Toggles
 - `SystemMetrics`: always on

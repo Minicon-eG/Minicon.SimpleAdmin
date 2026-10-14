@@ -56,6 +56,44 @@ public class StaticHtmlGeneratorTests : IDisposable
     }
 
     [Fact]
+    public async Task GenerateAllAsync_RendersPersistedProblemStart_AndTitleWithoutEmptySource()
+    {
+        var generator = new StaticHtmlGenerator(_tempDirectory, _logger.Object);
+        var lastUpdate = new DateTime(2026, 10, 14, 7, 31, 0, DateTimeKind.Utc);
+
+        var statuses = new List<RuntimeStatus>
+        {
+            new()
+            {
+                Server = "server-a",
+                Service = "api",
+                LastUpdate = lastUpdate,
+                Status = ServiceStatus.Unhealthy,
+                Metrics =
+                {
+                    new Metric
+                    {
+                        Name = "cpu",
+                        DisplayName = "CPU",
+                        Unit = "%",
+                        Value = 95,
+                        Status = Minicon.SimpleAdmin.Models.Status.MetricStatus.Critical,
+                        Threshold = new MetricThreshold { Warning = 70, Critical = 90, Operator = ">" }
+                    }
+                },
+                ProblemsSince = new Dictionary<string, DateTime> { ["cpu_usage_critical"] = lastUpdate.AddMinutes(-70) }
+            }
+        };
+
+        await generator.GenerateAllAsync(statuses, new Config(), "server-a", new List<Acknowledge>());
+
+        var html = await File.ReadAllTextAsync(Path.Combine(_tempDirectory, "server-a.api.html"));
+        html.Should().Contain("First: 2026-10-14 06:21 UTC");
+        html.Should().Contain("Last: 2026-10-14 07:31 UTC");
+        html.Should().Contain("<h3>cpu</h3>");
+    }
+
+    [Fact]
     public async Task GenerateAllAsync_RendersAppPoolSection_WhenPoolsPresent()
     {
         var generator = new StaticHtmlGenerator(_tempDirectory, _logger.Object);

@@ -850,4 +850,72 @@ public class ProblemDerivationServiceTests
 
         p1[0].Id.Should().Be(p2[0].Id);
     }
+
+    // -------------------------------------------------------------------------
+    // First / last occurrence
+    // -------------------------------------------------------------------------
+
+    private static ActiveProblem Problem(string id) => new() { Id = id, Type = "cpu" };
+
+    [Fact]
+    public void TrackFirstSeen_KeepsKnownStart_StartsNewAtNow_DropsResolved()
+    {
+        var start = new DateTime(2026, 10, 14, 6, 0, 0, DateTimeKind.Utc);
+        var now = start.AddHours(2);
+        var previous = new Dictionary<string, DateTime>
+        {
+            ["cpu_usage_critical"] = start,
+            ["memory_usage_warning"] = start
+        };
+
+        var result = ProblemDerivationService.TrackFirstSeen(
+            new[] { Problem("cpu_usage_critical"), Problem("disk_c_warning") }, previous, now);
+
+        result.Should().HaveCount(2);
+        result["cpu_usage_critical"].Should().Be(start);
+        result["disk_c_warning"].Should().Be(now);
+        result.Should().NotContainKey("memory_usage_warning");
+    }
+
+    [Fact]
+    public void TrackFirstSeen_StartInTheFuture_IsClampedToNow()
+    {
+        var now = new DateTime(2026, 10, 14, 6, 0, 0, DateTimeKind.Utc);
+        var previous = new Dictionary<string, DateTime> { ["cpu_usage_critical"] = now.AddHours(1) };
+
+        var result = ProblemDerivationService.TrackFirstSeen(new[] { Problem("cpu_usage_critical") }, previous, now);
+
+        result["cpu_usage_critical"].Should().Be(now);
+    }
+
+    [Fact]
+    public void ApplyOccurrences_UsesPersistedStart_AndObservationTimeAsLast()
+    {
+        var start = new DateTime(2026, 10, 14, 6, 0, 0, DateTimeKind.Utc);
+        var observedAt = start.AddMinutes(70);
+        var known = Problem("cpu_usage_critical");
+        var unknown = Problem("disk_c_warning");
+
+        ProblemDerivationService.ApplyOccurrences(
+            new[] { known, unknown },
+            new Dictionary<string, DateTime> { ["cpu_usage_critical"] = start },
+            observedAt);
+
+        known.FirstOccurrence.Should().Be(start);
+        known.LastOccurrence.Should().Be(observedAt);
+        unknown.FirstOccurrence.Should().Be(observedAt);
+        unknown.LastOccurrence.Should().Be(observedAt);
+    }
+
+    [Fact]
+    public void ApplyOccurrences_WithoutPersistedTimes_UsesObservationTime()
+    {
+        var observedAt = new DateTime(2026, 10, 14, 6, 0, 0, DateTimeKind.Utc);
+        var problem = Problem("cpu_usage_critical");
+
+        ProblemDerivationService.ApplyOccurrences(new[] { problem }, null, observedAt);
+
+        problem.FirstOccurrence.Should().Be(observedAt);
+        problem.LastOccurrence.Should().Be(observedAt);
+    }
 }

@@ -189,6 +189,7 @@ public sealed class NotificationService(
                     status.Certificates,
                     status.BizTalk,
                     status.FileMonitoring);
+                ProblemDerivationService.ApplyOccurrences(derived, status.ProblemsSince, status.LastUpdate);
 
                 foreach (var problem in derived)
                     AddProblem(collected, seen, serverId, problem);
@@ -363,7 +364,7 @@ public sealed class NotificationService(
                 }
                 else
                 {
-                    entry = new NotifyEntry { ServerId = serverId, FirstSeenAt = now };
+                    entry = new NotifyEntry { ServerId = serverId, FirstSeenAt = problem.Since < now ? problem.Since : now };
                 }
                 ownState.Entries[stateKey] = entry;
             }

@@ -91,4 +91,10 @@ public class RuntimeStatus
     /// Gets or sets the file-share / log monitoring state for this server (null if not enabled)
     /// </summary>
     public FileMonitoringState? FileMonitoring { get; set; }
+
+    /// <summary>
+    /// Gets or sets when each currently active problem was first observed (problem ID -> UTC).
+    /// Carried forward by the worker every cycle; resolved problems drop out (null if none).
+    /// </summary>
+    public Dictionary<string, DateTime>? ProblemsSince { get; set; }
 }

@@ -589,6 +589,7 @@ public class SimpleAdminWorker
             certificateStates,
             bizTalkState,
             fileMonitoringState);
+        var problemsSince = ProblemDerivationService.TrackFirstSeen(activeProblems, existingStatus?.ProblemsSince, timestamp);
         var overallStatus = _statusEvaluator.DetermineOverallStatusWithAcknowledges(metrics, activeProblems);
 
         // Build endpoint status list
@@ -632,7 +633,8 @@ public class SimpleAdminWorker
             EmailDelivery = emailDeliveryStates,
             Certificates = certificateStates,
             BizTalk = bizTalkState,
-            FileMonitoring = fileMonitoringState
+            FileMonitoring = fileMonitoringState,
+            ProblemsSince = problemsSince.Count > 0 ? problemsSince : null
         };
 
         // Save status with history

@@ -384,6 +384,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             status.Certificates,
             status.BizTalk,
             status.FileMonitoring);
+        ProblemDerivationService.ApplyOccurrences(problems, status.ProblemsSince, status.LastUpdate);
         if (problems.Count > 0)
         {
             var problemsHtml = GenerateProblemsSectionHtml(problems);
@@ -956,26 +957,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             var filePath = Path.Combine(statusDir, fileName);
 
             // Create a simplified status without full history for HTTP transfer
-            var httpStatus = new RuntimeStatus
-            {
-                Server = status.Server,
-                Service = status.Service,
-                LastUpdate = status.LastUpdate,
-                Status = status.Status,
-                StatusMessage = status.StatusMessage,
-                Metrics = status.Metrics,
-                Endpoints = status.Endpoints,
-                History = new List<MetricSnapshot>(), // Don't include full history in HTTP status
-                AppPools = status.AppPools,
-                Services = status.Services,
-                EventLogs = status.EventLogs,
-                SqlQueryChecks = status.SqlQueryChecks,
-                EmailProbes = status.EmailProbes,
-                EmailDelivery = status.EmailDelivery,
-                Certificates = status.Certificates,
-                BizTalk = status.BizTalk,
-                FileMonitoring = status.FileMonitoring
-            };
+            var httpStatus = WithoutHistory(status); // Don't include full history in HTTP status
 
             var json = JsonSerializer.Serialize(httpStatus, _jsonOptions);
             await File.WriteAllTextAsync(filePath, json);
@@ -991,26 +973,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             {
                 Hostname = hostname,
                 GeneratedAt = DateTime.UtcNow,
-                Statuses = statuses.Select(s => new RuntimeStatus
-                {
-                    Server = s.Server,
-                    Service = s.Service,
-                    LastUpdate = s.LastUpdate,
-                    Status = s.Status,
-                    StatusMessage = s.StatusMessage,
-                    Metrics = s.Metrics,
-                    Endpoints = s.Endpoints,
-                    History = new List<MetricSnapshot>(), // Don't include history in HTTP status
-                    AppPools = s.AppPools,
-                    Services = s.Services,
-                    EventLogs = s.EventLogs,
-                    SqlQueryChecks = s.SqlQueryChecks,
-                    EmailProbes = s.EmailProbes,
-                    EmailDelivery = s.EmailDelivery,
-                    Certificates = s.Certificates,
-                    BizTalk = s.BizTalk,
-                    FileMonitoring = s.FileMonitoring
-                }).ToList()
+                Statuses = statuses.Select(WithoutHistory).ToList()
             };
 
             var aggFileName = $"{hostname}.status.json";
@@ -1022,6 +985,31 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             _logger.LogDebug("Saved aggregated status JSON for HTTP: {FilePath}", aggFinalPath);
         }
     }
+
+    /// <summary>
+    /// Copy of a status without the metric history, for HTTP transfer and the central output path.
+    /// </summary>
+    private static RuntimeStatus WithoutHistory(RuntimeStatus s) => new()
+    {
+        Server = s.Server,
+        Service = s.Service,
+        LastUpdate = s.LastUpdate,
+        Status = s.Status,
+        StatusMessage = s.StatusMessage,
+        Metrics = s.Metrics,
+        Endpoints = s.Endpoints,
+        History = new List<MetricSnapshot>(),
+        AppPools = s.AppPools,
+        Services = s.Services,
+        EventLogs = s.EventLogs,
+        SqlQueryChecks = s.SqlQueryChecks,
+        EmailProbes = s.EmailProbes,
+        EmailDelivery = s.EmailDelivery,
+        Certificates = s.Certificates,
+        BizTalk = s.BizTalk,
+        FileMonitoring = s.FileMonitoring,
+        ProblemsSince = s.ProblemsSince
+    };
 
     /// <summary>
     /// Copies status JSON files to the central output path for aggregation by central generator
@@ -1044,26 +1032,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             {
                 Hostname = currentHostname,
                 GeneratedAt = DateTime.UtcNow,
-                Statuses = statuses.Select(s => new RuntimeStatus
-                {
-                    Server = s.Server,
-                    Service = s.Service,
-                    LastUpdate = s.LastUpdate,
-                Status = s.Status,
-                StatusMessage = s.StatusMessage,
-                Metrics = s.Metrics,
-                Endpoints = s.Endpoints,
-                History = new List<MetricSnapshot>(), // Don't include history in central status
-                AppPools = s.AppPools,
-                Services = s.Services,
-                EventLogs = s.EventLogs,
-                SqlQueryChecks = s.SqlQueryChecks,
-                EmailProbes = s.EmailProbes,
-                EmailDelivery = s.EmailDelivery,
-                Certificates = s.Certificates,
-                BizTalk = s.BizTalk,
-                FileMonitoring = s.FileMonitoring
-                }).ToList()
+                Statuses = statuses.Select(WithoutHistory).ToList()
             };
 
             var fileName = $"{currentHostname}.status.json";
@@ -2597,7 +2566,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
         {
             var severityClass = problem.Severity.ToString().ToLower();
             var ackStatus = problem.Acknowledged ? "Acknowledged" : "Unacknowledged";
-            var problemTitle = WebUtility.HtmlEncode($"{problem.Type}: {problem.Source}");
+            var problemTitle = WebUtility.HtmlEncode(string.IsNullOrEmpty(problem.Source) ? problem.Type : $"{problem.Type}: {problem.Source}");
 
             html.AppendLine($"                <div class=\"problem-card problem-{severityClass}\">");
             html.AppendLine($"                    <h3>{problemTitle}</h3>");

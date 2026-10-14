@@ -534,6 +534,14 @@ public class StatusReaderService
                     bizTalk,
                     fileMonitoring);
 
+                // First-seen times from all service files of the server; the earliest start wins.
+                var problemsSince = services
+                    .Where(s => s.ProblemsSince != null)
+                    .SelectMany(s => s.ProblemsSince!)
+                    .GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(gr => gr.Key, gr => gr.Min(kvp => kvp.Value), StringComparer.OrdinalIgnoreCase);
+                ProblemDerivationService.ApplyOccurrences(problems, problemsSince, newest.LastUpdate);
+
                 // Calculate overall status
                 var overallStatus = CalculateOverallStatus(services, problems);
 

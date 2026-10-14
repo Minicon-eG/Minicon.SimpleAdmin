@@ -288,6 +288,47 @@ public static class ProblemDerivationService
     }
 
     /// <summary>
+    /// Carries first-seen times forward: known problems keep their start, new ones start at
+    /// <paramref name="now"/>, resolved ones drop out. A change of severity yields a new problem ID
+    /// and therefore a new start.
+    /// </summary>
+    public static Dictionary<string, DateTime> TrackFirstSeen(
+        IEnumerable<ActiveProblem> problems,
+        IReadOnlyDictionary<string, DateTime>? previous,
+        DateTime now)
+    {
+        var result = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        foreach (var problem in problems)
+        {
+            var since = previous != null && previous.TryGetValue(problem.Id, out var known) && known <= now
+                ? known
+                : now;
+            result.TryAdd(problem.Id, since);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Sets <see cref="ActiveProblem.Since"/> from the worker's persisted first-seen times and
+    /// <see cref="ActiveProblem.LastOccurrence"/> to the time the state was observed. Problems without a
+    /// known start (older status files) start at <paramref name="observedAt"/>.
+    /// </summary>
+    public static void ApplyOccurrences(
+        IEnumerable<ActiveProblem> problems,
+        IReadOnlyDictionary<string, DateTime>? firstSeen,
+        DateTime observedAt)
+    {
+        foreach (var problem in problems)
+        {
+            problem.LastOccurrence = observedAt;
+            problem.Since = firstSeen != null && firstSeen.TryGetValue(problem.Id, out var since) && since <= observedAt
+                ? since
+                : observedAt;
+        }
+    }
+
+    /// <summary>
     /// Applies acknowledge information to derived problems by matching problem IDs
     /// </summary>
     public static void ApplyAcknowledges(
