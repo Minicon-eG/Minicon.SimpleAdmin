@@ -594,4 +594,48 @@ public class ConfigurationServiceTests
             if (File.Exists(tempFile)) File.Delete(tempFile);
         }
     }
+
+    // ── Application title ────────────────────────────────────────────────────
+
+    [Fact]
+    public void GetApplicationTitle_NotConfigured_ReturnsDefault()
+    {
+        CreateService().GetApplicationTitle().Should().Be(ConfigurationService.DefaultApplicationTitle);
+    }
+
+    [Fact]
+    public void UpdateApplicationTitle_TrimsAndStores()
+    {
+        var svc = CreateService();
+
+        svc.UpdateApplicationTitle("  Monitoring Justiz  ");
+
+        svc.GetApplicationTitle().Should().Be("Monitoring Justiz");
+        svc.Config.General!.Title.Should().Be("Monitoring Justiz");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void UpdateApplicationTitle_Empty_FallsBackToDefault(string? title)
+    {
+        var svc = CreateService();
+        svc.UpdateApplicationTitle("Alt");
+
+        svc.UpdateApplicationTitle(title);
+
+        svc.Config.General!.Title.Should().BeNull();
+        svc.GetApplicationTitle().Should().Be(ConfigurationService.DefaultApplicationTitle);
+    }
+
+    [Fact]
+    public void UpdateApplicationTitle_TooLong_IsCut()
+    {
+        var svc = CreateService();
+
+        svc.UpdateApplicationTitle(new string('x', 100));
+
+        svc.GetApplicationTitle().Should().HaveLength(ConfigurationService.MaxApplicationTitleLength);
+    }
 }

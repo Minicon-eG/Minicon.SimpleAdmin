@@ -1,0 +1,130 @@
+@* Acknowledge dialog shared by the Problems page and the server detail page.
+   Entry points: acknowledgeProblem(problemId, serverId, label), openAcknowledgeModal(targets), cancelAcknowledge(acknowledgeId). *@
+
+<div class="modal fade" id="acknowledgeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="acknowledgeModalTitle">Problem bestätigen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="small mb-3 d-none" id="acknowledgeSelectionList"></ul>
+                <div class="mb-3">
+                    <label for="acknowledgeDuration" class="form-label">Dauer</label>
+                    <select class="form-select" id="acknowledgeDuration" onchange="toggleAcknowledgeDate()">
+                        <option value="30">30 Minuten</option>
+                        <option value="60" selected>1 Stunde</option>
+                        <option value="240">4 Stunden</option>
+                        <option value="480">8 Stunden</option>
+                        <option value="1440">24 Stunden</option>
+                        <option value="10080">7 Tage</option>
+                        <option value="43200">30 Tage</option>
+                        <option value="date">Bis Datum …</option>
+                        <option value="0">Unbegrenzt (bis aufgehoben)</option>
+                    </select>
+                </div>
+                <div class="mb-3 d-none" id="acknowledgeDateGroup">
+                    <label for="acknowledgeDate" class="form-label">Bis</label>
+                    <input type="datetime-local" class="form-control" id="acknowledgeDate" />
+                </div>
+                <div class="mb-3">
+                    <label for="acknowledgeComment" class="form-label">Kommentar</label>
+                    <textarea class="form-control" id="acknowledgeComment" rows="3" placeholder="Grund für die Bestätigung..."></textarea>
+                </div>
+                <div class="form-text">
+                    Die Quittierung gilt bis zum Ablauf bzw. bis sie wieder aufgehoben wird.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary" onclick="submitAcknowledge()">Bestätigen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let acknowledgeModal;
+    // Problems the open dialog applies to: [{ serverId, problemId }]
+    let acknowledgeTargets = [];
+    const acknowledgeApiUrl = '@Url.Content("~/api/acknowledges")';
+    // Readable label for the dialog list: the problem message, falling back to the id.
+    const problemLabels = new Map();
+
+    function acknowledgeProblem(problemId, serverId) {
+        openAcknowledgeModal([{ serverId: serverId, problemId: problemId }]);
+    }
+
+    function openAcknowledgeModal(targets) {
+        acknowledgeTargets = targets;
+        const multi = targets.length > 1;
+        document.getElementById('acknowledgeModalTitle').textContent =
+            multi ? targets.length + ' Probleme bestätigen' : 'Problem bestätigen';
+        const list = document.getElementById('acknowledgeSelectionList');
+        list.replaceChildren(...(multi ? targets.map(t => {
+            const li = document.createElement('li');
+            li.textContent = t.serverId + ': ' + (problemLabels.get(t.serverId + '|' + t.problemId) || t.problemId);
+            return li;
+        }) : []));
+        list.classList.toggle('d-none', !multi);
+        acknowledgeModal = acknowledgeModal || new bootstrap.Modal(document.getElementById('acknowledgeModal'));
+        acknowledgeModal.show();
+    }
+
+    function toggleAcknowledgeDate() {
+        const isDate = document.getElementById('acknowledgeDuration').value === 'date';
+        document.getElementById('acknowledgeDateGroup').classList.toggle('d-none', !isDate);
+    }
+
+    async function cancelAcknowledge(acknowledgeId) {
+        if (!acknowledgeId || !confirm('Quittierung aufheben? Das Problem wird danach wieder gemeldet.')) return;
+        const response = await fetch(acknowledgeApiUrl + '/' + encodeURIComponent(acknowledgeId), { method: 'DELETE' });
+        if (response.ok) location.reload();
+        else alert('Fehler beim Aufheben der Quittierung');
+    }
+
+    async function submitAcknowledge() {
+        if (acknowledgeTargets.length === 0) return;
+        const choice = document.getElementById('acknowledgeDuration').value;
+        let duration = 0;
+        let expiresAt = null;
+        if (choice === 'date') {
+            const value = document.getElementById('acknowledgeDate').value;
+            if (!value) { alert('Bitte ein Datum wählen'); return; }
+            expiresAt = new Date(value).toISOString();
+        } else {
+            duration = parseInt(choice);
+        }
+        const comment = document.getElementById('acknowledgeComment').value;
+
+        try {
+            const single = acknowledgeTargets.length === 1;
+            const response = await fetch(single ? acknowledgeApiUrl : acknowledgeApiUrl + '/bulk', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    ...(single ? acknowledgeTargets[0] : { items: acknowledgeTargets }),
+                    acknowledgedBy: 'WebUI User',
+                    comment: comment,
+                    durationMinutes: duration,
+                    expiresAt: expiresAt,
+                    suppressAlerts: true
+                })
+            });
+
+            if (response.ok) {
+                acknowledgeModal.hide();
+                location.reload();
+            } else {
+                const err = await response.json().catch(() => ({}));
+                alert('Fehler beim Bestätigen des Problems' + (err.message ? ': ' + err.message : ''));
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Fehler beim Bestätigen des Problems');
+        }
+    }
+</script>

@@ -41,6 +41,21 @@
     <form asp-action="Index" method="post">
         @Html.AntiForgeryToken()
 
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-palette me-2"></i>Darstellung
+            </div>
+            <div class="card-body">
+                <label for="appTitle" class="form-label">Anwendungstitel</label>
+                <input type="text" id="appTitle" name="Title" value="@Model.Title" class="form-control" style="max-width: 32rem;"
+                       maxlength="@Minicon.SimpleAdmin.WebUI.Services.ConfigurationService.MaxApplicationTitleLength"
+                       placeholder="@Minicon.SimpleAdmin.WebUI.Services.ConfigurationService.DefaultApplicationTitle" />
+                <div class="form-text">
+                    Erscheint in der Navigationsleiste und im Browser-Tab, z. B. „Monitoring Justiz“. Leer = „SimpleAdmin“.
+                </div>
+            </div>
+        </div>
+
         <div class="row">
             <div class="col-lg-6">
                 <div class="card mb-4">

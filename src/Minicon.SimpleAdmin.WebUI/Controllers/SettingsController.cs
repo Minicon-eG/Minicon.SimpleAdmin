@@ -28,7 +28,10 @@ public class SettingsController : Controller
         var model = new SettingsViewModel
         {
             History = _configService.GetHistorySettings(),
-            Output = output
+            Output = output,
+            Title = _configService.GetApplicationTitle() == ConfigurationService.DefaultApplicationTitle
+                ? null
+                : _configService.GetApplicationTitle()
         };
 
         return View(model);
@@ -49,6 +52,7 @@ public class SettingsController : Controller
             {
                 _configService.UpdateHistorySettings(model.History);
                 _configService.UpdateOutputSettings(model.Output);
+                _configService.UpdateApplicationTitle(model.Title);
             });
             TempData["Success"] = "Einstellungen wurden erfolgreich aktualisiert.";
         }
@@ -175,6 +179,9 @@ public class SettingsViewModel
 {
     public HistorySettings History { get; set; } = new();
     public OutputSettings Output { get; set; } = new();
+
+    /// <summary>Application title (<c>general.title</c>); empty = default "SimpleAdmin".</summary>
+    public string? Title { get; set; }
 }
 
 public class FeaturesViewModel

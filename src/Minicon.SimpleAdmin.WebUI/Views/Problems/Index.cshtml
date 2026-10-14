@@ -11,51 +11,48 @@
     var openWarning = open.Count(p => p.Problem.Severity == ProblemSeverity.Warning);
     var acknowledgedCount = all.Count - open.Count;
     var servers = all.Select(p => p.ServerId).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList();
-
-    // Status timestamps are UTC; unspecified kinds come from JSON without offset and are UTC as well.
-    static DateTime AsUtc(DateTime value) =>
-        value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : value.ToUniversalTime();
-    static string Iso(DateTime value) => AsUtc(value).ToString("o");
-    static string Local(DateTime value) => AsUtc(value).ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 }
 
 <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-4">
     <div>
         <h1 class="mb-1"><i class="bi bi-exclamation-triangle me-2"></i>Probleme</h1>
-        <p class="text-muted mb-0">
+        <p class="text-body-secondary mb-0">
             @(open.Count == 0 ? "Keine offenen Probleme" : $"{open.Count} offen")@(acknowledgedCount > 0 ? $" · {acknowledgedCount} quittiert" : "")
         </p>
     </div>
-    <button class="btn btn-outline-secondary" onclick="location.reload()">
-        <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
-    </button>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <partial name="_AutoRefresh" />
+        <button type="button" class="btn btn-glass" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
+        </button>
+    </div>
 </div>
 
 @* KPI tiles — clicking one applies the matching filter *@
 <div class="row g-3 mb-4">
     <div class="col-6 col-lg-3">
-        <button type="button" class="problem-kpi kpi-open" data-filter-status="open" data-filter-severity="all">
+        <button type="button" class="problem-kpi kpi-tile kpi-accent" data-filter-status="open" data-filter-severity="all">
             <i class="bi bi-exclamation-octagon"></i>
             <span class="kpi-value">@open.Count</span>
             <span class="kpi-label">Offen</span>
         </button>
     </div>
     <div class="col-6 col-lg-3">
-        <button type="button" class="problem-kpi kpi-critical" data-filter-status="open" data-filter-severity="Critical">
+        <button type="button" class="problem-kpi kpi-tile kpi-crit" data-filter-status="open" data-filter-severity="Critical">
             <i class="bi bi-x-octagon"></i>
             <span class="kpi-value">@openCritical</span>
-            <span class="kpi-label">Critical offen</span>
+            <span class="kpi-label">Kritisch offen</span>
         </button>
     </div>
     <div class="col-6 col-lg-3">
-        <button type="button" class="problem-kpi kpi-warning" data-filter-status="open" data-filter-severity="Warning">
+        <button type="button" class="problem-kpi kpi-tile kpi-warn" data-filter-status="open" data-filter-severity="Warning">
             <i class="bi bi-exclamation-triangle"></i>
             <span class="kpi-value">@openWarning</span>
-            <span class="kpi-label">Warning offen</span>
+            <span class="kpi-label">Warnungen offen</span>
         </button>
     </div>
     <div class="col-6 col-lg-3">
-        <button type="button" class="problem-kpi kpi-acknowledged" data-filter-status="acknowledged" data-filter-severity="all">
+        <button type="button" class="problem-kpi kpi-tile kpi-ack" data-filter-status="acknowledged" data-filter-severity="all">
             <i class="bi bi-check2-circle"></i>
             <span class="kpi-value">@acknowledgedCount</span>
             <span class="kpi-label">Quittiert</span>
@@ -65,17 +62,17 @@
 
 @if (all.Count == 0)
 {
-    <div class="card shadow-sm problem-panel">
+    <div class="card problem-panel">
         <div class="problem-empty">
             <i class="bi bi-check-circle text-success"></i>
             <h5>Keine aktiven Probleme</h5>
-            <p class="text-muted mb-0">Alle Systeme sind funktionsfähig.</p>
+            <p class="text-body-secondary mb-0">Alle Systeme sind funktionsfähig.</p>
         </div>
     </div>
 }
 else
 {
-    <div class="card shadow-sm problem-panel">
+    <div class="card problem-panel">
         @* Filter bar *@
         <div class="card-header problem-toolbar">
             <div class="row g-2 align-items-center">
@@ -92,9 +89,9 @@ else
                 <div class="col-6 col-lg-auto">
                     <select class="form-select form-select-sm" id="filterSeverity" aria-label="Schweregrad-Filter">
                         <option value="all" selected>Alle Schweregrade</option>
-                        <option value="Critical">Critical</option>
-                        <option value="Warning">Warning</option>
-                        <option value="Info">Info</option>
+                        <option value="Critical">@Display.Label(ProblemSeverity.Critical)</option>
+                        <option value="Warning">@Display.Label(ProblemSeverity.Warning)</option>
+                        <option value="Info">@Display.Label(ProblemSeverity.Info)</option>
                     </select>
                 </div>
                 <div class="col-6 col-lg-auto">
@@ -113,7 +110,7 @@ else
                     </div>
                 </div>
                 <div class="col-12 col-lg-auto text-lg-end">
-                    <small class="text-muted" id="filterSummary"></small>
+                    <small class="text-body-secondary" id="filterSummary"></small>
                     <button type="button" class="btn btn-link btn-sm p-0 ms-2 d-none" id="filterReset" onclick="resetFilters()">Filter zurücksetzen</button>
                 </div>
             </div>
@@ -150,12 +147,6 @@ else
                     @foreach (var (serverId, problem) in all)
                     {
                         var severityKey = problem.Severity.ToString().ToLowerInvariant();
-                        var severityIcon = problem.Severity switch
-                        {
-                            ProblemSeverity.Critical => "bi-x-octagon-fill",
-                            ProblemSeverity.Warning => "bi-exclamation-triangle-fill",
-                            _ => "bi-info-circle-fill"
-                        };
                         var searchText = $"{problem.Type} {problem.Source} {problem.Message} {serverId} {problem.Id}".ToLowerInvariant();
                         var origin = string.IsNullOrWhiteSpace(problem.Source) ? problem.Type : $"{problem.Type} · {problem.Source}";
                         var title = string.IsNullOrWhiteSpace(problem.Message) ? origin : problem.Message;
@@ -174,15 +165,15 @@ else
                                 }
                             </td>
                             <td>
-                                <span class="severity-pill severity-pill-@severityKey">
-                                    <i class="bi @severityIcon"></i>@problem.Severity
+                                <span class="pill pill-@Display.Tone(problem.Severity) severity-pill">
+                                    <i class="bi @Display.Icon(problem.Severity)"></i>@Display.Label(problem.Severity)
                                 </span>
                             </td>
                             <td class="problem-main">
                                 <div class="fw-semibold">@title</div>
                                 @if (!string.IsNullOrWhiteSpace(problem.Message))
                                 {
-                                    <div class="small text-muted"><code class="problem-origin">@origin</code></div>
+                                    <div class="small text-body-secondary"><code class="problem-origin">@origin</code></div>
                                 }
                                 @if (!string.IsNullOrEmpty(problem.WikiUrl) || problem.RemediationSteps.Count > 0)
                                 {
@@ -197,7 +188,7 @@ else
                                         {
                                             <details class="problem-steps">
                                                 <summary>Lösungsschritte (@problem.RemediationSteps.Count)</summary>
-                                                <ol class="text-muted mb-0 mt-1 ps-3">
+                                                <ol class="text-body-secondary mb-0 mt-1 ps-3">
                                                     @foreach (var step in problem.RemediationSteps)
                                                     {
                                                         <li>@step</li>
@@ -214,15 +205,15 @@ else
                                 </a>
                             </td>
                             <td class="text-nowrap">
-                                <span class="relative-time" data-utc="@Iso(problem.FirstOccurrence)"
-                                      title="Erstmals: @Local(problem.FirstOccurrence) · Zuletzt: @Local(problem.LastOccurrence)">@Local(problem.FirstOccurrence)</span>
+                                <time class="relative-time" data-utc="@Display.Iso(problem.FirstOccurrence)"
+                                      title="Erstmals: @Display.LocalTime(problem.FirstOccurrence) · Zuletzt: @Display.LocalTime(problem.LastOccurrence)">@Display.LocalTime(problem.FirstOccurrence)</time>
                             </td>
                             <td>
                                 @if (problem.Acknowledged)
                                 {
-                                    <span class="state-pill state-acknowledged"><i class="bi bi-check2-circle"></i>Quittiert</span>
-                                    <div class="small text-muted mt-1">
-                                        @(problem.AcknowledgeExpiresAt.HasValue ? "bis " + Local(problem.AcknowledgeExpiresAt.Value) : "unbegrenzt")
+                                    <span class="pill pill-ack"><i class="bi bi-check2-circle"></i>Quittiert</span>
+                                    <div class="small text-body-secondary mt-1">
+                                        @(problem.AcknowledgeExpiresAt.HasValue ? "bis " + Display.LocalTime(problem.AcknowledgeExpiresAt.Value) : "unbegrenzt")
                                         @if (!string.IsNullOrEmpty(problem.AcknowledgedBy))
                                         {
                                             <span> · @problem.AcknowledgedBy</span>
@@ -231,19 +222,20 @@ else
                                 }
                                 else
                                 {
-                                    <span class="state-pill state-open"><i class="bi bi-circle-fill"></i>Offen</span>
+                                    <span class="pill pill-crit pill-open"><i class="bi bi-circle-fill"></i>Offen</span>
                                 }
                             </td>
                             <td class="text-end pe-3 text-nowrap">
                                 @if (!problem.Acknowledged)
                                 {
-                                    <button class="btn btn-sm btn-outline-primary" onclick="acknowledgeProblem('@problem.Id', '@serverId')">
+                                    <button type="button" class="btn btn-sm btn-primary" data-problem-id="@problem.Id" data-server-id="@serverId"
+                                            onclick="acknowledgeProblem(this.dataset.problemId, this.dataset.serverId)">
                                         <i class="bi bi-check2 me-1"></i>Quittieren
                                     </button>
                                 }
                                 else
                                 {
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="cancelAcknowledge('@problem.AcknowledgeId')"
+                                    <button type="button" class="btn btn-sm btn-glass" data-ack-id="@problem.AcknowledgeId" onclick="cancelAcknowledge(this.dataset.ackId)"
                                             title="Quittierung aufheben — das Problem wird wieder gemeldet">
                                         <i class="bi bi-arrow-counterclockwise me-1"></i>Aufheben
                                     </button>
@@ -259,69 +251,19 @@ else
         <div class="problem-empty d-none" id="filterEmpty">
             <i class="bi bi-check-circle text-success" id="filterEmptyIcon"></i>
             <h5 id="filterEmptyTitle">Keine offenen Probleme</h5>
-            <p class="text-muted mb-0" id="filterEmptyText"></p>
+            <p class="text-body-secondary mb-0" id="filterEmptyText"></p>
         </div>
     </div>
 }
 
-<!-- Acknowledge Modal -->
-<div class="modal fade" id="acknowledgeModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="acknowledgeModalTitle">Problem bestätigen</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <ul class="small mb-3 d-none" id="acknowledgeSelectionList"></ul>
-                <div class="mb-3">
-                    <label for="acknowledgeDuration" class="form-label">Dauer</label>
-                    <select class="form-select" id="acknowledgeDuration" onchange="toggleAcknowledgeDate()">
-                        <option value="30">30 Minuten</option>
-                        <option value="60" selected>1 Stunde</option>
-                        <option value="240">4 Stunden</option>
-                        <option value="480">8 Stunden</option>
-                        <option value="1440">24 Stunden</option>
-                        <option value="10080">7 Tage</option>
-                        <option value="43200">30 Tage</option>
-                        <option value="date">Bis Datum …</option>
-                        <option value="0">Unbegrenzt (bis aufgehoben)</option>
-                    </select>
-                </div>
-                <div class="mb-3 d-none" id="acknowledgeDateGroup">
-                    <label for="acknowledgeDate" class="form-label">Bis</label>
-                    <input type="datetime-local" class="form-control" id="acknowledgeDate" />
-                </div>
-                <div class="mb-3">
-                    <label for="acknowledgeComment" class="form-label">Kommentar</label>
-                    <textarea class="form-control" id="acknowledgeComment" rows="3" placeholder="Grund für die Bestätigung..."></textarea>
-                </div>
-                <div class="form-text">
-                    Die Quittierung gilt bis zum Ablauf bzw. bis sie unter „Probleme“ aufgehoben wird.
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-                <button type="button" class="btn btn-primary" onclick="submitAcknowledge()">Bestätigen</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 @section Scripts {
+    <partial name="_AcknowledgeModal" />
     <script>
-        let acknowledgeModal;
-        // Problems the open dialog applies to: [{ serverId, problemId }]
-        let acknowledgeTargets = [];
-        const acknowledgeApiUrl = '@Url.Content("~/api/acknowledges")';
         const filterDefaults = { status: 'open', severity: 'all', server: 'all', q: '' };
 
         document.addEventListener('DOMContentLoaded', function() {
-            acknowledgeModal = new bootstrap.Modal(document.getElementById('acknowledgeModal'));
-
             const params = new URLSearchParams(window.location.search);
             initFilters(params);
-            renderRelativeTimes();
 
             // Deep-link support (notifier mail): open the acknowledge dialog pre-filled
             // from ?ackServer=<serverId>&ackProblem=<problemId>.
@@ -428,17 +370,6 @@ else
             applyFilters();
         }
 
-        function renderRelativeTimes() {
-            const rtf = new Intl.RelativeTimeFormat('de', { numeric: 'auto' });
-            const units = [['day', 86400], ['hour', 3600], ['minute', 60]];
-            document.querySelectorAll('.relative-time').forEach(el => {
-                const seconds = (new Date(el.dataset.utc) - Date.now()) / 1000;
-                if (isNaN(seconds)) return;
-                const [unit, size] = units.find(([, s]) => Math.abs(seconds) >= s) || ['minute', 60];
-                el.textContent = rtf.format(Math.round(seconds / size), unit);
-            });
-        }
-
         // ---------- Selection ----------
 
         function visibleProblemBoxes() {
@@ -472,90 +403,12 @@ else
 
         // ---------- Acknowledge ----------
 
-        function acknowledgeProblem(problemId, serverId) {
-            openAcknowledgeModal([{ serverId: serverId, problemId: problemId }]);
-        }
-
-        // Readable label for the dialog list: the problem message, falling back to the id.
-        const problemLabels = new Map();
-
         function acknowledgeSelected() {
             const targets = selectedProblemBoxes().map(cb => {
                 problemLabels.set(cb.dataset.serverId + '|' + cb.dataset.problemId, cb.dataset.label);
                 return { serverId: cb.dataset.serverId, problemId: cb.dataset.problemId };
             });
             if (targets.length > 0) openAcknowledgeModal(targets);
-        }
-
-        function openAcknowledgeModal(targets) {
-            acknowledgeTargets = targets;
-            const multi = targets.length > 1;
-            document.getElementById('acknowledgeModalTitle').textContent =
-                multi ? targets.length + ' Probleme bestätigen' : 'Problem bestätigen';
-            const list = document.getElementById('acknowledgeSelectionList');
-            list.replaceChildren(...(multi ? targets.map(t => {
-                const li = document.createElement('li');
-                li.textContent = t.serverId + ': ' + (problemLabels.get(t.serverId + '|' + t.problemId) || t.problemId);
-                return li;
-            }) : []));
-            list.classList.toggle('d-none', !multi);
-            acknowledgeModal.show();
-        }
-
-        function toggleAcknowledgeDate() {
-            const isDate = document.getElementById('acknowledgeDuration').value === 'date';
-            document.getElementById('acknowledgeDateGroup').classList.toggle('d-none', !isDate);
-        }
-
-        async function cancelAcknowledge(acknowledgeId) {
-            if (!acknowledgeId || !confirm('Quittierung aufheben? Das Problem wird danach wieder gemeldet.')) return;
-            const response = await fetch(acknowledgeApiUrl + '/' + encodeURIComponent(acknowledgeId), { method: 'DELETE' });
-            if (response.ok) location.reload();
-            else alert('Fehler beim Aufheben der Quittierung');
-        }
-
-        async function submitAcknowledge() {
-            if (acknowledgeTargets.length === 0) return;
-            const choice = document.getElementById('acknowledgeDuration').value;
-            let duration = 0;
-            let expiresAt = null;
-            if (choice === 'date') {
-                const value = document.getElementById('acknowledgeDate').value;
-                if (!value) { alert('Bitte ein Datum wählen'); return; }
-                expiresAt = new Date(value).toISOString();
-            } else {
-                duration = parseInt(choice);
-            }
-            const comment = document.getElementById('acknowledgeComment').value;
-
-            try {
-                const single = acknowledgeTargets.length === 1;
-                const response = await fetch(single ? acknowledgeApiUrl : acknowledgeApiUrl + '/bulk', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        ...(single ? acknowledgeTargets[0] : { items: acknowledgeTargets }),
-                        acknowledgedBy: 'WebUI User',
-                        comment: comment,
-                        durationMinutes: duration,
-                        expiresAt: expiresAt,
-                        suppressAlerts: true
-                    })
-                });
-
-                if (response.ok) {
-                    acknowledgeModal.hide();
-                    location.reload();
-                } else {
-                    const err = await response.json().catch(() => ({}));
-                    alert('Fehler beim Bestätigen des Problems' + (err.message ? ': ' + err.message : ''));
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Fehler beim Bestätigen des Problems');
-            }
         }
     </script>
 }

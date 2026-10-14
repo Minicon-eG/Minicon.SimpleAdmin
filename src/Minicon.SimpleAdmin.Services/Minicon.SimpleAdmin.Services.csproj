@@ -7,7 +7,7 @@
     <RootNamespace>Minicon.SimpleAdmin</RootNamespace>
     <AssemblyName>Minicon.SimpleAdmin.Services</AssemblyName>
     <PackageId>Minicon.SimpleAdmin.Services</PackageId>
-    <Version>2.32.1</Version>
+    <Version>2.33.0</Version>
     <Authors>Minicon Contributors</Authors>
     <Description>Platform metrics, status evaluation and runtime status persistence services for the Minicon SimpleAdmin monitoring platform.</Description>
     <PackageTags>monitoring;simpleadmin;services;metrics;platform</PackageTags>
@@ -19,8 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
-    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.13" />
   </ItemGroup>
 
 </Project>

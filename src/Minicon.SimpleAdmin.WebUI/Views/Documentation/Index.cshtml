@@ -17,7 +17,7 @@
     }
     .doc-card {
         border-left: 4px solid var(--brand-accent, #009ee0);
-        background: #f8f9fa;
+        background: var(--bs-tertiary-bg);
         padding: 1rem;
         margin: 1rem 0;
     }
@@ -34,7 +34,7 @@
         background: #f0fff4;
     }
     .toc {
-        background: #f8f9fa;
+        background: var(--bs-tertiary-bg);
         border-radius: 8px;
         padding: 1.5rem;
         position: sticky;
@@ -59,7 +59,7 @@
         text-decoration: underline;
     }
     code {
-        background: #e9ecef;
+        background: var(--bs-secondary-bg);
         padding: 0.125rem 0.375rem;
         border-radius: 4px;
         font-size: 0.9em;
@@ -78,7 +78,7 @@
     }
     .keyboard-shortcut {
         display: inline-block;
-        background: #e9ecef;
+        background: var(--bs-secondary-bg);
         border: 1px solid #dee2e6;
         border-radius: 4px;
         padding: 0.125rem 0.5rem;
@@ -328,8 +328,23 @@
                             <td>Erforderliche aufeinanderfolgende Checks für Status-Wechsel</td>
                             <td>5</td>
                         </tr>
+                        <tr>
+                            <td><code>general.title</code></td>
+                            <td>Anwendungstitel in Navigation und Browser-Tab (<em>Einstellungen → Darstellung</em>, max. 60 Zeichen). Die statischen HTML-Seiten behalten ihren eigenen Titel.</td>
+                            <td>SimpleAdmin</td>
+                        </tr>
                     </tbody>
                 </table>
+
+                <div class="doc-card">
+                    <strong><i class="bi bi-moon-stars me-2"></i>Hell / Dunkel, Auto-Refresh, Zeiten</strong><br>
+                    Der Knopf mit Mond/Sonne rechts in der Navigation schaltet das Design um (gespeichert im Browser, sonst
+                    Systemeinstellung). Dashboard, Status, Probleme und Server-Detailansicht haben einen Schalter
+                    <strong>„Auto“</strong> (Neuladen alle 60 Sekunden; pausiert bei offenem Dialog, Eingabe oder Hintergrund-Tab).
+                    Alle Zeiten erscheinen in Ortszeit bzw. relativ („vor 5 Minuten“), der genaue Zeitpunkt steht im Tooltip.
+                    Das <strong>Dashboard</strong> zeigt offene/kritische Probleme, nicht gesunde Server und Quittierte; am
+                    Menüpunkt <em>Probleme</em> steht die Zahl der offenen Probleme.
+                </div>
 
                 <div class="doc-card warning">
                     <strong><i class="bi bi-exclamation-triangle me-2"></i>Status-Smoothing</strong><br>
@@ -365,7 +380,8 @@
                 <h4>Server-Karten</h4>
                 <p>Jeder Server wird als Karte dargestellt mit folgenden Informationen:</p>
                 <ul>
-                    <li><strong>Gesamtstatus:</strong> Farblich gekennzeichnet (Healthy/Degraded/Unhealthy/Unknown) — wird auch dann korrekt als Unhealthy/Degraded angezeigt, wenn keine PRTG-Metriken konfiguriert sind, aber E-Mail-, AppPool- oder Service-Probleme vorliegen</li>
+                    <li><strong>Eine Karte pro Server</strong> mit allen Diensten; Filter-Kacheln (Kritisch, Nicht erreichbar, Beeinträchtigt, Quittiert, Unbekannt, Gesund) und Suche bleiben in der URL erhalten</li>
+                    <li><strong>Gesamtstatus:</strong> Farblich gekennzeichnet (Gesund/Beeinträchtigt/Kritisch/Nicht erreichbar/Unbekannt/Quittiert) — wird auch dann korrekt als Unhealthy/Degraded angezeigt, wenn keine PRTG-Metriken konfiguriert sind, aber E-Mail-, AppPool- oder Service-Probleme vorliegen</li>
                     <li><strong>CPU-Auslastung:</strong> Aktuelle CPU-Last in Prozent mit Fortschrittsbalken</li>
                     <li><strong>Memory-Auslastung:</strong> Aktuelle Speicherauslastung in Prozent</li>
                     <li><strong>Disk-Belegung:</strong> Freier Speicherplatz pro Laufwerk</li>
@@ -378,7 +394,8 @@
                     Klicken Sie auf einen Server, um die Detail-Ansicht zu öffnen. Sie enthält:
                 </p>
                 <ul>
-                    <li>Vollständige Metriken mit Schwellwerten und History-Diagrammen</li>
+                    <li>Metrik-Kacheln mit Mini-Verlauf; ein Klick auf Kachel, Metrik-Badge eines Dienstes oder ein CPU-/Speicher-/Disk-Problem springt zum <strong>Verlaufsdiagramm</strong> (Warn-/Kritisch-Linien, aktuell/Ø/Min/Max, Wert je Messpunkt beim Überfahren)</li>
+                    <li><strong>Aktive Probleme direkt quittieren</strong> („Quittieren“ / „Aufheben“, gleicher Dialog wie auf der Probleme-Seite) inkl. Lösungsanleitung und Lösungsschritten</li>
                     <li>AppPool-Tabelle mit Status, Speicherverbrauch (MB) und Laufzeit (h) — farbcodiert</li>
                     <li>Windows Services mit Startart und Status</li>
                     <li>Event Log Ereignisse der letzten Stunden — mit Knopf <strong>„Ignorieren“</strong> je Ereignis (siehe <a href="#eventlog">Ignorier-Regeln</a>)</li>

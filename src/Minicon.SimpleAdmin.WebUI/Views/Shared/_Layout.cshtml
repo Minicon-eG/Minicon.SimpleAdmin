@@ -5,16 +5,29 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - SimpleAdmin Konfigurator</title>
+    <title>@ViewData["Title"] - @ConfigService.GetApplicationTitle()</title>
+    @* Apply the stored theme (or the OS preference) before the first paint — no light flash in dark mode *@
+    <script>
+        (function () {
+            var theme;
+            try { theme = localStorage.getItem('sa-theme'); } catch (e) { }
+            if (theme !== 'light' && theme !== 'dark') {
+                theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        })();
+    </script>
     <link rel="stylesheet" href="~/_content/Minicon.SimpleAdmin.WebUI/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/_content/Minicon.SimpleAdmin.WebUI/lib/bootstrap-icons/bootstrap-icons.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/_content/Minicon.SimpleAdmin.WebUI/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/_content/Minicon.SimpleAdmin.WebUI/css/theme.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/_content/Minicon.SimpleAdmin.WebUI/css/pages.css" asp-append-version="true" />
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+    <nav class="navbar navbar-expand-lg sticky-top app-nav">
         <div class="container-fluid">
-            <a class="navbar-brand fw-bold" asp-controller="Home" asp-action="Index">
-                <i class="bi bi-gear-fill me-2"></i>SimpleAdmin Konfigurator
+            <a class="navbar-brand" asp-controller="Home" asp-action="Index">
+                <span class="app-logo"><i class="bi bi-activity"></i></span>@ConfigService.GetApplicationTitle()
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -55,6 +68,9 @@
                         <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Problems" ? "active" : "")"
                            asp-controller="Problems" asp-action="Index">
                             <i class="bi bi-exclamation-triangle me-1"></i>Probleme
+                            @* Filled by site.js from /api/problems (async, never blocks the page) *@
+                            <span class="badge bg-danger nav-count d-none" data-open-problems="@Url.Content("~/api/problems")"
+                                  title="Offene (nicht quittierte) Probleme"></span>
                         </a>
                     </li>
                     @if (ScriptRunnerOptions.Enabled)
@@ -74,12 +90,17 @@
                             <i class="bi bi-book me-1"></i>Hilfe
                         </a>
                     </li>
+                    <li class="nav-item ms-lg-2">
+                        <button type="button" class="btn btn-glass theme-toggle" data-theme-toggle title="Dunkles Design" aria-label="Design umschalten">
+                            <i class="bi bi-moon-stars"></i>
+                        </button>
+                    </li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <div class="container-fluid py-4">
+    <div class="container-fluid py-4 app-main">
         @if (TempData["Success"] != null)
         {
             <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -100,11 +121,11 @@
         </main>
     </div>
 
-    <footer class="bg-light border-top py-3 mt-auto">
+    <footer class="app-footer py-3">
         <div class="container-fluid">
             <div class="row">
                 <div class="col text-muted small">
-                    <i class="bi bi-shield-check me-1"></i>Minicon.SimpleAdmin Konfigurator v@(typeof(Minicon.SimpleAdmin.WebUI.SimpleAdminWebUIExtensions).Assembly.GetName().Version?.ToString(3))
+                    <i class="bi bi-shield-check me-1"></i>Minicon.SimpleAdmin v@(typeof(Minicon.SimpleAdmin.WebUI.SimpleAdminWebUIExtensions).Assembly.GetName().Version?.ToString(3))
                 </div>
                 <div class="col text-end text-muted small">
                     <span id="configStatus" class="me-3">

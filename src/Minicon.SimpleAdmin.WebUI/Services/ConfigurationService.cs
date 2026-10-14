@@ -442,6 +442,35 @@ public class ConfigurationService
     /// </summary>
     public OutputSettings GetOutputSettings() => _config.Output ?? new OutputSettings();
 
+    /// <summary>Fallback when no title is configured in <c>general.title</c>.</summary>
+    public const string DefaultApplicationTitle = "SimpleAdmin";
+
+    /// <summary>Maximum title length — it has to fit into the navigation bar.</summary>
+    public const int MaxApplicationTitleLength = 60;
+
+    /// <summary>
+    /// Title shown in the WebUI navigation and browser tab (<c>general.title</c>, fallback "SimpleAdmin").
+    /// Safe to call before a config is loaded.
+    /// </summary>
+    public string GetApplicationTitle()
+    {
+        var title = _config.General?.Title?.Trim();
+        return string.IsNullOrEmpty(title) ? DefaultApplicationTitle : title;
+    }
+
+    /// <summary>
+    /// Sets the application title; empty or whitespace removes it (back to the default).
+    /// Longer titles are cut to <see cref="MaxApplicationTitleLength"/> characters.
+    /// </summary>
+    public void UpdateApplicationTitle(string? title)
+    {
+        title = title?.Trim();
+        if (title?.Length > MaxApplicationTitleLength) title = title[..MaxApplicationTitleLength].TrimEnd();
+
+        _config.General ??= new GeneralSettings();
+        _config.General.Title = string.IsNullOrEmpty(title) ? null : title;
+    }
+
     /// <summary>
     /// Updates the output settings
     /// </summary>

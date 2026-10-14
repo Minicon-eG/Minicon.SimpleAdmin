@@ -19,4 +19,10 @@ public class GeneralSettings
     /// Number of days to retain history (default: 30)
     /// </summary>
     public int HistoryRetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Application title shown in the WebUI navigation and browser tab
+    /// (empty = "SimpleAdmin")
+    /// </summary>
+    public string? Title { get; set; }
 }

@@ -1,125 +1,148 @@
+@using Minicon.SimpleAdmin.WebUI.ViewModels
 @{
     ViewData["Title"] = "Dashboard";
+    var monitoring = ViewBag.Monitoring as DashboardMonitoringView;
+    var problemsUrl = Url.Action("Index", "Problems");
+    var statusUrl = Url.Action("Index", "Status");
 }
 
-<div class="container-fluid">
-    <h1 class="mb-4">
-        <i class="bi bi-speedometer2 me-2"></i>Dashboard
-    </h1>
-
-    @if (ViewBag.IsLoaded == true)
-    {
-        <div class="row g-4">
-            <div class="col-md-3">
-                <div class="card bg-primary text-white h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="card-subtitle mb-2">Server</h6>
-                                <h2 class="card-title mb-0">@ViewBag.ServerCount</h2>
-                            </div>
-                            <i class="bi bi-hdd-stack fs-1 opacity-50"></i>
-                        </div>
-                    </div>
-                    <div class="card-footer bg-transparent border-0">
-                        <a asp-controller="Servers" asp-action="Index" class="text-white text-decoration-none small">
-                            Server verwalten <i class="bi bi-arrow-right"></i>
-                        </a>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-3">
-                <div class="card bg-success text-white h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="card-subtitle mb-2">Aktive Server</h6>
-                                <h2 class="card-title mb-0">@ViewBag.ActiveServerCount</h2>
-                            </div>
-                            <i class="bi bi-check-circle fs-1 opacity-50"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-3">
-                <div class="card bg-info text-white h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="card-subtitle mb-2">Umgebungen</h6>
-                                <h2 class="card-title mb-0">@ViewBag.EnvironmentCount</h2>
-                            </div>
-                            <i class="bi bi-layers fs-1 opacity-50"></i>
-                        </div>
-                    </div>
-                    <div class="card-footer bg-transparent border-0">
-                        <a asp-controller="Environments" asp-action="Index" class="text-white text-decoration-none small">
-                            Umgebungen verwalten <i class="bi bi-arrow-right"></i>
-                        </a>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-3">
-                <div class="card @(ViewBag.HasChanges == true ? "bg-warning" : "bg-secondary") text-white h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="card-subtitle mb-2">Status</h6>
-                                <h5 class="card-title mb-0">
-                                    @if (ViewBag.HasChanges == true)
-                                    {
-                                        <span>Ungespeicherte Änderungen</span>
-                                    }
-                                    else
-                                    {
-                                        <span>Keine Änderungen</span>
-                                    }
-                                </h5>
-                            </div>
-                            <i class="bi @(ViewBag.HasChanges == true ? "bi-exclamation-triangle" : "bi-check2-all") fs-1 opacity-50"></i>
-                        </div>
-                    </div>
-                    @if (ViewBag.HasChanges == true)
-                    {
-                        <div class="card-footer bg-transparent border-0">
-                            <small>Änderungen werden beim nächsten Speichern übernommen.</small>
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
-
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <i class="bi bi-lightning-charge me-2"></i>Schnellaktionen
-                    </div>
-                    <div class="card-body">
-                        <div class="d-flex flex-wrap gap-2">
-                            <a asp-controller="Servers" asp-action="Create" class="btn btn-outline-primary">
-                                <i class="bi bi-plus-circle me-1"></i>Neuen Server erstellen
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-    else
-    {
-        <div class="alert alert-warning">
-            <h4 class="alert-heading">
-                <i class="bi bi-exclamation-triangle me-2"></i>Keine Konfiguration geladen
-            </h4>
-            @if (ViewBag.LoadError != null)
-            {
-                <p class="mb-1"><strong>Ursache:</strong> @ViewBag.LoadError</p>
-            }
-            <p class="mb-0">Bitte prüfen Sie die Einstellung <code>ConfigPath</code> in <code>appsettings.json</code> und starten Sie die Anwendung neu.</p>
-        </div>
-    }
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-4">
+    <div>
+        <h1 class="mb-1"><i class="bi bi-speedometer2 me-2"></i>Dashboard</h1>
+        <p class="text-body-secondary mb-0">Überwachungsstand und Konfiguration auf einen Blick</p>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <partial name="_AutoRefresh" />
+        <button type="button" class="btn btn-glass" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
+        </button>
+    </div>
 </div>
+
+@* --- Überwachungsstand --- *@
+@if (monitoring?.Error != null)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>Statusdaten konnten nicht gelesen werden: @monitoring.Error
+    </div>
+}
+else if (monitoring != null)
+{
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <a href="@problemsUrl" class="kpi-tile tone-@(monitoring.OpenProblems > 0 ? "warn" : "ok")">
+                <i class="bi bi-exclamation-octagon"></i>
+                <span class="kpi-value">@monitoring.OpenProblems</span>
+                <span class="kpi-label">Offene Probleme</span>
+            </a>
+        </div>
+        <div class="col-6 col-lg-3">
+            <a href="@problemsUrl?severity=Critical" class="kpi-tile tone-@(monitoring.OpenCritical > 0 ? "crit" : "ok")">
+                <i class="bi bi-x-octagon"></i>
+                <span class="kpi-value">@monitoring.OpenCritical</span>
+                <span class="kpi-label">Davon kritisch</span>
+            </a>
+        </div>
+        <div class="col-6 col-lg-3">
+            <a href="@statusUrl" class="kpi-tile tone-@(monitoring.UnhealthyServers > 0 ? "crit" : "ok")">
+                <i class="bi bi-hdd-rack"></i>
+                <span class="kpi-value">@monitoring.UnhealthyServers<small class="kpi-total"> / @monitoring.ServerCount</small></span>
+                <span class="kpi-label">Server nicht gesund</span>
+            </a>
+        </div>
+        <div class="col-6 col-lg-3">
+            <a href="@problemsUrl?status=acknowledged" class="kpi-tile tone-ack">
+                <i class="bi bi-check2-circle"></i>
+                <span class="kpi-value">@monitoring.Acknowledged</span>
+                <span class="kpi-label">Quittiert</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Aktuell dringend</h5>
+            <a href="@problemsUrl" class="small">Alle Probleme <i class="bi bi-arrow-right"></i></a>
+        </div>
+        @if (monitoring.TopProblems.Count == 0)
+        {
+            <div class="card-body text-center text-body-secondary py-4">
+                <i class="bi bi-check-circle text-success fs-3 d-block mb-1"></i>
+                @(monitoring.ServerCount == 0 ? "Noch keine Statusdaten vorhanden." : "Keine offenen Probleme — alle Systeme sind in Ordnung.")
+            </div>
+        }
+        else
+        {
+            <ul class="list-group list-group-flush dashboard-problems">
+                @foreach (var (serverId, problem) in monitoring.TopProblems)
+                {
+                    <li class="list-group-item d-flex flex-wrap align-items-center gap-3">
+                        <span class="pill pill-@Display.Tone(problem.Severity)">
+                            <i class="bi @Display.Icon(problem.Severity)"></i>@Display.Label(problem.Severity)
+                        </span>
+                        <span class="flex-grow-1 fw-semibold">@(string.IsNullOrWhiteSpace(problem.Message) ? problem.Type : problem.Message)</span>
+                        <a href="@Url.Action("Details", "Status", new { id = serverId })" class="server-chip">
+                            <i class="bi bi-hdd-network"></i>@serverId
+                        </a>
+                        <time class="relative-time small text-body-secondary text-nowrap" data-utc="@Display.Iso(problem.FirstOccurrence)"
+                              title="Seit @Display.LocalTime(problem.FirstOccurrence)">@Display.LocalTime(problem.FirstOccurrence)</time>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@* --- Konfiguration --- *@
+@if (ViewBag.IsLoaded == true)
+{
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Konfiguration</h5>
+            <a asp-controller="Servers" asp-action="Create" class="btn btn-sm btn-primary">
+                <i class="bi bi-plus-circle me-1"></i>Neuen Server erstellen
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 dashboard-config">
+                <div class="col-6 col-lg-3">
+                    <a asp-controller="Servers" asp-action="Index" class="dashboard-config-item">
+                        <i class="bi bi-hdd-stack"></i>
+                        <span><strong>@ViewBag.ServerCount</strong> Server</span>
+                    </a>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <a asp-controller="Servers" asp-action="Index" class="dashboard-config-item">
+                        <i class="bi bi-check-circle"></i>
+                        <span><strong>@ViewBag.ActiveServerCount</strong> aktiv</span>
+                    </a>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <a asp-controller="Environments" asp-action="Index" class="dashboard-config-item">
+                        <i class="bi bi-layers"></i>
+                        <span><strong>@ViewBag.EnvironmentCount</strong> Umgebungen</span>
+                    </a>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="dashboard-config-item @(ViewBag.HasChanges == true ? "text-warning-emphasis" : "")">
+                        <i class="bi @(ViewBag.HasChanges == true ? "bi-exclamation-triangle" : "bi-check2-all")"></i>
+                        <span>@(ViewBag.HasChanges == true ? "Ungespeicherte Änderungen" : "Keine offenen Änderungen")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="alert alert-warning">
+        <h4 class="alert-heading">
+            <i class="bi bi-exclamation-triangle me-2"></i>Keine Konfiguration geladen
+        </h4>
+        @if (ViewBag.LoadError != null)
+        {
+            <p class="mb-1"><strong>Ursache:</strong> @ViewBag.LoadError</p>
+        }
+        <p class="mb-0">Bitte prüfen Sie die Einstellung <code>ConfigPath</code> in <code>appsettings.json</code> und starten Sie die Anwendung neu.</p>
+    </div>
+}

@@ -8,7 +8,7 @@
     <RootNamespace>Minicon.SimpleAdmin.Worker</RootNamespace>
     <AssemblyName>Minicon.SimpleAdmin.Worker</AssemblyName>
     <PackageId>Minicon.SimpleAdmin.Worker</PackageId>
-    <Version>2.32.1</Version>
+    <Version>2.33.0</Version>
     <Authors>Minicon Contributors</Authors>
     <Description>Standalone console worker that orchestrates monitoring checks, problem derivation and static HTML generation for the Minicon SimpleAdmin monitoring platform.</Description>
     <PackageTags>monitoring;simpleadmin;worker;console</PackageTags>
@@ -23,11 +23,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.8" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.8" />
-    <PackageReference Include="System.IO.Abstractions" Version="22.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.13" />
+    <PackageReference Include="System.IO.Abstractions" Version="22.3.0" />
   </ItemGroup>
 
 </Project>

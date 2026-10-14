@@ -522,6 +522,7 @@
                 <li><a href="#biztalk" class="toc-level-1">15. BizTalk-Überwachung</a></li>
                 <li><a href="#filemonitoring" class="toc-level-1">16. Datei-/Protokollüberwachung</a></li>
                 <li><a href="#scripts" class="toc-level-1">17. Skripte (PowerShell, WebUI)</a></li>
+                <li><a href="#webui-usage" class="toc-level-1">18. WebUI: Bedienung &amp; Darstellung</a></li>
             </ul>
         </aside>
 
@@ -3061,6 +3062,20 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
   "MaxConcurrentRuns": 4
 }</code></pre>
                 <p>Skriptdefinitionen liegen in <code>scripts.json</code> neben der <code>config.json</code>, hochgeladene Skripte unter <code>scripts/</code>, Verlauf und Logs unter <code>script-runs/</code>.</p>
+            </section>
+
+            <!-- 18. WebUI: Bedienung & Darstellung -->
+            <section id="webui-usage">
+                <h2>18. WebUI: Bedienung &amp; Darstellung</h2>
+                <ul>
+                    <li><strong>Hell / Dunkel:</strong> Der Knopf mit Mond/Sonne rechts in der Navigation schaltet das Design um. Die Wahl wird im Browser gespeichert; ohne Auswahl folgt die WebUI der Systemeinstellung.</li>
+                    <li><strong>Anwendungstitel:</strong> <em>Einstellungen &rarr; Darstellung &rarr; Anwendungstitel</em> (<code>general.title</code> in der <code>config.json</code>, max. 60 Zeichen) erscheint in der Navigation und im Browser-Tab. Leer = &bdquo;SimpleAdmin&ldquo;. Die statischen HTML-Seiten behalten ihren eigenen Titel.</li>
+                    <li><strong>Dashboard:</strong> Kacheln für offene und kritische Probleme, nicht gesunde Server und quittierte Probleme (jeweils mit Sprung zur gefilterten Liste) sowie &bdquo;Aktuell dringend&ldquo;. Am Menüpunkt <em>Probleme</em> steht die Zahl der offenen Probleme.</li>
+                    <li><strong>Server-Detailansicht:</strong> Probleme lassen sich direkt dort quittieren und wieder aufheben. Ein Klick auf eine Metrik-Kachel, ein Metrik-Badge eines Dienstes oder ein CPU-/Speicher-/Disk-Problem springt zum Verlaufsdiagramm (mit Warn-/Kritisch-Linien, aktuell/Ø/Min/Max und Wert je Messpunkt beim Überfahren).</li>
+                    <li><strong>Auto-Refresh:</strong> Dashboard, Status, Probleme und Server-Detailansicht haben einen Schalter &bdquo;Auto&ldquo; (Neuladen alle 60&nbsp;Sekunden). Er pausiert, solange ein Dialog offen ist, ein Eingabefeld den Fokus hat oder der Tab im Hintergrund liegt. &bdquo;Stand&ldquo; zeigt, wann die Seite geladen wurde.</li>
+                    <li><strong>Zeiten:</strong> Alle Zeiten erscheinen in der Ortszeit des Browsers bzw. relativ (&bdquo;vor 5 Minuten&ldquo;); der genaue Zeitpunkt steht im Tooltip.</li>
+                    <li><strong>Status-Übersicht:</strong> Eine Karte pro Server mit allen Diensten; Filter-Kacheln (Kritisch, Nicht erreichbar, Beeinträchtigt, Quittiert, Unbekannt, Gesund) und Suche bleiben in der URL erhalten.</li>
+                </ul>
             </section>
 
             <a href="./" class="back-link">← Zurück zur Übersicht</a>

@@ -918,4 +918,22 @@ public class ProblemDerivationServiceTests
         problem.FirstOccurrence.Should().Be(observedAt);
         problem.LastOccurrence.Should().Be(observedAt);
     }
+
+    [Fact]
+    public void DeriveProblems_DiskFreeSpaceBelowThreshold_MessageUsesMetricOperatorAndSingleColon()
+    {
+        var metrics = new List<Metric>
+        {
+            new()
+            {
+                Name = "disk", Target = "C:", Value = 15.2, Unit = "%", Status = StatusMetricStatus.Warning,
+                Threshold = new MetricThreshold { Warning = 20, Critical = 10, Operator = "<" }
+            }
+        };
+
+        var problems = ProblemDerivationService.DeriveProblems(metrics, null);
+
+        problems.Should().ContainSingle();
+        problems[0].Message.Should().StartWith("Disk C: ").And.Contain("Warning < 20%").And.NotContain("C::");
+    }
 }

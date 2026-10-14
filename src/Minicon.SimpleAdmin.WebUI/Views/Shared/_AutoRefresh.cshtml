@@ -1,0 +1,10 @@
+@* Auto-refresh toggle + "Stand" timestamp for the monitoring pages. Logic lives in site.js (initAutoRefresh). *@
+<div class="auto-refresh" data-auto-refresh="60">
+    <span class="text-body-secondary small me-2" title="Zeitpunkt, zu dem diese Seite geladen wurde">
+        <i class="bi bi-clock me-1"></i>Stand @DateTime.Now.ToString("HH:mm:ss")
+    </span>
+    <button type="button" class="btn btn-sm btn-glass" data-auto-refresh-toggle aria-pressed="false"
+            title="Seite alle 60 Sekunden neu laden (pausiert bei offenen Dialogen und Eingaben)">
+        <i class="bi bi-arrow-repeat me-1"></i>Auto <span data-auto-refresh-label>Aus</span>
+    </button>
+</div>

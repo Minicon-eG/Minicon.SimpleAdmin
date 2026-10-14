@@ -41,7 +41,7 @@ public static class ProblemDerivationService
                 {
                     "cpu" => ActiveProblem.CpuHigh(metric.Value, threshold, isCritical),
                     "memory" => ActiveProblem.MemoryHigh(metric.Value, threshold, isCritical),
-                    "disk" => ActiveProblem.DiskHigh(metric.Target ?? "C:", metric.Value, threshold, isCritical),
+                    "disk" => ActiveProblem.DiskHigh(metric.Target ?? "C:", metric.Value, threshold, isCritical, metric.Threshold?.Operator ?? ">"),
                     _ => null
                 };
 

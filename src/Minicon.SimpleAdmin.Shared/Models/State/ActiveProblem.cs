@@ -188,14 +188,15 @@ public class ActiveProblem
     /// <summary>
     /// Creates a disk high usage problem
     /// </summary>
-    public static ActiveProblem DiskHigh(string drive, double value, double threshold, bool isCritical)
+    /// <param name="comparison">Threshold operator of the metric — free-space checks use "&lt;".</param>
+    public static ActiveProblem DiskHigh(string drive, double value, double threshold, bool isCritical, string comparison = ">")
     {
         return new ActiveProblem
         {
             Id = CreateId("disk", drive.TrimEnd(':'), isCritical ? "critical" : "warning"),
             Type = "disk",
             Severity = isCritical ? ProblemSeverity.Critical : ProblemSeverity.Warning,
-            Message = $"Disk {drive}: {value:N1}% ({(isCritical ? "Critical" : "Warning")} > {threshold:N0}%)",
+            Message = $"Disk {drive.TrimEnd(':')}: {value:N1}% ({(isCritical ? "Critical" : "Warning")} {comparison} {threshold:N0}%)",
             Context = new Dictionary<string, object>
             {
                 ["drive"] = drive,

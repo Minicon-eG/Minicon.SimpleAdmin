@@ -4,254 +4,447 @@
 
 @{
     ViewData["Title"] = $"Status - {Model.ServerId}";
-    System.Diagnostics.Debug.WriteLine($"=== Details View for {Model.ServerId} ===");
-    System.Diagnostics.Debug.WriteLine($"  OverallStatus: {Model.OverallStatus}");
-    System.Diagnostics.Debug.WriteLine($"  Services: {Model.Services?.Count ?? 0}");
-    System.Diagnostics.Debug.WriteLine($"  SqlQueryChecks: {Model.SqlQueryChecks?.Count ?? 0}");
-    System.Diagnostics.Debug.WriteLine($"  AppPools: {Model.AppPools?.Count ?? 0}");
-    System.Diagnostics.Debug.WriteLine($"  WindowsServices: {Model.WindowsServices?.Count ?? 0}");
-    System.Diagnostics.Debug.WriteLine($"  EventLogs: {(Model.EventLogs != null ? "yes" : "no")}");
-    System.Diagnostics.Debug.WriteLine($"  BaseUrl: {Model.BaseUrl}");
-    if (Model.SqlQueryChecks?.Count > 0)
-    {
-        foreach (var (checkId, check) in Model.SqlQueryChecks)
-        {
-            System.Diagnostics.Debug.WriteLine($"    Check '{checkId}': {check.CheckName}, Status={check.Status}, Results={check.Results?.Count ?? 0}");
-        }
-    }
 
-    var statusBadge = Model.OverallStatus switch
+    // Key matches history snapshot key: "disk_C:" / "disk_D:" for targeted metrics
+    static string MetricKey(StatusNs.Metric m) =>
+        string.IsNullOrEmpty(m.Target) ? m.Name : $"{m.Name}_{m.Target}";
+
+    static string ChartId(string metricKey) =>
+        "chart-" + System.Text.RegularExpressions.Regex.Replace(metricKey.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
+
+    // Metric problems (cpu/memory/disk) point to the history chart of their metric.
+    static string? ProblemMetricKey(StateNs.ActiveProblem p) => p.Type switch
     {
-        StatusNs.ServiceStatus.Healthy => "bg-success",
-        StatusNs.ServiceStatus.Degraded => "bg-warning text-dark",
-        StatusNs.ServiceStatus.Unhealthy => "bg-danger",
-        StatusNs.ServiceStatus.Acknowledged => "bg-info text-dark",
-        _ => "bg-secondary"
+        "cpu" or "memory" => p.Type,
+        "disk" when p.Context.TryGetValue("drive", out var drive) => $"disk_{drive}",
+        _ => null
     };
+
+    static bool Exceeds(double value, double? limit, string op) => limit.HasValue && op switch
+    {
+        "<" => value < limit,
+        "<=" => value <= limit,
+        ">=" => value >= limit,
+        _ => value > limit
+    };
+
+    // Machine metrics are reported by every service type of the server. Per metric the history of the
+    // service with the most samples is used, so values of different services are never mixed in one chart.
+    var services = Model.Services ?? [];
+    var metricHistory = services
+        .Where(s => s.History?.Count > 0)
+        .SelectMany(s => s.History.SelectMany(h => h.Values.Keys).Distinct().Select(key => (Key: key, Service: s)))
+        .GroupBy(x => x.Key)
+        .ToDictionary(
+            g => g.Key,
+            g => g.Select(x => x.Service.History.Where(h => h.Values.ContainsKey(g.Key)).OrderBy(h => h.Timestamp).ToList())
+                  .OrderByDescending(list => list.Count)
+                  .First()
+                  .TakeLast(120)
+                  .Select(h => (Time: h.Timestamp, Value: h.Values[g.Key]))
+                  .ToList());
+
+    var metricsByKey = Model.Metrics.GroupBy(MetricKey).ToDictionary(g => g.Key, g => g.First());
+
+    string? ChartLink(string? metricKey) =>
+        metricKey != null && metricHistory.ContainsKey(metricKey) ? "#" + ChartId(metricKey) : null;
+
+    var openProblems = Model.ActiveProblems.Count(p => !p.Acknowledged);
+    var staticBase = Model.BaseUrl?.TrimEnd('/');
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head" id="top">
     <div>
+        <div class="page-sub mt-0 mb-1">
+            <a asp-action="Index" class="text-reset text-decoration-none"><i class="bi bi-arrow-left me-1"></i>Status</a>
+        </div>
         <h1>
-            <i class="bi bi-hdd-rack me-2"></i>@Model.ServerId
-            <span class="badge @statusBadge fs-5 ms-2">@Model.OverallStatus</span>
+            @Model.ServerId
+            <span class="pill pill-lg pill-@Display.Tone(Model.OverallStatus)"><i class="bi @Display.Icon(Model.OverallStatus)"></i>@Display.Label(Model.OverallStatus)</span>
         </h1>
-        <p class="text-muted mb-0">Letzte Aktualisierung: @Model.LastCheck.ToString("yyyy-MM-dd HH:mm:ss") UTC</p>
+        <div class="page-sub">
+            <i class="bi bi-clock me-1"></i>Aktualisiert
+            <time class="relative-time" data-utc="@Display.Iso(Model.LastCheck)">@Display.LocalTimeSeconds(Model.LastCheck)</time>
+            · @Display.LocalTimeSeconds(Model.LastCheck) · @services.Count @(services.Count == 1 ? "Dienst" : "Dienste") überwacht
+        </div>
     </div>
-    <div>
-        <a asp-action="Index" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left me-1"></i>Zurück
-        </a>
+    <div class="page-actions">
+        <partial name="_AutoRefresh" />
+        <button type="button" class="btn btn-primary" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
+        </button>
     </div>
 </div>
 
 @* --- Metriken --- *@
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-speedometer2 me-2"></i>Metriken</h5>
+@if (Model.Metrics.Count == 0)
+{
+    <div class="card mb-4">
+        <div class="card-body text-body-secondary"><i class="bi bi-speedometer2 me-2"></i>Keine Metriken verfügbar.</div>
     </div>
-    <div class="card-body">
-        @if (Model.Metrics.Count == 0)
+}
+else
+{
+    var metricColumn = Model.Metrics.Count switch { 1 => "col-xl-6", 2 => "col-xl-6", 3 => "col-xl-4", _ => "col-xl-3" };
+    <div class="row g-3 mb-4">
+        @foreach (var metric in Model.Metrics)
         {
-            <p class="text-muted mb-0">Keine Metriken verfügbar.</p>
-        }
-        else
-        {
-            <div class="row g-3">
-                @foreach (var metric in Model.Metrics)
-                {
-                    var metricBadge = metric.Status switch
-                    {
-                        StatusNs.MetricStatus.Ok => "bg-success",
-                        StatusNs.MetricStatus.Warning => "bg-warning text-dark",
-                        StatusNs.MetricStatus.Critical => "bg-danger",
-                        _ => "bg-secondary"
-                    };
+            var key = MetricKey(metric);
+            var chartLink = ChartLink(key);
+            var tone = Display.Tone(metric.Status);
+            var progressValue = Math.Clamp(metric.Value, 0, 100);
+            var spark = metricHistory.TryGetValue(key, out var sparkPoints) && sparkPoints.Count > 1
+                ? new ChartGeometry(sparkPoints.TakeLast(30).Select(p => p.Value).ToList(), 110, 40,
+                    includeMin: metric.Unit.Trim() == "%" ? 0 : null, includeMax: metric.Unit.Trim() == "%" ? 100 : null)
+                : null;
+            var sparkColor = tone is "ok" or "warn" or "crit" ? $"var(--sa-{tone})" : "#94a3b8";
+            var icon = metric.Name switch
+            {
+                "cpu" => "bi-cpu",
+                "memory" => "bi-memory",
+                "disk" => "bi-device-hdd",
+                _ => "bi-speedometer2"
+            };
 
-                    var progressColor = metric.Status switch
-                    {
-                        StatusNs.MetricStatus.Ok => "bg-success",
-                        StatusNs.MetricStatus.Warning => "bg-warning",
-                        StatusNs.MetricStatus.Critical => "bg-danger",
-                        _ => "bg-secondary"
-                    };
-
-                    var progressValue = Math.Min(metric.Value, 100);
-
-                    <div class="col-md-6 col-lg-4">
-                        <div class="card h-100">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <strong>@metric.DisplayName</strong>
-                                    <span class="badge @metricBadge">@metric.Status</span>
-                                </div>
-                                <div class="progress mb-2" style="height: 20px;">
-                                    <div class="progress-bar @progressColor" role="progressbar"
-                                         style="width: @progressValue.ToString("F0")%"
-                                         aria-valuenow="@metric.Value" aria-valuemin="0" aria-valuemax="100">
-                                        @metric.Value.ToString("F1")@metric.Unit
-                                    </div>
-                                </div>
-                                <div class="d-flex justify-content-between text-muted small">
-                                    @if (metric.AverageValue.HasValue)
-                                    {
-                                        <span>Durchschnitt: @metric.AverageValue.Value.ToString("F1")@metric.Unit (@(metric.AverageSampleCount ?? 0) Samples)</span>
-                                    }
-                                    @if (metric.Target != null)
-                                    {
-                                        <span>Ziel: @metric.Target</span>
-                                    }
-                                </div>
-                                @if (metric.Threshold != null)
+            <div class="col-sm-6 @metricColumn">
+                <div class="card h-100 metric-tile @(chartLink != null ? "metric-chart-link" : "") @(metric.Status == StatusNs.MetricStatus.Critical ? "card-alert" : "")">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>
+                                <i class="bi @icon me-1"></i>
+                                @if (chartLink != null)
                                 {
-                                    <div class="text-muted small mt-1">
-                                        Schwellenwerte: Warning @metric.Threshold.Operator @metric.Threshold.Warning, Critical @metric.Threshold.Operator @metric.Threshold.Critical
-                                    </div>
+                                    <a href="@chartLink" class="stretched-link text-reset text-decoration-none" title="Verlauf anzeigen">@metric.DisplayName</a>
                                 }
-                            </div>
+                                else
+                                {
+                                    @metric.DisplayName
+                                }
+                            </strong>
+                            <span class="pill pill-@tone">@Display.Label(metric.Status)</span>
                         </div>
-                    </div>
-                }
-            </div>
-        }
-    </div>
-</div>
-
-@* --- Services --- *@
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Services</h5>
-    </div>
-    <div class="card-body">
-        @if ((Model.Services?.Count ?? 0) == 0)
-        {
-            <p class="text-muted mb-0">Keine Services verfügbar.</p>
-        }
-        else
-        {
-            <div class="row g-3">
-                @foreach (var service in (Model.Services ?? []).OrderBy(s => s.Service))
-                {
-                    var svcBadge = service.Status switch
-                    {
-                        StatusNs.ServiceStatus.Healthy => "bg-success",
-                        StatusNs.ServiceStatus.Degraded => "bg-warning text-dark",
-                        StatusNs.ServiceStatus.Unhealthy => "bg-danger",
-                        StatusNs.ServiceStatus.Acknowledged => "bg-info text-dark",
-                        StatusNs.ServiceStatus.Unreachable => "bg-dark",
-                        _ => "bg-secondary"
-                    };
-
-                    var staticHtmlUrl = Model.BaseUrl != null
-                        ? $"{Model.BaseUrl.TrimEnd('/')}/{Model.ServerId}.{service.Service}.html"
-                        : null;
-
-                    <div class="col-md-6 col-lg-4">
-                        <div class="card h-100">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <strong>@service.Service</strong>
-                                <span class="badge @svcBadge">@service.Status</span>
-                            </div>
-                            <div class="card-body">
-                                @if (service.Metrics.Count > 0)
-                                {
-                                    <div class="mb-2">
-                                        @foreach (var m in service.Metrics.Take(3))
-                                        {
-                                            var mBadge = m.Status switch
-                                            {
-                                                StatusNs.MetricStatus.Ok => "bg-success",
-                                                StatusNs.MetricStatus.Warning => "bg-warning text-dark",
-                                                StatusNs.MetricStatus.Critical => "bg-danger",
-                                                _ => "bg-secondary"
-                                            };
-                                            <span class="badge @mBadge me-1 mb-1">@m.DisplayName: @m.Value.ToString("F1")@m.Unit</span>
-                                        }
-                                    </div>
-                                }
-                                @if (service.Endpoints?.Count > 0)
-                                {
-                                    <div class="text-muted small">
-                                        <strong>Endpoints:</strong>
-                                        @foreach (var ep in service.Endpoints.Where(e => e.Enabled))
-                                        {
-                                            <div>@ep.Type: @ep.Path</div>
-                                        }
-                                    </div>
-                                }
-                                <div class="text-muted small mt-2">
-                                    <small>Aktualisiert: @service.LastUpdate.ToString("dd.MM. HH:mm")</small>
-                                </div>
-                            </div>
-                            @if (staticHtmlUrl != null)
+                        <div class="d-flex align-items-end justify-content-between gap-3 mt-2">
+                            <div class="metric-value">@metric.Value.ToString("F1")<small>@metric.Unit</small></div>
+                            @if (spark != null)
                             {
-                                <div class="card-footer">
-                                    <a href="@staticHtmlUrl" target="_blank" class="btn btn-sm btn-outline-secondary w-100">
-                                        <i class="bi bi-box-arrow-up-right me-1"></i>HTML-Report
-                                    </a>
-                                </div>
+                                <svg class="metric-spark" viewBox="0 0 110 40" preserveAspectRatio="none" aria-hidden="true">
+                                    <defs>
+                                        <linearGradient id="spark-@ChartId(key)" x1="0" x2="0" y1="0" y2="1">
+                                            <stop offset="0" style="stop-color: @sparkColor; stop-opacity: .35" />
+                                            <stop offset="1" style="stop-color: @sparkColor; stop-opacity: 0" />
+                                        </linearGradient>
+                                    </defs>
+                                    <path d="@spark.AreaPath()" fill="url(#spark-@ChartId(key))" />
+                                    <path d="@spark.LinePath()" fill="none" style="stroke: @sparkColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+                                </svg>
                             }
                         </div>
+                        @{
+                            var hints = new List<string>();
+                            if (metric.AverageValue.HasValue) hints.Add($"Ø {metric.AverageValue.Value:F1}{metric.Unit}");
+                            if (metric.Threshold?.Warning != null) hints.Add($"Warnung {metric.Threshold.Operator} {metric.Threshold.Warning}");
+                            if (metric.Threshold?.Critical != null) hints.Add($"kritisch {metric.Threshold.Operator} {metric.Threshold.Critical}");
+                        }
+                        <div class="small text-body-secondary">
+                            @string.Join(" · ", hints)
+                            @if (chartLink != null)
+                            {
+                                <i class="bi bi-graph-up ms-1"></i>
+                            }
+                        </div>
+                        <div class="progress mt-3" role="progressbar" aria-label="@metric.DisplayName"
+                             aria-valuenow="@progressValue.ToString("F0")" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar bg-@(tone switch { "ok" => "success", "warn" => "warning", "crit" => "danger", _ => "secondary" })"
+                                 style="width: @progressValue.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                        </div>
                     </div>
-                }
+                </div>
             </div>
         }
     </div>
-</div>
+}
 
 @* --- Probleme --- *@
 @if (Model.ActiveProblems.Count > 0)
 {
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">
-                <i class="bi bi-exclamation-triangle me-2"></i>Aktive Probleme
-                <span class="badge bg-danger ms-2">@Model.ActiveProblems.Count</span>
+    <div class="card mb-4 @(openProblems > 0 && Model.ActiveProblems.Any(p => !p.Acknowledged && p.Severity == StateNs.ProblemSeverity.Critical) ? "card-alert" : "")">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="detail-section-title">
+                <i class="bi bi-exclamation-triangle"></i>Aktive Probleme
+                <span class="pill @(openProblems > 0 ? "pill-crit" : "pill-ack")">@openProblems offen</span>
             </h5>
+            @if (openProblems < Model.ActiveProblems.Count)
+            {
+                <small class="text-body-secondary">@(Model.ActiveProblems.Count - openProblems) quittiert</small>
+            }
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Typ</th>
-                            <th>Schweregrad</th>
-                            <th>Beschreibung</th>
-                            <th>Seit</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var problem in Model.ActiveProblems.OrderByDescending(p => p.Severity))
-                        {
-                            var sevBadge = problem.Severity switch
-                            {
-                                StateNs.ProblemSeverity.Critical => "bg-danger",
-                                StateNs.ProblemSeverity.Warning => "bg-warning text-dark",
-                                _ => "bg-info text-dark"
-                            };
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-3">Problem</th>
+                        <th>Schweregrad</th>
+                        <th>Seit</th>
+                        <th>Status</th>
+                        <th class="text-end pe-3">Aktion</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var problem in Model.ActiveProblems.OrderBy(p => p.Acknowledged).ThenByDescending(p => p.Severity))
+                    {
+                        var problemChartLink = ChartLink(ProblemMetricKey(problem));
+                        var origin = string.IsNullOrWhiteSpace(problem.Source) ? problem.Type : $"{problem.Type} · {problem.Source}";
+                        var title = string.IsNullOrWhiteSpace(problem.Message) ? origin : problem.Message;
 
-                            <tr>
-                                <td>@problem.Type</td>
-                                <td><span class="badge @sevBadge">@problem.Severity</span></td>
-                                <td>@problem.Message</td>
-                                <td><small>@problem.Since.ToString("yyyy-MM-dd HH:mm:ss")</small></td>
-                                <td>
-                                    @if (problem.Acknowledged)
-                                    {
-                                        <span class="badge bg-info text-dark"><i class="bi bi-check-circle me-1"></i>Acknowledged</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-danger"><i class="bi bi-exclamation-circle me-1"></i>Offen</span>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+                        <tr class="@(problem.Acknowledged ? "text-body-secondary" : "")">
+                            <td class="ps-3">
+                                @if (problemChartLink != null)
+                                {
+                                    <a href="@problemChartLink" class="fw-semibold" title="Verlauf anzeigen">@title<i class="bi bi-graph-up ms-2"></i></a>
+                                }
+                                else
+                                {
+                                    <span class="fw-semibold">@title</span>
+                                }
+                                <div class="small text-body-secondary"><code>@origin</code></div>
+                                @if (!string.IsNullOrEmpty(problem.WikiUrl) || problem.RemediationSteps.Count > 0)
+                                {
+                                    <div class="small mt-1 d-flex flex-wrap gap-3">
+                                        @if (!string.IsNullOrEmpty(problem.WikiUrl))
+                                        {
+                                            <a href="@problem.WikiUrl" target="_blank" rel="noopener"><i class="bi bi-book me-1"></i>Lösungsanleitung</a>
+                                        }
+                                        @if (problem.RemediationSteps.Count > 0)
+                                        {
+                                            <details class="problem-steps">
+                                                <summary>Lösungsschritte (@problem.RemediationSteps.Count)</summary>
+                                                <ol class="text-body-secondary mb-0 mt-1 ps-3">
+                                                    @foreach (var step in problem.RemediationSteps)
+                                                    {
+                                                        <li>@step</li>
+                                                    }
+                                                </ol>
+                                            </details>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                            <td><span class="pill pill-@Display.Tone(problem.Severity)"><i class="bi @Display.Icon(problem.Severity)"></i>@Display.Label(problem.Severity)</span></td>
+                            <td class="text-nowrap">
+                                <time class="relative-time" data-utc="@Display.Iso(problem.FirstOccurrence)"
+                                      title="Erstmals: @Display.LocalTime(problem.FirstOccurrence) · Zuletzt: @Display.LocalTime(problem.LastOccurrence)">@Display.LocalTime(problem.FirstOccurrence)</time>
+                            </td>
+                            <td>
+                                @if (problem.Acknowledged)
+                                {
+                                    <span class="pill pill-soft pill-ack"><i class="bi bi-check2-circle"></i>Quittiert</span>
+                                    <div class="small text-body-secondary mt-1">
+                                        @(problem.AcknowledgeExpiresAt.HasValue ? "bis " + Display.LocalTime(problem.AcknowledgeExpiresAt.Value) : "unbegrenzt")
+                                        @if (!string.IsNullOrEmpty(problem.AcknowledgedBy))
+                                        {
+                                            <span> · @problem.AcknowledgedBy</span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="pill pill-soft pill-crit"><i class="bi bi-circle-fill" style="font-size: .5rem;"></i>Offen</span>
+                                }
+                            </td>
+                            <td class="text-end pe-3 text-nowrap">
+                                @if (!problem.Acknowledged)
+                                {
+                                    <button type="button" class="btn btn-sm btn-primary"
+                                            data-problem-id="@problem.Id" onclick="acknowledgeProblem(this.dataset.problemId, '@Model.ServerId')">
+                                        <i class="bi bi-check2 me-1"></i>Quittieren
+                                    </button>
+                                }
+                                else if (!string.IsNullOrEmpty(problem.AcknowledgeId))
+                                {
+                                    <button type="button" class="btn btn-sm btn-glass"
+                                            data-ack-id="@problem.AcknowledgeId" onclick="cancelAcknowledge(this.dataset.ackId)"
+                                            title="Quittierung aufheben — das Problem wird wieder gemeldet">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>Aufheben
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
         </div>
+    </div>
+}
+
+@* --- Dienste --- *@
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="detail-section-title"><i class="bi bi-hdd-network"></i>Dienste</h5>
+    </div>
+    <div class="card-body py-1">
+        @if (services.Count == 0)
+        {
+            <p class="text-body-secondary my-3">Keine Dienste verfügbar.</p>
+        }
+        else
+        {
+            @foreach (var service in services.OrderBy(s => s.Service))
+            {
+                var tone = Display.Tone(service.Status);
+                var enabledEndpoints = service.Endpoints?.Where(e => e.Enabled).ToList() ?? [];
+
+                <div class="service-row">
+                    <span class="status-dot status-dot-@tone"></span>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold">@service.Service</div>
+                        <div class="small text-body-secondary">
+                            @foreach (var ep in enabledEndpoints)
+                            {
+                                <span class="me-3">@ep.Type: @ep.Path</span>
+                            }
+                            <span>aktualisiert <time class="relative-time" data-utc="@Display.Iso(service.LastUpdate)" title="@Display.LocalTime(service.LastUpdate)">@Display.LocalTime(service.LastUpdate)</time></span>
+                        </div>
+                    </div>
+                    <div class="d-none d-md-flex flex-wrap gap-1 justify-content-end">
+                        @foreach (var m in service.Metrics.Take(3))
+                        {
+                            var mChartLink = ChartLink(MetricKey(m));
+                            var mBadge = Display.Tone(m.Status) switch { "ok" => "bg-success", "warn" => "bg-warning", "crit" => "bg-danger", _ => "bg-secondary" };
+                            if (mChartLink != null)
+                            {
+                                <a href="@mChartLink" class="badge @mBadge text-decoration-none" title="Verlauf anzeigen">@m.DisplayName: @m.Value.ToString("F1")@m.Unit <i class="bi bi-graph-up"></i></a>
+                            }
+                            else
+                            {
+                                <span class="badge @mBadge">@m.DisplayName: @m.Value.ToString("F1")@m.Unit</span>
+                            }
+                        }
+                    </div>
+                    <span class="pill pill-@tone">@Display.Label(service.Status)</span>
+                    @if (staticBase != null)
+                    {
+                        <a href="@($"{staticBase}/{Model.ServerId}.{service.Service}.html")" target="_blank" rel="noopener"
+                           class="btn btn-sm btn-glass" title="Statischen HTML-Report öffnen">
+                            <i class="bi bi-box-arrow-up-right"></i><span class="d-none d-lg-inline ms-1">HTML-Report</span>
+                        </a>
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@* --- Verlaufs-Charts (Ziel der Links aus Metrik-Kacheln, Dienst-Badges und Problemen) --- *@
+@if (metricHistory.Count > 0)
+{
+    <div class="row g-3 mb-4">
+        @foreach (var (key, points) in metricHistory.OrderBy(kv => kv.Key))
+        {
+            if (points.Count == 0) continue;
+
+            metricsByKey.TryGetValue(key, out var current);
+            var displayName = current?.DisplayName ?? key;
+            var unit = current?.Unit ?? "";
+            var threshold = current?.Threshold;
+            var op = threshold?.Operator ?? ">";
+            var values = points.Select(p => p.Value).ToList();
+            var isPercent = unit.Trim() == "%";
+            var limits = new[] { threshold?.Warning, threshold?.Critical }.Where(v => v.HasValue).Select(v => v!.Value).ToList();
+
+            const double plotWidth = 940, plotHeight = 200, left = 48, top = 12;
+            var geo = new ChartGeometry(values, plotWidth, plotHeight,
+                includeMin: isPercent ? 0 : Math.Min(0, values.Min()),
+                includeMax: isPercent ? 100 : (limits.Count > 0 ? limits.Max() : null));
+
+            var last = values[^1];
+            var lastTone = Exceeds(last, threshold?.Critical, op) ? "crit" : Exceeds(last, threshold?.Warning, op) ? "warn" : "ok";
+            var lineColor = $"var(--sa-{lastTone})";
+            var gradientId = "area-" + ChartId(key);
+            var ticks = Enumerable.Range(0, 5).Select(i => geo.Min + (geo.Max - geo.Min) * i / 4).ToList();
+            var labelEvery = Math.Max(1, points.Count / 6);
+
+            <div class="col-12 col-xxl-6">
+                <div class="card h-100 metric-chart" id="@ChartId(key)">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="detail-section-title"><i class="bi bi-graph-up"></i>@displayName</h5>
+                        <div class="d-flex align-items-center gap-3">
+                            <small class="text-body-secondary">@points.Count Messwerte · @Display.LocalShort(points[0].Time) – @Display.LocalShort(points[^1].Time)</small>
+                            <a href="#top" class="small text-decoration-none" title="Zur Übersicht"><i class="bi bi-arrow-up"></i></a>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                            <div class="chart-stats">
+                                <span>Aktuell <strong>@last.ToString("F1")@unit</strong></span>
+                                <span>Ø <strong>@values.Average().ToString("F1")@unit</strong></span>
+                                <span>Min <strong>@values.Min().ToString("F1")@unit</strong></span>
+                                <span>Max <strong>@values.Max().ToString("F1")@unit</strong></span>
+                            </div>
+                            @if (limits.Count > 0)
+                            {
+                                <div class="chart-legend">
+                                    @if (threshold?.Warning != null)
+                                    {
+                                        <span><span class="swatch" style="background: var(--sa-warn)"></span>Warnung @op @threshold.Warning@unit</span>
+                                    }
+                                    @if (threshold?.Critical != null)
+                                    {
+                                        <span><span class="swatch" style="background: var(--sa-crit)"></span>Kritisch @op @threshold.Critical@unit</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <svg class="history-chart" viewBox="0 0 1000 240" role="img" aria-label="Verlauf @displayName">
+                            <defs>
+                                <linearGradient id="@gradientId" x1="0" x2="0" y1="0" y2="1">
+                                    <stop offset="0" style="stop-color: @lineColor; stop-opacity: .32" />
+                                    <stop offset="1" style="stop-color: @lineColor; stop-opacity: 0" />
+                                </linearGradient>
+                            </defs>
+                            <g transform="translate(@ChartGeometry.F(left),@ChartGeometry.F(top))">
+                                @foreach (var tick in ticks)
+                                {
+                                    var y = ChartGeometry.F(geo.Y(tick));
+                                    <line class="grid-line" x1="0" x2="@ChartGeometry.F(plotWidth)" y1="@y" y2="@y" />
+                                    @:<text class="axis-label" x="-8" y="@y" text-anchor="end" dominant-baseline="middle">@tick.ToString("0.#")</text>
+                                }
+                                @if (threshold?.Warning != null)
+                                {
+                                    var y = ChartGeometry.F(geo.Y(threshold.Warning.Value));
+                                    <line x1="0" x2="@ChartGeometry.F(plotWidth)" y1="@y" y2="@y" style="stroke: var(--sa-warn)" stroke-dasharray="6 5" opacity=".8" />
+                                }
+                                @if (threshold?.Critical != null)
+                                {
+                                    var y = ChartGeometry.F(geo.Y(threshold.Critical.Value));
+                                    <line x1="0" x2="@ChartGeometry.F(plotWidth)" y1="@y" y2="@y" style="stroke: var(--sa-crit)" stroke-dasharray="6 5" opacity=".8" />
+                                }
+                                <path d="@geo.AreaPath()" fill="url(#@gradientId)" />
+                                <path d="@geo.LinePath()" fill="none" style="stroke: @lineColor" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+                                @for (var i = 0; i < points.Count; i++)
+                                {
+                                    var point = points[i];
+                                    var cx = ChartGeometry.F(geo.X(i));
+                                    var cy = ChartGeometry.F(geo.Y(point.Value));
+                                    var pointTone = Exceeds(point.Value, threshold?.Critical, op) ? "crit" : Exceeds(point.Value, threshold?.Warning, op) ? "warn" : "ok";
+                                    @* Wide invisible hit area per point; the dot appears on hover/focus *@
+                                    <rect class="hover-target" x="@ChartGeometry.F(geo.X(i) - plotWidth / Math.Max(points.Count, 2) / 2)" y="0"
+                                          width="@ChartGeometry.F(plotWidth / Math.Max(points.Count, 2))" height="@ChartGeometry.F(plotHeight)" fill="transparent">
+                                        <title>@Display.LocalTime(point.Time): @point.Value.ToString("F1")@unit</title>
+                                    </rect>
+                                    <circle class="hover-dot" cx="@cx" cy="@cy" r="5" style="fill: var(--sa-@pointTone); stroke: var(--sa-surface-solid)" stroke-width="2" />
+                                    if (i % labelEvery == 0 && i < points.Count - labelEvery / 2)
+                                    {
+                                        @:<text class="axis-label" x="@cx" y="@ChartGeometry.F(plotHeight + 20)" text-anchor="middle">@Display.LocalShort(point.Time)</text>
+                                    }
+                                }
+                                <circle cx="@ChartGeometry.F(geo.X(points.Count - 1))" cy="@ChartGeometry.F(geo.Y(last))" r="5"
+                                        style="fill: @lineColor; stroke: var(--sa-surface-solid)" stroke-width="2" />
+                            </g>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        }
     </div>
 }
 
@@ -260,16 +453,16 @@
 {
     <div class="card mb-4">
         <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-layers me-2"></i>Application Pools</h5>
+            <h5 class="mb-0"><i class="bi bi-layers me-2"></i>Anwendungspools</h5>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                    <thead>
                         <tr>
                             <th>Name</th>
                             <th>Status</th>
-                            <th>Memory</th>
+                            <th>Arbeitsspeicher</th>
                             <th>Uptime</th>
                         </tr>
                     </thead>
@@ -298,7 +491,7 @@
 
                             <tr data-pool="@pool.Key">
                                 <td>@pool.Key</td>
-                                <td><span class="badge @poolBadge">@pool.Value.Status</span></td>
+                                <td><span class="badge @poolBadge">@(pool.Value.Status switch { StateNs.AppPoolStatus.Running => "Läuft", StateNs.AppPoolStatus.Stopped => "Gestoppt", _ => pool.Value.Status.ToString() })</span></td>
                                 <td>
                                     @if (pool.Value.Status == StateNs.AppPoolStatus.Running && pool.Value.WorkerProcessId.HasValue)
                                     {
@@ -324,8 +517,7 @@
                                     }
                                     else if (pool.Value.Status == StateNs.AppPoolStatus.Stopped && pool.Value.StoppedSince.HasValue)
                                     {
-                                        var stoppedFor = DateTime.UtcNow - pool.Value.StoppedSince.Value;
-                                        <small class="text-muted">Gestoppt seit @stoppedFor.ToString("hh\\:mm\\:ss")</small>
+                                        <small class="text-body-secondary" title="seit @Display.LocalTime(pool.Value.StoppedSince.Value)">Gestoppt seit @Display.Duration(DateTime.UtcNow - Display.AsUtc(pool.Value.StoppedSince.Value))</small>
                                     }
                                     else
                                     {
@@ -346,12 +538,12 @@
 {
     <div class="card mb-4">
         <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-window me-2"></i>Windows Services</h5>
+            <h5 class="mb-0"><i class="bi bi-window me-2"></i>Windows-Dienste</h5>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                    <thead>
                         <tr>
                             <th>Name</th>
                             <th>Anzeigename</th>
@@ -403,7 +595,7 @@
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-sm table-hover mb-0">
-                    <thead class="table-light">
+                    <thead>
                         <tr>
                             <th>Zeitstempel</th>
                             <th>Level</th>
@@ -428,7 +620,7 @@
                                 _                     => "bg-secondary"
                             };
                             <tr>
-                                <td><small class="text-muted">@ev.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</small></td>
+                                <td><small class="text-muted">@Display.LocalTimeSeconds(ev.Timestamp)</small></td>
                                 <td><span class="badge @evBadge">@ev.Level</span></td>
                                 <td><small>@ev.Source</small></td>
                                 <td><small>@ev.EventId</small></td>
@@ -454,7 +646,7 @@
 {
     <div class="card mb-4">
         <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-database me-2"></i>SQL Query Checks</h5>
+            <h5 class="mb-0"><i class="bi bi-database me-2"></i>SQL-Prüfungen</h5>
         </div>
         <div class="card-body">
             @foreach (var (checkId, check) in (Model.SqlQueryChecks ?? []).OrderBy(kvp => kvp.Key))
@@ -470,8 +662,8 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <strong><i class="bi bi-database-check me-1"></i>@check.CheckName</strong>
                         <div>
-                            <span class="badge @checkBadge">@check.Status</span>
-                            <small class="text-muted ms-2">@check.LastChecked.ToString("yyyy-MM-dd HH:mm:ss")</small>
+                            <span class="badge @checkBadge">@Display.Label(check.Status)</span>
+                            <small class="text-muted ms-2">@Display.LocalTimeSeconds(check.LastChecked)</small>
                         </div>
                     </div>
                     <div class="card-body p-0">
@@ -486,7 +678,7 @@
                         {
                             <div class="table-responsive">
                                 <table class="table table-sm table-hover mb-0">
-                                    <thead class="table-light">
+                                    <thead>
                                         <tr>
                                             <th>Query</th>
                                             <th>Status</th>
@@ -507,7 +699,7 @@
 
                                             <tr>
                                                 <td><strong>@result.QueryName</strong></td>
-                                                <td><span class="badge @qBadge">@result.Status</span></td>
+                                                <td><span class="badge @qBadge">@Display.Label(result.Status)</span></td>
                                                 <td>
                                                     @if (!string.IsNullOrEmpty(result.ExecutionError))
                                                     {
@@ -542,7 +734,7 @@
                                                             <div class="collapse mt-2" id="@rowsCollapseId">
                                                                 <div class="table-responsive">
                                                                     <table class="table table-sm table-bordered font-monospace small mb-0">
-                                                                        <thead class="table-light">
+                                                                        <thead>
                                                                             <tr>
                                                                                 @foreach (var colName in result.Columns)
                                                                                 {
@@ -600,7 +792,7 @@
         </div>
         <div class="card-body p-0">
             <table class="table table-sm table-hover mb-0">
-                <thead class="table-light">
+                <thead>
                     <tr>
                         <th>Name</th>
                         <th>Status</th>
@@ -619,8 +811,8 @@
                         };
                         <tr>
                             <td>@probe.ProbeName</td>
-                            <td><span class="badge @probeBadge">@probe.Status</span></td>
-                            <td>@(probe.LastSentAt.HasValue ? probe.LastSentAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss") : "–")</td>
+                            <td><span class="badge @probeBadge">@Display.Label(probe.Status)</span></td>
+                            <td>@(probe.LastSentAt.HasValue ? Display.LocalTimeSeconds(probe.LastSentAt.Value) : "–")</td>
                             <td>
                                 @if (!string.IsNullOrEmpty(probe.ErrorMessage))
                                 {
@@ -648,7 +840,7 @@
         </div>
         <div class="card-body p-0">
             <table class="table table-sm table-hover mb-0">
-                <thead class="table-light">
+                <thead>
                     <tr>
                         <th>Name</th>
                         <th>Status</th>
@@ -668,8 +860,8 @@
                         };
                         <tr>
                             <td>@check.CheckName</td>
-                            <td><span class="badge @deliveryBadge">@check.Status</span></td>
-                            <td>@(check.LastReceivedAt.HasValue ? check.LastReceivedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss") : "–")</td>
+                            <td><span class="badge @deliveryBadge">@Display.Label(check.Status)</span></td>
+                            <td>@(check.LastReceivedAt.HasValue ? Display.LocalTimeSeconds(check.LastReceivedAt.Value) : "–")</td>
                             <td>@(check.AgeMinutes.HasValue ? $"{check.AgeMinutes.Value:F0}" : "–")</td>
                             <td>
                                 @if (!string.IsNullOrEmpty(check.ErrorMessage))
@@ -698,7 +890,7 @@
         </div>
         <div class="card-body p-0">
             <table class="table table-sm table-hover mb-0">
-                <thead class="table-light">
+                <thead>
                     <tr>
                         <th>Subject</th>
                         <th>Thumbprint</th>
@@ -726,7 +918,7 @@
                             <td><code class="small">@thumb</code></td>
                             <td>@(cert.ExpiresAt == default ? "–" : cert.ExpiresAt.ToString("dd.MM.yyyy"))</td>
                             <td>@rest</td>
-                            <td><span class="badge @certBadge">@cert.Status</span></td>
+                            <td><span class="badge @certBadge">@Display.Label(cert.Status)</span></td>
                         </tr>
                     }
                 </tbody>
@@ -758,7 +950,7 @@
                 @if (bt.Problems.Count > 0)
                 {
                     <table class="table table-sm table-hover mb-3">
-                        <thead class="table-light"><tr><th>Typ</th><th>Name</th><th>Status</th><th>Schweregrad</th></tr></thead>
+                        <thead><tr><th>Typ</th><th>Name</th><th>Status</th><th>Schweregrad</th></tr></thead>
                         <tbody>
                             @foreach (var p in bt.Problems)
                             {
@@ -766,7 +958,7 @@
                                     <td>@p.ArtifactType</td>
                                     <td>@p.Name</td>
                                     <td>@p.Status</td>
-                                    <td><span class="badge @(p.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(p.IsCritical ? "Critical" : "Warning")</span></td>
+                                    <td><span class="badge @(p.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(p.IsCritical ? "Kritisch" : "Warnung")</span></td>
                                 </tr>
                             }
                         </tbody>
@@ -818,7 +1010,7 @@
                 {
                     <h6>Hängengebliebene Dateien</h6>
                     <table class="table table-sm table-hover mb-3">
-                        <thead class="table-light"><tr><th>Verzeichnis</th><th>Datei</th><th>Alter</th><th>Grund</th><th>Schweregrad</th><th>Lösung</th></tr></thead>
+                        <thead><tr><th>Verzeichnis</th><th>Datei</th><th>Alter</th><th>Grund</th><th>Schweregrad</th><th>Lösung</th></tr></thead>
                         <tbody>
                             @foreach (var s in fm.StuckFiles)
                             {
@@ -828,7 +1020,7 @@
                                     <td title="@s.FilePath">@System.IO.Path.GetFileName(s.FilePath)</td>
                                     <td>@ageLabel</td>
                                     <td>@(string.Equals(s.Reason, "cutoff", StringComparison.OrdinalIgnoreCase) ? "Nach Cutoff" : "Zu alt")</td>
-                                    <td><span class="badge @(s.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(s.IsCritical ? "Critical" : "Warning")</span></td>
+                                    <td><span class="badge @(s.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(s.IsCritical ? "Kritisch" : "Warnung")</span></td>
                                     <td>
                                         @if (!string.IsNullOrEmpty(s.WikiUrl))
                                         {
@@ -845,7 +1037,7 @@
                 {
                     <h6>Log-Fehler</h6>
                     <table class="table table-sm table-hover mb-3">
-                        <thead class="table-light"><tr><th>Log</th><th>Signatur</th><th>Treffer</th><th>Beispiel</th><th>Lösung</th></tr></thead>
+                        <thead><tr><th>Log</th><th>Signatur</th><th>Treffer</th><th>Beispiel</th><th>Lösung</th></tr></thead>
                         <tbody>
                             @foreach (var m in fm.LogMatches)
                             {
@@ -873,107 +1065,6 @@
             }
         </div>
     </div>
-}
-
-@* --- History Charts --- *@
-@{
-    var allHistory = (Model.Services ?? [])
-        .Where(s => s.History?.Count > 0)
-        .SelectMany(s => s.History)
-        .OrderBy(h => h.Timestamp)
-        .ToList();
-
-    var metricKeys = allHistory.SelectMany(h => h.Values.Keys).Distinct().OrderBy(k => k).ToList();
-
-    // Key matches history snapshot key: "disk_c:" / "disk_d:" for targeted metrics
-    static string MetricKey(Minicon.SimpleAdmin.Models.Status.Metric m) =>
-        string.IsNullOrEmpty(m.Target) ? m.Name : $"{m.Name}_{m.Target}";
-
-    // Build threshold lookup from current metrics
-    var thresholds = Model.Metrics
-        .Where(m => m.Threshold != null)
-        .GroupBy(MetricKey)
-        .ToDictionary(g => g.Key, g => g.First().Threshold!);
-
-    // Display name lookup
-    var displayNames = Model.Metrics
-        .GroupBy(MetricKey)
-        .ToDictionary(g => g.Key, g => g.First().DisplayName);
-}
-
-@if (allHistory.Count > 0)
-{
-    foreach (var metricKey in metricKeys)
-    {
-        var entries = allHistory
-            .Where(h => h.Values.ContainsKey(metricKey))
-            .TakeLast(100)
-            .ToList();
-
-        if (entries.Count == 0) continue;
-
-        var displayName = displayNames.ContainsKey(metricKey) ? displayNames[metricKey] : metricKey;
-        var hasThreshold = thresholds.ContainsKey(metricKey);
-        var warnVal = hasThreshold ? thresholds[metricKey].Warning : (double?)null;
-        var critVal = hasThreshold ? thresholds[metricKey].Critical : (double?)null;
-        var op = hasThreshold ? thresholds[metricKey].Operator : ">";
-        var maxVal = Math.Max(entries.Max(e => e.Values[metricKey]), critVal ?? 100);
-
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>@displayName</h5>
-                <small class="text-muted">Letzte @entries.Count Einträge</small>
-            </div>
-            <div class="card-body">
-                @if (hasThreshold)
-                {
-                    <div class="mb-2 small text-muted">
-                        <span class="badge bg-success">OK</span>
-                        <span class="badge bg-warning text-dark">Warning @op @warnVal</span>
-                        <span class="badge bg-danger">Critical @op @critVal</span>
-                    </div>
-                }
-                <div class="d-flex align-items-end" style="height: 200px; gap: 1px; overflow-x: auto;">
-                    @foreach (var entry in entries)
-                    {
-                        var val = entry.Values[metricKey];
-                        var pct = maxVal > 0 ? (val / maxVal * 100) : 0;
-                        var barColor = "#198754"; // green (ok)
-
-                        if (hasThreshold)
-                        {
-                            var isWarn = op switch
-                            {
-                                ">" => val > warnVal,
-                                ">=" => val >= warnVal,
-                                "<" => val < warnVal,
-                                "<=" => val <= warnVal,
-                                _ => val > warnVal
-                            };
-                            var isCrit = op switch
-                            {
-                                ">" => val > critVal,
-                                ">=" => val >= critVal,
-                                "<" => val < critVal,
-                                "<=" => val <= critVal,
-                                _ => val > critVal
-                            };
-
-                            if (isCrit) barColor = "#dc3545"; // red
-                            else if (isWarn) barColor = "#ffc107"; // yellow
-                        }
-
-                        <div style="flex: 1; min-width: 4px; max-width: 12px; height: @(pct.ToString("F0"))%; background: @barColor; border-radius: 2px 2px 0 0;"
-                             title="@entry.Timestamp.ToString("dd.MM. HH:mm"): @val.ToString("F1")"></div>
-                    }
-                </div>
-                <div class="d-flex justify-content-between mt-1 small text-muted">
-                    <span>@entries.First().Timestamp.ToString("dd.MM. HH:mm")</span>
-                    <span>@entries.Last().Timestamp.ToString("dd.MM. HH:mm")</span>
-                </div>
-            </div>
-        </div>
-    }
 }
 
 @* --- Event ignorieren (Modal) --- *@
@@ -1022,6 +1113,7 @@
 </div>
 
 @section Scripts {
+    <partial name="_AcknowledgeModal" />
     <script>
         let eventIgnoreModal;
         let eventIgnoreSource = '';
