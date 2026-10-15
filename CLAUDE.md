@@ -40,6 +40,9 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 - `src/build/Minicon.SimpleAdmin.Sources.targets` is packed as `buildTransitive/<PackageId>.targets`: on build, the host extracts every referenced SimpleAdmin package to `SimpleAdmin.Sources/<PackageId>/` (re-extracted only when the package path/version changes, marker `.simpleadmin-package`; local edits are overwritten on upgrade). The folder is added to `DefaultItemExcludes`, so the host keeps compiling against the package DLLs. Opt-out: `<SimpleAdminExtractSources>false</SimpleAdminExtractSources>`, target folder: `SimpleAdminSourcesDirectory`.
 - Customer namespace: `<SimpleAdminSourcesNamespace>Kunde.Monitoring</SimpleAdminSourcesNamespace>` replaces the token `Minicon.SimpleAdmin` (whole identifier, not after `Minicon-eG/`) in text files and in file/folder names during extraction (inline `RoslynCodeTaskFactory` task — netstandard2.0, so no `Path.GetRelativePath`). Namespaces, project names, `_content/<PackageId>` paths and logger categories stay consistent; LICENSE, `Authors` and repository URLs are kept. Keep `Minicon.SimpleAdmin` as the only spelling of the prefix in code so the rename stays complete.
 
+### Release Notes
+- `CHANGELOG.md` (repo root, German, newest first, Keep-a-Changelog style: `## [X.Y.Z] – date – headline` with `### Neu / Geändert / Behoben / Intern`) is the changelog of record and **must** get an entry in every release commit. The GitHub Release notes are extracted from that section (see `.claude/skills/release/SKILL.md`).
+
 ### Publishing
 - Trusted Publishing to nuget.org is configured via GitHub Actions (`Add NuGet publish workflow (Trusted Publishing)` commit). The workflow publishes all seven packages on release.
 

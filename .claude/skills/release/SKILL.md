@@ -15,7 +15,7 @@ on top purely to hold human-readable notes.
 ## When to invoke
 - User types `/release`, `/release 2.16.0`, "cut a release", "release the packages",
   "bump version and publish", "mach ein Release", "veröffentliche die Pakete".
-- After a feature/fix is merged to `master`, build + tests are green, and the user wants
+- After a feature/fix is merged to `main`, build + tests are green, and the user wants
   it shipped to nuget.org.
 
 ## Inputs
@@ -24,7 +24,7 @@ on top purely to hold human-readable notes.
   features, major for breaking changes) and confirm with the user via AskUserQuestion.
 
 ## Preconditions — check first, stop and report if any fails
-1. On `master` (`git branch --show-current`). Releases are tags on master.
+1. On `main` (`git branch --show-current`). Releases are tags on main.
 2. Working tree contains only the intended changes (`git status --short`). If there are
    unrelated modifications, ask before bundling them into the release commit.
 3. `gh auth status` is logged in with `repo` + `workflow` scopes.
@@ -57,8 +57,30 @@ grep -rn "<Version>" src/*/*.csproj   # verify all show NEW (the Tests project h
 **Developer docs:**
 - In `CLAUDE.md`, update the "currently `X.Y.Z`" string in the **Versioning** section, and ensure any
   new feature area has a short section with correct `(vX.Y.Z)` header tags.
-- If a `CHANGELOG.md` exists, prepend a section for `NEW`; otherwise the GitHub Release notes (step 7)
-  are the changelog of record.
+
+**Release notes — MANDATORY GATE: `CHANGELOG.md`.** The repo-root `CHANGELOG.md` is the changelog of
+record and MUST get a section for `NEW` in the release commit — never release without it. Draft it from
+the changes since the previous tag:
+```bash
+PREV=$(git tag --sort=-v:refname | grep '^v' | head -1)
+git log --no-merges --pretty="- %s" ${PREV}..HEAD
+git diff --stat ${PREV}..HEAD
+```
+Prepend directly below the intro (newest first), in German, operator-oriented (what changes for the user,
+config keys in `code`), no "Generated with" footer:
+```markdown
+## [NEW] – YYYY-MM-DD – <Headline = commit topic>
+
+**<one-sentence summary>**
+
+### Neu
+### Geändert
+### Behoben
+### Intern        <!-- optional: refactorings, tests, build -->
+```
+Omit empty groups. Security fixes go under **Behoben** with the advisory ID. Add the compare link at the
+bottom of the file: `[NEW]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/vPREV...vNEW`.
+The same section is reused verbatim as the GitHub Release notes (step 7).
 
 **User-facing documentation — MANDATORY GATE.** The release must NOT proceed if a new user-visible
 feature, config key, or CLI flag is undocumented. Both user-doc sources ship *inside* the
@@ -97,17 +119,15 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 ```bash
 git add -A
 git commit -m "<deutsche Zusammenfassung> (vNEW)" -m "<details>" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
-git push origin master
+git push origin main
 ```
 
-### 6. Draft release notes
-Summarize from the diff since the previous tag:
+### 6. Extract the release notes from CHANGELOG.md
+The notes were written in step 3; extract the `NEW` section (without its `## [NEW]` heading) for the
+GitHub Release:
 ```bash
-PREV=$(git tag --sort=-creatordate | grep '^v' | head -1)
-git log --no-merges --pretty="- %s" ${PREV}..HEAD
+awk '/^## \[NEW\]/{f=1;next} /^## \[/{f=0} /^\[[0-9]/{f=0} f' CHANGELOG.md > /tmp/release-notes.md
 ```
-Group into **Neu / Geändert / Behoben**, in German. Lead with a one-line headline that
-matches the commit topic.
 
 ### 7. Tag and create the GitHub Release
 Pushing the tag triggers the nuget.org publish — this is a **public, irreversible** action.
@@ -115,7 +135,7 @@ Confirm the user still wants to publish before pushing the tag.
 ```bash
 git tag vNEW
 git push origin vNEW                       # <-- triggers .github/workflows/publish.yml
-gh release create vNEW --title "vNEW — <Headline>" --notes-file <notes>   # tag already exists
+gh release create vNEW --title "vNEW — <Headline>" --notes-file /tmp/release-notes.md   # tag already exists
 ```
 (`gh release create` on an existing tag only attaches the notes; it does not re-create the tag.)
 
