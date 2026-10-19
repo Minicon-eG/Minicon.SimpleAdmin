@@ -15,11 +15,18 @@ public static class PlatformMetricsProviderFactory
     /// Creates the appropriate metrics provider for the current platform
     /// </summary>
     public static IPlatformMetricsProvider Create(ILogger logger)
+        => Create(logger, CpuSamplingOptions.Default);
+
+    /// <summary>
+    /// Creates the appropriate metrics provider for the current platform with
+    /// explicit CPU-sampling options (window, samples, self-subtract).
+    /// </summary>
+    public static IPlatformMetricsProvider Create(ILogger logger, CpuSamplingOptions cpuOptions)
     {
         if (OperatingSystem.IsWindows())
         {
             logger.LogInformation("Creating Windows metrics provider");
-            return new WindowsMetricsProvider(logger);
+            return new WindowsMetricsProvider(logger, cpuOptions);
         }
 
         if (OperatingSystem.IsLinux())
