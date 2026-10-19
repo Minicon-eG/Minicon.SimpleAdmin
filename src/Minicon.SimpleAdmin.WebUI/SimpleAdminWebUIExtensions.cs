@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Minicon.SimpleAdmin.Checkers;
 using Minicon.SimpleAdmin.Services;
+using Minicon.SimpleAdmin.WebUI.Hosting;
 using Minicon.SimpleAdmin.WebUI.Services;
 using Minicon.SimpleAdmin.WebUI.Services.Scripts;
 
@@ -100,7 +102,52 @@ public static class SimpleAdminWebUIExtensions
         services.AddSingleton<IFileSystemAccess, FileSystemAccess>();
         services.AddSingleton<FileMonitoringPreviewService>();
 
+        AddDataProtection(services, configuration);
+
         return services;
+    }
+
+    /// <summary>
+    /// Robust DataProtection keys for the admin UI: persisted to a stable filesystem
+    /// path (default <c>C:\ProgramData\SimpleAdmin\dp-keys</c>) and encrypted with the
+    /// LOCAL MACHINE DPAPI scope — not the user profile. The previous default kept
+    /// keys at the IIS AppPool user profile, which disappeared on AppPool recycle /
+    /// profile load issues and crashed the WebUI with CryptographicException 0xe0434352.
+    /// Opt-out: <c>DataProtection:Enabled=false</c>; path override: <c>DataProtection:KeysDirectory</c>.
+    /// </summary>
+    private static void AddDataProtection(IServiceCollection services, IConfiguration configuration)
+    {
+        if (configuration.GetValue<bool?>("DataProtection:Enabled") == false)
+            return;
+
+        if (!OperatingSystem.IsWindows())
+        {
+            services.AddDataProtection().SetApplicationName("SimpleAdmin");
+            return;
+        }
+
+        var keysDirectory = configuration.GetValue<string>("DataProtection:KeysDirectory");
+        if (string.IsNullOrWhiteSpace(keysDirectory))
+            keysDirectory = InstallerOptions.DefaultKeysDirectory;
+
+        try
+        {
+            Directory.CreateDirectory(keysDirectory);
+        }
+        catch
+        {
+            // Fallback to the default DataProtection behaviour (no persisted keys)
+            // if we cannot create the directory (lack of rights, read-only drive).
+            services.AddDataProtection().SetApplicationName("SimpleAdmin");
+            return;
+        }
+
+        var builder = services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory))
+            .SetApplicationName("SimpleAdmin");
+
+        if (OperatingSystem.IsWindows())
+            builder.ProtectKeysWithDpapi(protectToLocalMachine: true);
     }
 
     /// <summary>
