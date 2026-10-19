@@ -9,6 +9,7 @@ namespace Minicon.SimpleAdmin.Services.PlatformMetrics.Windows;
 public class WindowsMetricsProvider : IPlatformMetricsProvider
 {
     private readonly ILogger _logger;
+    private readonly CpuSamplingOptions _cpuOptions;
     private readonly Dictionary<string, PerformanceCounter> _counters = new();
     private bool _initialized;
 
@@ -16,8 +17,18 @@ public class WindowsMetricsProvider : IPlatformMetricsProvider
     /// Initializes a new instance of the WindowsMetricsProvider class
     /// </summary>
     public WindowsMetricsProvider(ILogger logger)
+        : this(logger, CpuSamplingOptions.Default)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance with explicit CPU-sampling options (tests + hosts
+    /// that want a different sampling window / self-subtract behaviour).
+    /// </summary>
+    public WindowsMetricsProvider(ILogger logger, CpuSamplingOptions cpuOptions)
     {
         _logger = logger;
+        _cpuOptions = cpuOptions;
     }
 
     /// <summary>
@@ -67,7 +78,12 @@ public class WindowsMetricsProvider : IPlatformMetricsProvider
     }
 
     /// <summary>
-    /// Gets CPU usage percentage using Performance Counter
+    /// Gets system CPU usage percentage. Samples the <c>% Processor Time</c> rate
+    /// counter multiple times over a configurable window (default 900 ms, 3 samples)
+    /// and returns the median — a single 100 ms snapshot easily lands inside a
+    /// JIT/DI/checker burst and read 100 % even on an idle box. On top of that,
+    /// the worker's own CPU share over the same window is subtracted, so the
+    /// metrics collector does not measure itself.
     /// </summary>
     public async Task<double> GetCpuUsageAsync()
     {
@@ -76,26 +92,56 @@ public class WindowsMetricsProvider : IPlatformMetricsProvider
             await InitializeAsync();
         }
 
-        if (_counters.TryGetValue("cpu", out var counter))
+        if (!_counters.TryGetValue("cpu", out var counter))
         {
-            try
-            {
-                // First call returns 0, need to wait and call again
-                counter.NextValue();
-                await Task.Delay(100);
-                var value = counter.NextValue();
-                _logger.LogTrace("CPU usage: {Value}%", value);
-                return value;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error reading CPU counter");
-                return 0;
-            }
+            _logger.LogWarning("CPU counter not available");
+            return 0;
         }
 
-        _logger.LogWarning("CPU counter not available");
-        return 0;
+        try
+        {
+            // Discard the first sample (always 0 / stale) and prime the counter.
+            counter.NextValue();
+
+            var process = System.Diagnostics.Process.GetCurrentProcess();
+            var cpuBefore = process.TotalProcessorTime;
+            var swStart = System.Diagnostics.Stopwatch.StartNew();
+
+            var samples = new List<double>(_cpuOptions.Samples);
+            var perSampleDelay = Math.Max(50, _cpuOptions.WindowMilliseconds / _cpuOptions.Samples);
+            for (var i = 0; i < _cpuOptions.Samples; i++)
+            {
+                await Task.Delay(perSampleDelay);
+                samples.Add(counter.NextValue());
+            }
+
+            swStart.Stop();
+            process.Refresh();
+            var cpuAfter = process.TotalProcessorTime;
+
+            double selfPercent = 0;
+            if (swStart.Elapsed.TotalMilliseconds > 0 && Environment.ProcessorCount > 0)
+            {
+                selfPercent = 100.0 * (cpuAfter - cpuBefore).TotalMilliseconds
+                              / swStart.Elapsed.TotalMilliseconds
+                              / Environment.ProcessorCount;
+            }
+
+            var effective = CpuSamplingOptions.CombineSamples(samples, selfPercent, _cpuOptions.SubtractSelfCpu);
+            _logger.LogDebug(
+                "CPU usage: {Value:F1}% (system median {System:F1}%, self {Self:F1}% over {Elapsed} ms, samples [{Samples}])",
+                effective,
+                CpuSamplingOptions.Median(samples),
+                selfPercent,
+                swStart.Elapsed.TotalMilliseconds,
+                string.Join(", ", samples.Select(s => s.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))));
+            return effective;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading CPU counter");
+            return 0;
+        }
     }
 
     /// <summary>

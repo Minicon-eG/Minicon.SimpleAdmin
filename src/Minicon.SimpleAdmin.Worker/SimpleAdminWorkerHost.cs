@@ -61,11 +61,14 @@ public static class SimpleAdminWorkerHost
         services.AddSingleton<IServiceConfigReader>(sp =>
             new ServiceConfigReader(paths.ConfigPath, sp.GetRequiredService<ILogger<ServiceConfigReader>>(), sp.GetRequiredService<IFileSystem>()));
 
-        // Register platform-specific metrics provider
+        // Register platform-specific metrics provider. CPU sampling is tunable from
+        // appsettings.json (Metrics:Cpu:WindowMs / Samples / SubtractSelf) so hosts
+        // can trade latency vs. smoothness without recompiling.
         services.AddSingleton<IPlatformMetricsProvider>(sp =>
         {
             var logger = sp.GetRequiredService<ILogger<IPlatformMetricsProvider>>();
-            var provider = PlatformMetricsProviderFactory.Create(logger);
+            var cpuOptions = CpuSamplingOptions.FromConfiguration(configuration);
+            var provider = PlatformMetricsProviderFactory.Create(logger, cpuOptions);
             provider.InitializeAsync().GetAwaiter().GetResult();
             return provider;
         });
@@ -194,6 +197,11 @@ public static class SimpleAdminWorkerHost
         var logger = host.Services.GetRequiredService<ILogger<SimpleAdminWorker>>();
         logger.LogInformation("Minicon.SimpleAdmin starting... ForceProbe={ForceProbe}", paths.ForceProbe);
 
+        // Lower the worker's priority so its own CPU usage does not steal time from
+        // the real workloads it is measuring (BizTalk, SQL, IIS, …). On Windows
+        // this is non-destructive; failures are logged and ignored.
+        TryLowerProcessPriority(logger);
+
         try
         {
             var worker = host.Services.GetRequiredService<SimpleAdminWorker>();
@@ -209,6 +217,23 @@ public static class SimpleAdminWorkerHost
         finally
         {
             await host.StopAsync();
+        }
+    }
+
+    private static void TryLowerProcessPriority(ILogger logger)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetCurrentProcess();
+            if (process.PriorityClass != System.Diagnostics.ProcessPriorityClass.BelowNormal)
+            {
+                process.PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal;
+                logger.LogDebug("Worker process priority lowered to BelowNormal to avoid self-contamination of CPU metrics.");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Could not lower worker process priority (continuing at default priority).");
         }
     }
 }

@@ -36,7 +36,7 @@ return await SimpleAdminWorkerHost.RunAsync(args);
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.34.0" />
+<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.34.1" />
 ```
 
 ### Admin UI
@@ -48,7 +48,7 @@ return await SimpleAdminWebUIHost.RunAsync(args);
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.34.0" />
+<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.34.1" />
 ```
 
 `SimpleAdminWebUIHost.RunAsync` handles the regular WebApplication build and, when
