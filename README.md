@@ -36,7 +36,7 @@ return await SimpleAdminWorkerHost.RunAsync(args);
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.32.0" />
+<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.34.0" />
 ```
 
 ### Admin UI
@@ -44,17 +44,59 @@ return await SimpleAdminWorkerHost.RunAsync(args);
 ```csharp
 using Minicon.SimpleAdmin.WebUI;
 
+return await SimpleAdminWebUIHost.RunAsync(args);
+```
+
+```xml
+<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.34.0" />
+```
+
+`SimpleAdminWebUIHost.RunAsync` handles the regular WebApplication build and, when
+the first argument is `install`, `uninstall`, `start` or `stop`, dispatches to the
+Windows-service installer (see "Installation without IIS" below). A custom host can
+still use the long form:
+
+```csharp
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSimpleAdminWebUI(builder.Configuration);
-
 var app = builder.Build();
 app.UseSimpleAdminWebUI();
 app.Run();
 ```
 
-```xml
-<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.32.0" />
+### Installation without IIS (Windows service)
+
+The WebUI ships with a one-click installer so it can run as a plain Windows
+service — no IIS required.
+
+```cmd
+rem Als Administrator ausführen
+install.cmd                                  rem Default: Port 5080, LocalSystem
+install.cmd --port=5080 --account=CORP\svc-sa  rem Dienstkonto, Passwort-Prompt
+<EigeneEXE>.exe uninstall                    rem Dienst + URL-ACL + Firewall entfernen
 ```
+
+`install` legt den Dienst `SimpleAdminWebUI` an (`sc.exe create binPath=<EigeneEXE>`,
+Autostart), reserviert die URL-ACL (`netsh http add urlacl url=http://+:<Port>/
+user=<Konto>`), öffnet die Firewall (`netsh advfirewall firewall add rule`), erstellt
+`C:\ProgramData\SimpleAdmin\dp-keys` und erteilt dem Dienstkonto per `icacls` dort
+Modify-Rechte (`(OI)(CI)M`) und startet den Dienst. Alle Schritte sind idempotent.
+Flags: `--port=5080`, `--account=…`, `--password=…`, `--service-name=SimpleAdminWebUI`,
+`--display-name=…`, `--description=…`, `--keys-dir=…`, `--non-interactive`, `--purge`
+(nur `uninstall`, löscht den Keys-Ordner mit).
+
+Im Windows-Dienst-Modus hostet die Anwendung über **HttpSys**, sodass Negotiate
+weiterhin ohne IIS funktioniert. Interaktive Starts und IIS-Deployments bleiben
+auf Kestrel bzw. In-Process — kein Eingriff ins bestehende IIS-Setup nötig.
+
+### DataProtection keys
+
+Die WebUI persistiert ihre DataProtection-Keys per Default unter
+`C:\ProgramData\SimpleAdmin\dp-keys` und verschlüsselt sie mit **DPAPI im
+LocalMachine-Scope** — damit sind sie unabhängig vom Benutzerprofil des
+AppPools/Dienstkontos (behebt den `CryptographicException 0xe0434352`-Startabsturz
+nach AppPool-Recycle). Overrides: `DataProtection:KeysDirectory` (anderer Pfad)
+oder `DataProtection:Enabled = false` (zurück zum Default-Verhalten des Frameworks).
 
 The host's `appsettings.json` supplies deployment specifics:
 

@@ -28,7 +28,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.33.0`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.34.0`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
@@ -91,16 +91,21 @@ The host's `appsettings.json` supplies `Encryption:ConnectionStringKey` plus opt
 ```csharp
 using Minicon.SimpleAdmin.WebUI;
 
-var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddSimpleAdminWebUI(builder.Configuration);
-
-var app = builder.Build();
-app.UseSimpleAdminWebUI();
-app.Run();
+return await SimpleAdminWebUIHost.RunAsync(args);
 ```
-Host `appsettings.json` keys: `ConfigPath` (directory containing `config.json`; empty = the app directory itself, e.g. the IIS app folder — v2.24.0), `StatusDirectory`, optional `BasePath` for IIS sub-applications, `Encryption:ConnectionStringKey`, optional `Authentication:Enabled` / `Authentication:RequiredRole` (see "WebUI Authentication").
+`SimpleAdminWebUIHost.RunAsync` (v2.34.0) handles the normal WebApplication build and, when invoked with `install` / `uninstall` / `start` / `stop` as the first argument, dispatches to `ServiceInstaller` for the Windows-service installer (see "Installation ohne IIS"). The older three-liner (`CreateBuilder` + `AddSimpleAdminWebUI` + `UseSimpleAdminWebUI` + `Run`) still works for custom hosts.
+
+Host `appsettings.json` keys: `ConfigPath` (directory containing `config.json`; empty = the app directory itself, e.g. the IIS app folder — v2.24.0), `StatusDirectory`, optional `BasePath` for IIS sub-applications, `Encryption:ConnectionStringKey`, optional `Authentication:Enabled` / `Authentication:RequiredRole` (see "WebUI Authentication"), optional `DataProtection:KeysDirectory` / `DataProtection:Enabled` (see "DataProtection" below).
 
 `AddSimpleAdmin(IServiceCollection, IConfiguration, HostPaths)` is exposed publicly so a host can also customise the worker's DI registrations before `BuildHost`.
+
+### Installation ohne IIS (Windows-Dienst, v2.34.0)
+`SimpleAdminWebUIHost.RunAsync(args)` erkennt die Subkommandos `install` / `uninstall` / `start` / `stop` am ersten Argument und delegiert an `ServiceInstaller.Dispatch`. Der Installer legt den Dienst (`sc.exe create binPath=<EigeneEXE>`, Autostart), die URL-ACL (`netsh http add urlacl`), eine Firewall-Regel (`netsh advfirewall firewall add rule`) und den DataProtection-Keys-Ordner (`icacls` mit `(OI)(CI)M` für das Dienstkonto) in einem Schritt an und startet den Dienst. Standard-Dienstkonto: `LocalSystem`; optional `--account=DOMAIN\u` + `--password=…` (interaktiver Prompt, wenn `--password` fehlt und `--non-interactive` nicht gesetzt ist). Flags: `--port=5080`, `--service-name=SimpleAdminWebUI`, `--display-name=…`, `--description=…`, `--keys-dir=C:\ProgramData\SimpleAdmin\dp-keys`, `--non-interactive`, `--purge` (nur `uninstall`, löscht den Keys-Ordner mit). Admin-Rechte werden am Anfang geprüft. Alle externen Prozesse laufen über `IProcessRunner`, die Tests mocken diese Schicht. Der `uninstall`-Pfad läßt den Keys-Ordner stehen (laufende Sessions/Cookies), `--purge` entfernt ihn.
+
+Im Windows-Dienst-Modus (`WindowsServiceHelpers.IsWindowsService() == true`) nutzt der Host **HttpSys** statt Kestrel, damit Negotiate ohne IIS funktioniert — Listening-Prefix aus `ASPNETCORE_URLS` bzw. `Urls` (Default `http://*:5080/`). Interaktive Starts (Konsole) und IIS-Deployments bleiben auf Kestrel bzw. In-Process.
+
+### DataProtection (v2.34.0)
+`AddSimpleAdminWebUI` konfiguriert `IDataProtectionProvider` auf einen stabilen Dateisystem-Pfad (`DataProtection:KeysDirectory`, Default `C:\ProgramData\SimpleAdmin\dp-keys`) und verschlüsselt die Keys unter Windows mit **DPAPI im LocalMachine-Scope** (`ProtectKeysWithDpapi(protectToLocalMachine: true)`). Damit hängen die Keys nicht mehr am Benutzerprofil des AppPools / Dienstkontos — der frühere Startabsturz mit `CryptographicException 0xe0434352` beim Entschlüsseln verwaister User-DPAPI-Keys ist damit behoben. Hostseitig abschaltbar mit `DataProtection:Enabled = false`. Lässt sich das Verzeichnis nicht anlegen (fehlende Rechte), fällt der Host auf das Default-Verhalten (keine persistierten Keys) zurück und loggt einen Hinweis.
 
 ## Architecture — Worker (`Minicon.SimpleAdmin.Worker`)
 
