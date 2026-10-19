@@ -28,7 +28,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.34.1`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.34.2`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
@@ -206,7 +206,7 @@ Problems are evaluated first, before checking whether metrics exist:
 
 A server with no PRTG metrics but a failing email delivery check correctly returns `Unhealthy`, not `Unknown`.
 
-### CPU-Metrik gegen Selbstkontamination (v2.34.1)
+### CPU-Metrik gegen Selbstkontamination (v2.34.2)
 `WindowsMetricsProvider.GetCpuUsageAsync` las vorher `% Processor Time` einmal mit nur 100 ms Fenster — bei einem kurzlebigen Worker, der `MetricsCollector` parallel zu 10+ Checkern in `Task.WhenAll` laufen lässt, landete das Sample fast immer in einem Burst (JIT/DI/Config-Load, PowerShell für EventLog, SQL-Probes, AppPool-PerfCounter) und meldete 100 % obwohl der Server idle war. Jetzt:
 - **Mehrfachabtastung mit Median**: default 3 Samples über 900 ms Fenster (`CpuSamplingOptions`, `Metrics:Cpu:WindowMs` / `Metrics:Cpu:Samples`). Eine einzelne Burst-Spitze gewinnt nicht mehr.
 - **Eigene CPU-Last abziehen**: `Process.TotalProcessorTime` vor/nach dem Fenster → `100 × self_ms / wall_ms / coreCount` wird vom System-Median subtrahiert. Default an, Opt-out `Metrics:Cpu:SubtractSelf=false`.
