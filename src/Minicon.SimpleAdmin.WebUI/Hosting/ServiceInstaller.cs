@@ -160,20 +160,28 @@ public static class ServiceInstaller
     [SupportedOSPlatform("windows")]
     private static void CreateService(InstallerOptions opts, string executablePath, TextWriter output, IProcessRunner runner)
     {
-        // binPath MUST be ONE string ("<exe>") - sc.exe parses the service's own command line itself.
-        var binPath = "\"" + executablePath + "\"";
+        // sc.exe wants `optName=` and the value as TWO separate argv tokens
+        // ("start=" + "auto"), not one. Passing "start= auto" as a single
+        // ArgumentList entry makes Windows quote the whole thing and sc.exe
+        // rejects it with "Invalid start= field". Keep them split here.
+        // ArgumentList will quote the path itself if it contains spaces; sc.exe
+        // sees exactly the raw path string as the binPath value.
         var args = new List<string>
         {
             "create", opts.ServiceName,
-            $"binPath= {binPath}",
-            "start= auto",
-            $"DisplayName= {opts.DisplayName}"
+            "binPath=", executablePath,
+            "start=", "auto",
+            "DisplayName=", opts.DisplayName
         };
         if (!string.IsNullOrEmpty(opts.Account))
         {
-            args.Add($"obj= {opts.Account}");
+            args.Add("obj=");
+            args.Add(opts.Account!);
             if (!string.IsNullOrEmpty(opts.Password))
-                args.Add($"password= {opts.Password}");
+            {
+                args.Add("password=");
+                args.Add(opts.Password!);
+            }
         }
 
         var create = runner.Run("sc.exe", args);

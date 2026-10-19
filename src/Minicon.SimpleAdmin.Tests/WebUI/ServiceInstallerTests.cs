@@ -126,6 +126,17 @@ public sealed class ServiceInstallerDispatchTests
             runner.Calls.Should().Contain(c => c.FileName == "sc.exe" && c.Args.Contains("create"));
             runner.Calls.Should().Contain(c => c.FileName == "netsh" && c.Args.Contains("urlacl") && c.Args.Any(a => a.Contains("9090")));
             runner.Calls.Should().Contain(c => c.FileName == "sc.exe" && c.Args.Contains("start"));
+
+            // sc.exe will reject "start= auto" as a single argv token with
+            // "Invalid start= field" — the key/value must be two separate tokens.
+            var createCall = runner.Calls.First(c => c.FileName == "sc.exe" && c.Args.Contains("create"));
+            createCall.Args.Should().ContainInOrder("start=", "auto",
+                "sc.exe braucht start= und auto als getrennte Argv-Tokens");
+            createCall.Args.Should().ContainInOrder("binPath=",
+                "sc.exe braucht binPath= und den Pfad als getrennte Tokens");
+            foreach (var keyToken in new[] { "start=", "auto", "binPath=", "DisplayName=" })
+                createCall.Args.Should().Contain(a => a == keyToken,
+                    $"'{keyToken}' muss als eigenes Argv-Token übergeben werden - sc.exe scheitert sonst mit 'Invalid … field'");
         }
         finally
         {
