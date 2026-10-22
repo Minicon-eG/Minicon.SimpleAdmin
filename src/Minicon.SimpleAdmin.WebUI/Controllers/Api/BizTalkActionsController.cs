@@ -26,15 +26,18 @@ public class BizTalkActionsController : ControllerBase
 
     private readonly BizTalkActionStore _store;
     private readonly ConfigurationService _configService;
+    private readonly StatusReaderService _statusReader;
     private readonly ILogger<BizTalkActionsController> _logger;
 
     public BizTalkActionsController(
         BizTalkActionStore store,
         ConfigurationService configService,
+        StatusReaderService statusReader,
         ILogger<BizTalkActionsController> logger)
     {
         _store = store;
         _configService = configService;
+        _statusReader = statusReader;
         _logger = logger;
     }
 
@@ -105,7 +108,7 @@ public class BizTalkActionsController : ControllerBase
             return BadRequest(new { message = $"Für Server '{request.ServerId}' ist die BizTalk-Überwachung nicht aktiviert." });
         }
 
-        var (targetParent, error) = await ResolveTargetAsync(request.ServerId, artifact, request.TargetName);
+        var (targetParent, canonicalName, error) = await ResolveTargetAsync(request.ServerId, artifact, request.TargetName);
         if (error != null)
             return BadRequest(new { message = error });
 
@@ -113,7 +116,7 @@ public class BizTalkActionsController : ControllerBase
         {
             ServerId = request.ServerId,
             Artifact = artifact,
-            TargetName = request.TargetName.Trim(),
+            TargetName = canonicalName,
             TargetParent = targetParent,
             RequestedBy = ResolveRequestedBy(request.RequestedBy),
             Comment = request.Comment
@@ -173,7 +176,7 @@ public class BizTalkActionsController : ControllerBase
                 continue;
             }
 
-            var (targetParent, error) = await ResolveTargetAsync(item.ServerId, artifact, item.TargetName);
+            var (targetParent, canonicalName, error) = await ResolveTargetAsync(item.ServerId, artifact, item.TargetName);
             if (error != null)
             {
                 rejected.Add(new { serverId = item.ServerId, targetName = item.TargetName, reason = error });
@@ -184,7 +187,7 @@ public class BizTalkActionsController : ControllerBase
             {
                 ServerId = item.ServerId,
                 Artifact = artifact,
-                TargetName = item.TargetName.Trim(),
+                TargetName = canonicalName,
                 TargetParent = targetParent,
                 RequestedBy = ResolveRequestedBy(request.RequestedBy),
                 Comment = request.Comment
@@ -206,45 +209,70 @@ public class BizTalkActionsController : ControllerBase
         => _configService.IsLoaded && _configService.GetFeatures().BizTalk.ActionsEnabled;
 
     /// <summary>
-    /// Resolves the second path element the Management API needs: the owning application of an
-    /// orchestration and the owning receive port of a receive location. Both are taken from the
-    /// published status — never from the client.
+    /// Resolves the artefact in the published status and derives everything the Management API
+    /// needs from there: the canonical name and the owning application / receive port.
+    /// <para>
+    /// All four artefact types are validated against the published status. A client can therefore
+    /// not name an arbitrary running application or send port — only an element that the server
+    /// actually reports as a problem can be deactivated.
+    /// </para>
     /// </summary>
-    private async Task<(string? TargetParent, string? Error)> ResolveTargetAsync(
+    private async Task<(string? TargetParent, string CanonicalName, string? Error)> ResolveTargetAsync(
         string serverId,
         BizTalkArtifactKind artifact,
         string targetName)
     {
-        if (artifact == BizTalkArtifactKind.Application || artifact == BizTalkArtifactKind.SendPort)
-            return (null, null);
-
-        var statusReader = HttpContext.RequestServices.GetService<StatusReaderService>();
-        if (statusReader == null)
-            return (null, "Der Status-Leser ist nicht verfügbar.");
-
+        var statusReader = _statusReader;
         var server = await statusReader.GetServerAsync(serverId);
         var bizTalk = server?.BizTalk;
         if (bizTalk == null)
-            return (null, $"Für Server '{serverId}' liegen keine BizTalk-Daten vor.");
+            return (null, string.Empty, $"Für Server '{serverId}' liegen keine BizTalk-Daten vor.");
 
-        var artifactType = artifact == BizTalkArtifactKind.Orchestration ? "orchestration" : "receivelocation";
+        var artifactType = ArtifactTypeOf(artifact);
         var match = bizTalk.Problems
-            .FirstOrDefault(a => a.ArtifactType == artifactType &&
-                                  string.Equals(a.Name, targetName, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(a => string.Equals(a.ArtifactType, artifactType, StringComparison.OrdinalIgnoreCase) &&
+                                  string.Equals(a.Name, targetName.Trim(), StringComparison.OrdinalIgnoreCase));
 
         if (match == null)
         {
-            // The artefact is not in the problem list any more (it was fixed meanwhile) — the
-            // owning information is then taken from the checker's own view of the server.
-            return (null, $"'{targetName}' wird aktuell nicht als Problem gemeldet — die Aktion kann nicht zugeordnet werden.");
+            // The element is not in the problem list (any more) — the action cannot be assigned
+            // unambiguously, so it is refused.
+            return (null, string.Empty,
+                $"'{targetName.Trim()}' wird für Server '{serverId}' aktuell nicht als {LabelOf(artifact)} gemeldet — die Aktion kann nicht zugeordnet werden.");
         }
+
+        var canonicalName = match.Name;
+
+        // Applications and send ports have no parent; the API expects only their name.
+        if (artifact == BizTalkArtifactKind.Application || artifact == BizTalkArtifactKind.SendPort)
+            return (null, canonicalName, null);
 
         var parent = artifact == BizTalkArtifactKind.Orchestration ? match.ApplicationName : match.ReceivePortName;
         if (string.IsNullOrWhiteSpace(parent))
-            return (null, $"Für '{targetName}' ist kein übergeordnetes Element bekannt.");
+            return (null, string.Empty, $"Für '{canonicalName}' ist kein übergeordnetes Element bekannt.");
 
-        return (parent, null);
+        return (parent, canonicalName, null);
     }
+
+    /// <summary>The artefact type as the checker publishes it in the problem list.</summary>
+    private static string ArtifactTypeOf(BizTalkArtifactKind artifact) => artifact switch
+    {
+        BizTalkArtifactKind.Application => "application",
+        BizTalkArtifactKind.Orchestration => "orchestration",
+        BizTalkArtifactKind.SendPort => "sendport",
+        BizTalkArtifactKind.ReceiveLocation => "receivelocation",
+        _ => throw new ArgumentOutOfRangeException(nameof(artifact), artifact, "Unbekannter Artefakt-Typ.")
+    };
+
+    /// <summary>Readable name of the artefact type (for the error message).</summary>
+    private static string LabelOf(BizTalkArtifactKind artifact) => artifact switch
+    {
+        BizTalkArtifactKind.Application => "Anwendung",
+        BizTalkArtifactKind.Orchestration => "Orchestrierung",
+        BizTalkArtifactKind.SendPort => "Sendeport",
+        BizTalkArtifactKind.ReceiveLocation => "Empfangsort",
+        _ => "BizTalk-Element"
+    };
 
     /// <summary>Prefer the authenticated Windows user over the client-supplied name.</summary>
     private string ResolveRequestedBy(string? clientSupplied)

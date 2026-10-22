@@ -139,7 +139,7 @@ public class BizTalkActionStoreTests
             var request = new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "App1" };
             await store.RequestAsync(request);
 
-            var requestFile = Path.Combine(dir, "requests", "srv1", request.Id + ".json");
+            var requestFile = Path.Combine(dir, "requests", BizTalkActionStore.ServerDirName("srv1"), request.Id + ".json");
             File.SetLastWriteTimeUtc(requestFile, DateTime.UtcNow.AddDays(-2));
 
             var removed = await store.CleanupAsync(TimeSpan.FromDays(1));
@@ -199,12 +199,135 @@ public class BizTalkActionStoreTests
             store.SetActionsDirectory(second);
 
             (await store.ListAsync("srv1")).Should().BeEmpty();
-            File.Exists(Path.Combine(dir, "requests", "srv1", request.Id + ".json")).Should().BeTrue();
+            File.Exists(Path.Combine(dir, "requests", BizTalkActionStore.ServerDirName("srv1"), request.Id + ".json")).Should().BeTrue();
         }
         finally
         {
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
             if (Directory.Exists(second)) Directory.Delete(second, true);
+        }
+    }
+
+    // --- P2: collision-free server folders and server id check ---
+
+    [Fact]
+    public void ServerDirName_IsCollisionFreeForSimilarServerIds()
+    {
+        // "bt.prod" and "bt_prod" would both reduce to "bt_prod" without the hash.
+        BizTalkActionStore.ServerDirName("bt.prod").Should().NotBe(BizTalkActionStore.ServerDirName("bt_prod"));
+        BizTalkActionStore.ServerDirName("srv1").Should().Be(BizTalkActionStore.ServerDirName("srv1"));
+    }
+
+    [Fact]
+    public async Task GetPendingAsync_IgnoresRequestOfAnotherServerInTheSameFolder()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            await store.RequestAsync(new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "A" });
+
+            // A request of a foreign server is placed into the folder of srv1 — the worker of srv1
+            // must not execute it.
+            var foreign = new BizTalkActionRequest { ServerId = "srv2", Artifact = BizTalkArtifactKind.Application, TargetName = "B" };
+            var foreignPath = Path.Combine(dir, "requests", BizTalkActionStore.ServerDirName("srv1"), foreign.Id + ".json");
+            await File.WriteAllTextAsync(foreignPath, System.Text.Json.JsonSerializer.Serialize(foreign));
+
+            var pending = await store.GetPendingAsync("srv1");
+            pending.Should().ContainSingle();
+            pending[0].Id.Should().NotBe(foreign.Id);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    // --- P1: exclusive claim ---
+
+    [Fact]
+    public async Task ClaimAsync_SecondWorkerGetsNothing()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            var request = new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "App1" };
+            await store.RequestAsync(request);
+
+            var first = await store.ClaimAsync("srv1", request.Id, "worker-1");
+            var second = await store.ClaimAsync("srv1", request.Id, "worker-2");
+
+            first.Should().NotBeNull();
+            first!.WorkerId.Should().Be("worker-1");
+            second.Should().BeNull();
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task GetPendingAsync_ExcludesClaimedRequests()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            var request = new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "App1" };
+            await store.RequestAsync(request);
+
+            (await store.GetPendingAsync("srv1")).Should().ContainSingle();
+
+            await store.ClaimAsync("srv1", request.Id, "worker-1");
+
+            // A claimed request must never be handed out again.
+            (await store.GetPendingAsync("srv1")).Should().BeEmpty();
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task MarkClaimUncertainAsync_SetsTheUncertainOutcome()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            var request = new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "App1" };
+            await store.RequestAsync(request);
+            await store.ClaimAsync("srv1", request.Id, "worker-1");
+
+            await store.MarkClaimUncertainAsync("srv1", request.Id);
+
+            var view = await store.GetAsync("srv1", request.Id);
+            view.Should().NotBeNull();
+            view!.Claim.Should().NotBeNull();
+            view.Claim!.OutcomeUncertain.Should().BeTrue();
+            view.State.Should().Be(BizTalkActionState.Uncertain);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task GetAsync_WithoutClaim_ReturnsRequestedState()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            var request = new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "App1" };
+            await store.RequestAsync(request);
+
+            var view = await store.GetAsync("srv1", request.Id);
+            view!.State.Should().Be(BizTalkActionState.Requested);
+            view.Claim.Should().BeNull();
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
 }

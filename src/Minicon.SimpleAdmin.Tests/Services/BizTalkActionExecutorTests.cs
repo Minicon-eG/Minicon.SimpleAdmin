@@ -198,4 +198,119 @@ public class BizTalkActionExecutorTests
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
+
+    [Fact]
+    public async Task ExecutePendingAsync_TwoWorkersInParallel_ExecuteTheRequestOnlyOnce()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            await store.RequestAsync(new BizTalkActionRequest
+            {
+                ServerId = "srv1",
+                Artifact = BizTalkArtifactKind.Application,
+                TargetName = "App1"
+            });
+
+            var calls = 0;
+            var api = new Mock<IBizTalkApiClient>();
+            api.Setup(a => a.StopApplicationAsync(BaseUrl, "App1", It.IsAny<CancellationToken>()))
+                .Returns(async () =>
+                {
+                    Interlocked.Increment(ref calls);
+                    // Give the second worker time to compete for the same request.
+                    await Task.Delay(150);
+                });
+
+            var executor1 = new BizTalkActionExecutor(api.Object, store, NullLogger<BizTalkActionExecutor>.Instance);
+            var executor2 = new BizTalkActionExecutor(api.Object, store, NullLogger<BizTalkActionExecutor>.Instance);
+
+            var both = Task.WhenAll(
+                executor1.ExecutePendingAsync("srv1", BaseUrl),
+                executor2.ExecutePendingAsync("srv1", BaseUrl));
+
+            var completed = await Task.WhenAny(both, Task.Delay(TimeSpan.FromSeconds(15)));
+            completed.Should().Be(both, "the request must be executed by exactly one worker");
+
+            var results = (await both).SelectMany(r => r).ToList();
+            results.Should().ContainSingle();
+            api.Verify(a => a.StopApplicationAsync(BaseUrl, "App1", It.IsAny<CancellationToken>()), Times.Once);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecutePendingAsync_WhenResultCannotBeSaved_DoesNotRepeatTheAction()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            await store.RequestAsync(new BizTalkActionRequest
+            {
+                ServerId = "srv1",
+                Artifact = BizTalkArtifactKind.Application,
+                TargetName = "App1"
+            });
+
+            var api = new Mock<IBizTalkApiClient>();
+            api.Setup(a => a.StopApplicationAsync(BaseUrl, "App1", It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            var executor = new BizTalkActionExecutor(api.Object, store, NullLogger<BizTalkActionExecutor>.Instance);
+
+            // The result cannot be persisted — the outcome stays unclear.
+            var failingStore = new FailingResultStore(store);
+            var failingExecutor = new BizTalkActionExecutor(api.Object, failingStore, NullLogger<BizTalkActionExecutor>.Instance);
+
+            await failingExecutor.ExecutePendingAsync("srv1", BaseUrl);
+            api.Verify(a => a.StopApplicationAsync(BaseUrl, "App1", It.IsAny<CancellationToken>()), Times.Once);
+
+            // The next cycle must not execute the request again.
+            await executor.ExecutePendingAsync("srv1", BaseUrl);
+            api.Verify(a => a.StopApplicationAsync(BaseUrl, "App1", It.IsAny<CancellationToken>()), Times.Once);
+
+            // The request is reported as unclear instead of being silently repeated.
+            var pending = await store.GetPendingAsync("srv1");
+            pending.Should().BeEmpty();
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    /// <summary>Store that fails when the result is written (e.g. a full or unreachable share).</summary>
+    private sealed class FailingResultStore : IBizTalkActionStore
+    {
+        private readonly IBizTalkActionStore _inner;
+
+        public FailingResultStore(IBizTalkActionStore inner) => _inner = inner;
+
+        public Task<BizTalkActionRequest> RequestAsync(BizTalkActionRequest request, CancellationToken cancellationToken = default)
+            => _inner.RequestAsync(request, cancellationToken);
+
+        public Task<List<BizTalkActionView>> ListAsync(string serverId, CancellationToken cancellationToken = default)
+            => _inner.ListAsync(serverId, cancellationToken);
+
+        public Task<BizTalkActionView?> GetAsync(string serverId, string requestId, CancellationToken cancellationToken = default)
+            => _inner.GetAsync(serverId, requestId, cancellationToken);
+
+        public Task<List<BizTalkActionRequest>> GetPendingAsync(string serverId, CancellationToken cancellationToken = default)
+            => _inner.GetPendingAsync(serverId, cancellationToken);
+
+        public Task SaveResultAsync(BizTalkActionResult result, CancellationToken cancellationToken = default)
+            => throw new IOException("Austauschverzeichnis nicht schreibbar.");
+
+        public Task<BizTalkActionClaim?> ClaimAsync(string serverId, string requestId, string workerId, CancellationToken cancellationToken = default)
+            => _inner.ClaimAsync(serverId, requestId, workerId, cancellationToken);
+
+        public Task MarkClaimUncertainAsync(string serverId, string requestId, CancellationToken cancellationToken = default)
+            => _inner.MarkClaimUncertainAsync(serverId, requestId, cancellationToken);
+
+        public Task<int> CleanupAsync(TimeSpan maxAge, CancellationToken cancellationToken = default)
+            => _inner.CleanupAsync(maxAge, cancellationToken);
+    }
 }

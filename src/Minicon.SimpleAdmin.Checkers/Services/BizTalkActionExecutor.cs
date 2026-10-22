@@ -28,6 +28,10 @@ public sealed class BizTalkActionExecutor(
     IBizTalkActionStore store,
     ILogger<BizTalkActionExecutor> logger) : IBizTalkActionExecutor
 {
+    /// <summary>Identifies this worker process in the claim files.</summary>
+    private static readonly string WorkerId =
+        $"{Environment.MachineName}:{Environment.ProcessId}";
+
     /// <inheritdoc />
     public async Task<List<BizTalkActionResult>> ExecutePendingAsync(
         string serverId,
@@ -44,6 +48,15 @@ public sealed class BizTalkActionExecutor(
 
         foreach (var request in pending)
         {
+            // The claim is taken before the Management API is called. It is created exclusively,
+            // so a second worker running at the same time cannot execute the same request.
+            var claim = await store.ClaimAsync(serverId, request.Id, WorkerId, cancellationToken);
+            if (claim == null)
+            {
+                logger.LogInformation("BizTalk-Aktion: Auftrag '{Id}' wurde bereits von einem anderen Worker uebernommen", request.Id);
+                continue;
+            }
+
             var result = await ExecuteAsync(request, baseUrl, cancellationToken);
             results.Add(result);
 
@@ -53,12 +66,28 @@ public sealed class BizTalkActionExecutor(
             }
             catch (Exception ex)
             {
-                // The result could not be persisted — the action would run again on the next cycle.
+                // The action was carried out, but the result could not be persisted. Repeating it
+                // could stop an element that has meanwhile been started again, so the outcome is
+                // marked as unclear and the request is never executed again.
                 logger.LogError(ex, "BizTalk-Aktion: Ergebnis fuer Auftrag '{Id}' konnte nicht gespeichert werden", request.Id);
+                await TryMarkUncertainAsync(serverId, request.Id, cancellationToken);
             }
         }
 
         return results;
+    }
+
+    /// <summary>Marks the claim as uncertain; a failure here must not abort the remaining actions.</summary>
+    private async Task TryMarkUncertainAsync(string serverId, string requestId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await store.MarkClaimUncertainAsync(serverId, requestId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "BizTalk-Aktion: Auftrag '{Id}' konnte nicht als unbestimmt markiert werden", requestId);
+        }
     }
 
     /// <summary>Executes a single request and builds its result. Never throws.</summary>

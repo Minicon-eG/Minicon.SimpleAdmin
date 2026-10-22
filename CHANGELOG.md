@@ -22,6 +22,10 @@ Alle relevanten Änderungen an den Minicon.SimpleAdmin-Paketen. Neueste Version 
 
 ### Sicherheit
 - Die WebUI speichert und benötigt keine BizTalk-Zugangsdaten. Die Management-API wird ausschließlich vom Worker auf dem BizTalk-Server aufgerufen (integrierte Windows-Authentifizierung).
+- **Exklusive Übernahme der Aufträge:** Vor dem Management-API-Aufruf legt der Worker eine Claim-Datei an (`claims/{serverId}/{requestId}.json`), die ausschließlich erzeugt wird. Zwei Worker, die denselben Auftrag bearbeiten, können so nicht parallel dieselbe Aktion auslösen.
+- **Kein Wiederholen bei unklarem Ausgang:** Lässt sich das Ergebnis nach dem API-Aufruf nicht speichern (z. B. nicht erreichbares Austauschverzeichnis), wird der Auftrag als *unbestimmt* markiert und **nicht** erneut ausgeführt. Ein zwischenzeitlich neu gestartetes Element wird nicht ungewollt erneut gestoppt.
+- **Zielwahl gegen den veröffentlichten Status:** Alle vier Artefakttypen (Anwendung, Orchestrierung, Sendeport, Empfangsort) werden gegen die Problemliste des Servers geprüft. Der Client kann keine beliebige laufende Anwendung oder einen beliebigen Sendeport benennen; kanonische Name und übergeordnetes Element stammen aus dem Status des Servers.
+- **Kollisionsfreie Serverordner:** Der Ordner je Server enthält zusätzlich einen Hash der Server-ID, sodass unterschiedliche IDs (`bt.prod` und `bt_prod`) nicht auf denselben Ordner fallen. Zusätzlich prüft der Worker die Server-ID im Auftrag selbst, bevor er einen Auftrag ausführt.
 
 [2.36.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.35.0...v2.36.0
 

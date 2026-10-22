@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -14,10 +16,14 @@ namespace Minicon.SimpleAdmin.Services;
 /// <list type="bullet">
 /// <item><c>requests/{serverId}/{requestId}.json</c> — written by the WebUI, read by the worker
 /// whose server id matches <c>{serverId}</c>.</item>
+/// <item><c>claims/{serverId}/{requestId}.json</c> — written exclusively by the worker that takes
+/// the request over; the file is the proof that the request is being handled.</item>
 /// <item><c>results/{serverId}/{requestId}.json</c> — written by the worker, read by the WebUI.</item>
 /// </list>
-/// A request file that already has a result is not executed again. The worker only ever touches
-/// requests addressed to its own server id, so several workers can share one directory.
+/// A request that already has a claim is never executed a second time: the outcome of an
+/// interrupted execution cannot be reconstructed, so the action is reported as unclear instead of
+/// being repeated. The worker only ever touches requests addressed to its own server id, so
+/// several workers can share one directory.
 /// </para>
 /// </summary>
 public interface IBizTalkActionStore
@@ -39,6 +45,23 @@ public interface IBizTalkActionStore
 
     /// <summary>Writes the result of an executed action.</summary>
     Task SaveResultAsync(BizTalkActionResult result, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Takes the exclusive claim on a request before it is executed. The claim file is created
+    /// exclusively, so exactly one worker wins the race — also across processes and hosts sharing
+    /// the directory. Returns null when the request is already claimed.
+    /// </summary>
+    Task<BizTalkActionClaim?> ClaimAsync(
+        string serverId,
+        string requestId,
+        string workerId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks the claim of a request as uncertain: the action was carried out but the result could
+    /// not be persisted. The request must not be executed again — somebody has to check the target.
+    /// </summary>
+    Task MarkClaimUncertainAsync(string serverId, string requestId, CancellationToken cancellationToken = default);
 
     /// <summary>Removes request and result files of actions that are older than <paramref name="maxAge"/>.</summary>
     Task<int> CleanupAsync(TimeSpan maxAge, CancellationToken cancellationToken = default);
@@ -93,10 +116,13 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
     private void EnsureDirectories()
     {
         Directory.CreateDirectory(RequestsRoot);
+        Directory.CreateDirectory(ClaimsRoot);
         Directory.CreateDirectory(ResultsRoot);
     }
 
     private string RequestsRoot => Path.Combine(_actionsDirectory, "requests");
+
+    private string ClaimsRoot => Path.Combine(_actionsDirectory, "claims");
 
     private string ResultsRoot => Path.Combine(_actionsDirectory, "results");
 
@@ -128,7 +154,8 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
         foreach (var request in await ReadRequestsAsync(serverId, cancellationToken))
         {
             var result = await ReadResultAsync(serverId, request.Id, cancellationToken);
-            views.Add(new BizTalkActionView { Request = request, Result = result });
+            var claim = await ReadClaimAsync(serverId, request.Id, cancellationToken);
+            views.Add(new BizTalkActionView { Request = request, Result = result, Claim = claim });
         }
 
         return views.OrderByDescending(v => v.Request.RequestedAt).ToList();
@@ -146,7 +173,8 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
             return null;
 
         var result = await ReadResultAsync(serverId, requestId, cancellationToken);
-        return new BizTalkActionView { Request = request, Result = result };
+        var claim = await ReadClaimAsync(serverId, requestId, cancellationToken);
+        return new BizTalkActionView { Request = request, Result = result, Claim = claim };
     }
 
     /// <inheritdoc />
@@ -156,6 +184,11 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
 
         foreach (var request in await ReadRequestsAsync(serverId, cancellationToken))
         {
+            // A request that already carries a claim is being handled (or was handled) by a
+            // worker — it must never be handed out a second time.
+            if (await ReadClaimAsync(serverId, request.Id, cancellationToken) != null)
+                continue;
+
             var result = await ReadResultAsync(serverId, request.Id, cancellationToken);
             if (result == null)
                 pending.Add(request);
@@ -175,12 +208,90 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
     }
 
     /// <inheritdoc />
+    public async Task<BizTalkActionClaim?> ClaimAsync(
+        string serverId,
+        string requestId,
+        string workerId,
+        CancellationToken cancellationToken = default)
+    {
+        var path = BuildFilePath(ClaimsRoot, serverId, requestId);
+        if (path == null)
+            return null;
+
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        var claim = new BizTalkActionClaim
+        {
+            RequestId = requestId,
+            ServerId = serverId,
+            WorkerId = workerId,
+            ClaimedAt = DateTime.UtcNow
+        };
+
+        // The file is created exclusively: if it already exists, another worker owns the
+        // request and this one must not execute it.
+        FileStream stream;
+        try
+        {
+            stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        }
+        catch (IOException)
+        {
+            // Already claimed by another worker.
+            return null;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException)
+        {
+            _logger.LogError(ex, "BizTalk-Aktion: Claim fuer Auftrag '{Id}' konnte nicht angelegt werden", requestId);
+            return null;
+        }
+
+        try
+        {
+            await using (stream)
+            {
+                await JsonSerializer.SerializeAsync(stream, claim, JsonOptions, cancellationToken);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A half-written claim would block the request forever — remove it.
+            TryDeleteFile(path);
+            _logger.LogError(ex, "BizTalk-Aktion: Claim fuer Auftrag '{Id}' konnte nicht geschrieben werden", requestId);
+            return null;
+        }
+
+        _logger.LogInformation("BizTalk-Aktion: Auftrag '{Id}' von Worker '{Worker}' uebernommen", requestId, ForLog(workerId));
+        return claim;
+    }
+
+    /// <inheritdoc />
+    public async Task MarkClaimUncertainAsync(string serverId, string requestId, CancellationToken cancellationToken = default)
+    {
+        var path = BuildFilePath(ClaimsRoot, serverId, requestId);
+        if (path == null)
+            return;
+
+        var claim = await ReadClaimAsync(serverId, requestId, cancellationToken);
+        if (claim == null)
+            return;
+
+        claim.OutcomeUncertain = true;
+        await WriteJsonAtomicAsync(path, claim, cancellationToken);
+
+        _logger.LogWarning(
+            "BizTalk-Aktion: Ergebnis fuer Auftrag '{Id}' ist unbestimmt — der Auftrag wird nicht wiederholt", requestId);
+    }
+
+    /// <inheritdoc />
     public async Task<int> CleanupAsync(TimeSpan maxAge, CancellationToken cancellationToken = default)
     {
         var cutoff = DateTime.UtcNow - maxAge;
         var removed = 0;
 
-        foreach (var root in new[] { RequestsRoot, ResultsRoot })
+        foreach (var root in new[] { RequestsRoot, ClaimsRoot, ResultsRoot })
         {
             if (!Directory.Exists(root))
                 continue;
@@ -211,10 +322,41 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
         return removed;
     }
 
+    /// <summary>Deletes a file, ignoring the case that it is already gone.</summary>
+    private void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogDebug(ex, "BizTalk-Aktion: Datei '{File}' konnte nicht entfernt werden", Path.GetFileName(path));
+        }
+    }
+
     // --- internals ---
 
+    /// <summary>
+    /// Directory of one server inside a root folder. The name carries a hash of the exact server
+    /// id, so two different ids can never share a folder ("bt.prod" and "bt_prod" would both
+    /// reduce to "bt_prod" otherwise) and the mapping stays stable across processes.
+    /// </summary>
     private static string ServerDir(string root, string serverId)
-        => Path.Combine(root, Sanitize(serverId));
+        => Path.Combine(root, ServerDirName(serverId));
+
+    /// <summary>
+    /// The folder name of one server: the readable part plus a short hash of the exact id.
+    /// Internal so the tests can assert the layout.
+    /// </summary>
+    internal static string ServerDirName(string serverId)
+    {
+        var readable = Sanitize(serverId);
+        var hash = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(serverId ?? string.Empty)))[..8].ToLowerInvariant();
+        return $"{readable}-{hash}";
+    }
 
     /// <summary>
     /// Builds the path of a request/result file. The id comes from the URL and must therefore
@@ -282,8 +424,20 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
         foreach (var file in Directory.EnumerateFiles(dir, "*.json"))
         {
             var request = await ReadJsonAsync<BizTalkActionRequest>(file, cancellationToken);
-            if (request != null)
-                requests.Add(request);
+            if (request == null)
+                continue;
+
+            // The folder name is derived from the server id, but the file itself is authoritative:
+            // a request that belongs to a different server must never be executed here.
+            if (!string.Equals(request.ServerId, serverId, StringComparison.Ordinal))
+            {
+                _logger.LogWarning(
+                    "BizTalk-Aktion: Auftrag im Ordner von Server '{Server}' gehoert zu Server '{Owner}' — wird uebersprungen",
+                    ForLog(serverId), ForLog(request.ServerId));
+                continue;
+            }
+
+            requests.Add(request);
         }
 
         return requests;
@@ -296,6 +450,15 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
             return null;
 
         return await ReadJsonAsync<BizTalkActionResult>(path, cancellationToken);
+    }
+
+    private async Task<BizTalkActionClaim?> ReadClaimAsync(string serverId, string requestId, CancellationToken cancellationToken)
+    {
+        var path = BuildFilePath(ClaimsRoot, serverId, requestId);
+        if (path == null)
+            return null;
+
+        return await ReadJsonAsync<BizTalkActionClaim>(path, cancellationToken);
     }
 
     private async Task<T?> ReadJsonAsync<T>(string path, CancellationToken cancellationToken) where T : class

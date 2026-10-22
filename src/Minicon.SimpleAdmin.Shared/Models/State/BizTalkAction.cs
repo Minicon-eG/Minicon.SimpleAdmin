@@ -36,7 +36,14 @@ public enum BizTalkActionState
     Succeeded,
 
     /// <summary>The action failed (API error, artefact not found, …).</summary>
-    Failed
+    Failed,
+
+    /// <summary>
+    /// The outcome is unclear: the worker claimed the request and then stopped without reporting
+    /// a result. The action may or may not have been executed, so it is never repeated
+    /// automatically — a person has to check the target.
+    /// </summary>
+    Uncertain
 }
 
 /// <summary>
@@ -101,16 +108,69 @@ public class BizTalkActionResult
 }
 
 /// <summary>
+/// The exclusive claim a worker takes on a request before it executes it. The claim file is
+/// created exclusively (create-new), so only one worker can ever own a request — even across
+/// processes and machines sharing the directory. A request with a claim is never executed a
+/// second time, because the outcome of an interrupted execution cannot be reconstructed.
+/// </summary>
+public class BizTalkActionClaim
+{
+    /// <summary>Id of the claimed request.</summary>
+    public string RequestId { get; set; } = string.Empty;
+
+    /// <summary>Id of the server the request was claimed for.</summary>
+    public string ServerId { get; set; } = string.Empty;
+
+    /// <summary>Which worker process holds the claim.</summary>
+    public string WorkerId { get; set; } = string.Empty;
+
+    /// <summary>When the claim was taken (UTC).</summary>
+    public DateTime ClaimedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// True when the worker could not persist the result after the action was carried out. The
+    /// action may have been executed, so it is never repeated automatically.
+    /// </summary>
+    public bool OutcomeUncertain { get; set; }
+}
+
+/// <summary>
 /// A request together with its (possibly still missing) result — the view the WebUI shows.
 /// </summary>
 public class BizTalkActionView
 {
+    /// <summary>
+    /// A claim older than this is treated as abandoned: the worker most likely died during the
+    /// execution, so the outcome is unclear and a person has to check the target.
+    /// </summary>
+    public static readonly TimeSpan ClaimStaleAfter = TimeSpan.FromMinutes(15);
+
     /// <summary>The request.</summary>
     public BizTalkActionRequest Request { get; set; } = new();
 
     /// <summary>The result, or null while the worker has not reported back yet.</summary>
     public BizTalkActionResult? Result { get; set; }
 
-    /// <summary>Effective state: the result's state, or <see cref="BizTalkActionState.Requested"/> while pending.</summary>
-    public BizTalkActionState State => Result?.State ?? BizTalkActionState.Requested;
+    /// <summary>The claim of the worker that took the request, or null while it is unclaimed.</summary>
+    public BizTalkActionClaim? Claim { get; set; }
+
+    /// <summary>
+    /// Effective state of the action: the reported result wins; a claim without a result means
+    /// the action is running — or was abandoned, which leaves the outcome unclear.
+    /// </summary>
+    public BizTalkActionState State
+    {
+        get
+        {
+            if (Result != null)
+                return Result.State;
+
+            if (Claim == null)
+                return BizTalkActionState.Requested;
+
+            return Claim.OutcomeUncertain || DateTime.UtcNow - Claim.ClaimedAt > ClaimStaleAfter
+                ? BizTalkActionState.Uncertain
+                : BizTalkActionState.Running;
+        }
+    }
 }
