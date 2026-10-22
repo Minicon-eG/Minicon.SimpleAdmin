@@ -1,0 +1,130 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.DomainViewModel
+@{
+    var selected = Model.Servers.ToHashSet(StringComparer.OrdinalIgnoreCase);
+}
+
+<div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+<input type="hidden" asp-for="OriginalName" />
+
+<div class="card mb-3">
+    <div class="card-header"><i class="bi bi-globe2 me-2"></i>Domain</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label asp-for="Name" class="form-label"></label>
+                <input asp-for="Name" class="form-control" placeholder="z. B. app-services-dev oder app-services.example.org" autocomplete="off" />
+                <span asp-validation-for="Name" class="text-danger small"></span>
+                <div class="form-text">
+                    Konvention:
+                    @foreach (var kv in Model.SuffixMap.OrderBy(k => k.Key))
+                    {
+                        <code>@kv.Key</code><text> → @kv.Value; </text>
+                    }
+                    ohne Suffix → production. Beide PROD-Varianten (<code>app</code> und <code>app-prod</code>) sind eigene Einträge.
+                </div>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="Environment" class="form-label"></label>
+                <select asp-for="Environment" class="form-select" id="Environment">
+                    <option value="">– bitte wählen –</option>
+                    @foreach (var env in Model.Environments)
+                    {
+                        <option value="@env">@env</option>
+                    }
+                </select>
+                <span asp-validation-for="Environment" class="text-danger small"></span>
+                <div class="form-text" id="envSuggestion"></div>
+            </div>
+            <div class="col-12">
+                <div id="mismatchBox" class="alert alert-warning mb-0 @(ViewData.ModelState[nameof(Model.AllowNameMismatch)]?.Errors.Count > 0 || Model.AllowNameMismatch ? "" : "d-none")">
+                    <div id="mismatchText"><i class="bi bi-exclamation-triangle me-2"></i>Der Name passt nicht zur Namenskonvention der gewählten Umgebung.</div>
+                    <span asp-validation-for="AllowNameMismatch" class="text-danger small d-block"></span>
+                    <div class="form-check mt-2">
+                        <input asp-for="AllowNameMismatch" class="form-check-input" />
+                        <label asp-for="AllowNameMismatch" class="form-check-label">Ausnahme zulassen (Name weicht bewusst von der Konvention ab)</label>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <label asp-for="Description" class="form-label"></label>
+                <input asp-for="Description" class="form-control" />
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-hdd-stack me-2"></i>Server der Umgebung</span>
+        <span class="small text-muted" id="serverCount"></span>
+    </div>
+    <div class="card-body">
+        <span asp-validation-for="Servers" class="text-danger small d-block mb-2"></span>
+        <div id="serverEmpty" class="text-muted small d-none">Bitte zuerst eine Umgebung wählen.</div>
+        <div id="serverNone" class="text-muted small d-none">
+            Dieser Umgebung sind keine Server zugeordnet. Zuordnung unter
+            <a asp-controller="Environments" asp-action="Index">Umgebungen</a>.
+        </div>
+        <div id="serverList" class="row g-2">
+            @foreach (var (env, servers) in Model.ServersByEnvironment)
+            {
+                foreach (var s in servers)
+                {
+                    <div class="col-md-4 col-sm-6 server-option" data-env="@env">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="Servers" value="@s" id="srv-@env-@s"
+                                   @(selected.Contains(s) && env.Equals(Model.Environment, StringComparison.OrdinalIgnoreCase) ? "checked" : "") />
+                            <label class="form-check-label" for="srv-@env-@s">
+                                @s
+                                @if (Model.ServerDescriptions.TryGetValue(s, out var desc) && !string.IsNullOrEmpty(desc))
+                                {
+                                    <span class="small text-muted">– @desc</span>
+                                }
+                            </label>
+                        </div>
+                    </div>
+                }
+            }
+            @{
+                var envServers = Model.ServersByEnvironment.TryGetValue(Model.Environment ?? "", out var list)
+                    ? list.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+            @foreach (var s in Model.Servers.Where(s => !envServers.Contains(s)))
+            {
+                <div class="col-md-4 col-sm-6 server-option server-outside" data-env="*">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="Servers" value="@s" id="srv-outside-@s" checked />
+                        <label class="form-check-label text-warning" for="srv-outside-@s">
+                            @s <i class="bi bi-exclamation-triangle" title="Gehört nicht zur gewählten Umgebung – bitte abwählen"></i>
+                        </label>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header"><i class="bi bi-diagram-2 me-2"></i>Load Balancer (optional)</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label asp-for="NetScalerVServer" class="form-label"></label>
+                <input asp-for="NetScalerVServer" class="form-control" list="vserverList" autocomplete="off" placeholder="z. B. vs_app_services_prod" />
+                <datalist id="vserverList">
+                    @foreach (var v in Model.VServerNames) { <option value="@v"></option> }
+                </datalist>
+                <div class="form-text">Höchstens ein vServer pro Domain; mehrere Domains dürfen denselben vServer teilen.</div>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="HealthCheck" class="form-label"></label>
+                <input asp-for="HealthCheck" class="form-control" list="healthCheckList" autocomplete="off" />
+                <datalist id="healthCheckList">
+                    @foreach (var h in Model.HealthCheckNames) { <option value="@h"></option> }
+                </datalist>
+                <div class="form-text">Name eines NetScaler-Health-Checks aus der Server-Konfiguration (Information, kein eigener Check).</div>
+            </div>
+        </div>
+    </div>
+</div>

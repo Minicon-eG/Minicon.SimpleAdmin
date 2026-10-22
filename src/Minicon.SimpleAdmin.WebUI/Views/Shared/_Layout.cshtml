@@ -53,6 +53,12 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Domains" ? "active" : "")"
+                           asp-controller="Domains" asp-action="Index">
+                            <i class="bi bi-globe2 me-1"></i>Domains
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Settings" ? "active" : "")"
                            asp-controller="Settings" asp-action="Index">
                             <i class="bi bi-sliders me-1"></i>Einstellungen

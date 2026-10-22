@@ -25,6 +25,11 @@ public class ServersController : Controller
         }
 
         var servers = _configService.GetServers();
+        var config = _configService.Config;
+        ViewData["ServerEnvironments"] = servers.ToDictionary(
+            s => s.Name, s => config.GetEnvironmentForServer(s.Name), StringComparer.OrdinalIgnoreCase);
+        ViewData["Environments"] = _configService.GetEnvironmentNames()
+            .OrderBy(DomainsController.EnvironmentOrder).ThenBy(e => e, StringComparer.OrdinalIgnoreCase).ToList();
         return View(servers);
     }
 

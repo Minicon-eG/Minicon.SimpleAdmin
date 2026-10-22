@@ -102,6 +102,7 @@
                         <ul>
                             <li><a href="#servers">Server</a></li>
                             <li><a href="#environments">Umgebungen</a></li>
+                            <li><a href="#domains">Domains</a></li>
                             <li><a href="#settings">Einstellungen</a></li>
                             <li><a href="#status-page">Status-Seite</a></li>
                             <li><a href="#problems-page">Probleme-Seite</a></li>
@@ -284,6 +285,7 @@
                 <ul>
                     <li><strong>Suche:</strong> Filtern nach Name oder Beschreibung</li>
                     <li><strong>Status-Filter:</strong> Alle, nur aktive oder nur inaktive Server anzeigen</li>
+                    <li><strong>Umgebungs-Filter:</strong> Nach Umgebung filtern (oder Server ohne Umgebung anzeigen)</li>
                     <li><strong>Service-Typ-Filter:</strong> Nach Service-Typ filtern</li>
                     <li><strong>Sortierung:</strong> Klicken Sie auf Spaltenüberschriften zum Sortieren</li>
                 </ul>
@@ -305,6 +307,32 @@
                     <li><span class="badge" style="background-color: #fd7e14;">Ref</span> - Referenzumgebung (Orange)</li>
                     <li><span class="badge" style="background-color: #198754;">Development</span> - Entwicklungsumgebung (Grün)</li>
                 </ul>
+
+                <h3 id="domains"><i class="bi bi-globe2 me-2"></i>Domains</h3>
+                <p>
+                    Eine Domain (DNS-Name) gehört genau einer Umgebung und wird von einem oder mehreren Servern dieser Umgebung bedient,
+                    optional mit genau einem NetScaler-vServer (mehrere Domains dürfen denselben vServer teilen). Die Umgebung wird immer
+                    ausdrücklich gewählt; der Name liefert nur einen Vorschlag.
+                </p>
+                <table class="table table-sm">
+                    <thead><tr><th>Name</th><th>Vorschlag</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>&lt;name&gt;-dev</code></td><td>development</td></tr>
+                        <tr><td><code>&lt;name&gt;-ref</code></td><td>ref</td></tr>
+                        <tr><td><code>&lt;name&gt;-prod</code> und <code>&lt;name&gt;</code> (ohne Suffix)</td><td>production</td></tr>
+                    </tbody>
+                </table>
+                <ul>
+                    <li>In PROD gibt es beide Varianten (<code>app-services</code> und <code>app-services-prod</code>) als <strong>eigenständige Einträge</strong> mit eigenen Servern und vServern.</li>
+                    <li>Die Serverauswahl zeigt nur Server der gewählten Umgebung und aktualisiert sich beim Wechsel.</li>
+                    <li>Passt der Name nicht zur Umgebung, erscheint eine Warnung; gespeichert wird erst mit <strong>„Ausnahme zulassen“</strong> (<code>allowNameMismatch</code>).</li>
+                    <li>Weitere Suffixe/Umgebungen: <code>"domainSuffixMap": { "-test": "test" }</code> in der <code>config.json</code>.</li>
+                </ul>
+<pre><code>"domains": [
+  { "name": "app-services-dev",  "environment": "development", "servers": [ "srv-dev-01" ] },
+  { "name": "app-services",      "environment": "production",  "servers": [ "srv-prod-01" ], "netScalerVServer": "vs_app_prod" },
+  { "name": "app-services-prod", "environment": "production",  "servers": [ "srv-prod-02" ], "netScalerVServer": "vs_app_prod" }
+]</code></pre>
 
                 <h3 id="settings"><i class="bi bi-sliders me-2"></i>Einstellungen</h3>
                 <p>Globale Einstellungen für das SimpleAdmin-System.</p>

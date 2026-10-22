@@ -913,6 +913,34 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
     }
 
     /// <summary>
+    /// Renders the domains of an environment as a compact list (name → servers, optional vServer).
+    /// Returns an empty string when the environment has no domains.
+    /// </summary>
+    internal static string RenderDomainList(Config config, string environment, string indent)
+    {
+        var domains = config.GetDomainsInEnvironment(environment);
+        if (domains.Count == 0) return string.Empty;
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"{indent}<div class=\"domain-list\" style=\"display:flex;flex-wrap:wrap;gap:0.5rem;margin:0 0 0.75rem 0;font-size:0.85rem;\">");
+        foreach (var d in domains)
+        {
+            var servers = d.Servers.Count > 0 ? string.Join(", ", d.Servers) : "keine Server";
+            var title = string.IsNullOrEmpty(d.NetScalerVServer) ? servers : $"{servers} | vServer: {d.NetScalerVServer}";
+            sb.Append($"{indent}    <span class=\"domain-chip\" title=\"{WebUtility.HtmlEncode(title)}\" ");
+            sb.Append("style=\"background:#ecf0f1;color:#2c3e50;border:1px solid #bdc3c7;border-radius:12px;padding:0.15rem 0.6rem;\">");
+            sb.Append($"🌐 <strong>{WebUtility.HtmlEncode(d.Name)}</strong> <span style=\"color:#7f8c8d;\">→ {WebUtility.HtmlEncode(servers)}</span>");
+            if (!string.IsNullOrEmpty(d.NetScalerVServer))
+            {
+                sb.Append($" <span style=\"color:#7f8c8d;\">· LB {WebUtility.HtmlEncode(d.NetScalerVServer)}</span>");
+            }
+            sb.AppendLine("</span>");
+        }
+        sb.AppendLine($"{indent}</div>");
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Generates the documentation page
     /// </summary>
     private async Task GenerateDocumentationPageAsync()
@@ -1222,8 +1250,13 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             ["development"] = ("#27ae60", "🟢")
         };
 
-        // Render environments in order
-        foreach (var envName in environmentOrder)
+        // Render environments in order: known ones first, then any further environments alphabetically
+        var renderOrder = environmentOrder
+            .Concat(statusesByEnvironment.Keys
+                .Where(k => !environmentOrder.Contains(k))
+                .OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        foreach (var envName in renderOrder)
         {
             if (!statusesByEnvironment.ContainsKey(envName))
                 continue;
@@ -1236,6 +1269,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             html.AppendLine($"                {icon} {envName.ToUpperInvariant()}");
             html.AppendLine($"                <span class=\"env-count\">({statuses.Count} Service(s))</span>");
             html.AppendLine($"            </div>");
+            html.Append(RenderDomainList(_config, envName, "            "));
             html.AppendLine($"            <div class=\"grid\">");
 
             foreach (var (hostname, status) in statuses.OrderBy(s => s.Status.Server).ThenBy(s => s.Status.Service))
@@ -1824,6 +1858,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             html.AppendLine($"                    <button class=\"btn-normal\" onclick=\"setView('{envKey}', 'normal')\">Normal</button>");
             html.AppendLine($"                </div>");
             html.AppendLine($"            </div>");
+            html.Append(RenderDomainList(config, environmentName, "            "));
 
             if (envStatuses.Count > 0)
             {
@@ -2807,6 +2842,12 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
     ""ref"": { ""transfer"": [...], ""services"": [...], ""biztalk"": [...] },
     ""development"": { ""transfer"": [...], ""services"": [...], ""biztalk"": [...] }
   },
+  ""domains"": [
+    { ""name"": ""app-services-dev"", ""environment"": ""development"", ""servers"": [""srv-dev-01""] },
+    { ""name"": ""app-services"", ""environment"": ""production"", ""servers"": [""srv-prod-01""], ""netScalerVServer"": ""vs_app_prod"" },
+    { ""name"": ""app-services-prod"", ""environment"": ""production"", ""servers"": [""srv-prod-02""], ""netScalerVServer"": ""vs_app_prod"" }
+  ],
+  ""domainSuffixMap"": { ""-test"": ""test"" },
   ""servers"": [
     {
       ""name"": ""server-name"",
@@ -2816,6 +2857,9 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
     }
   ]
 }</pre>
+            <p><strong>Domains:</strong> Jede Domain gehört explizit zu einer Umgebung (<code>environment</code>). Die Namenskonvention
+            <code>-dev</code> → development, <code>-ref</code> → ref, <code>-prod</code> und ohne Suffix → production liefert nur einen Vorschlag
+            und eine Warnung; <code>allowNameMismatch: true</code> lässt bewusste Ausnahmen zu. Zusätzliche Suffixe über <code>domainSuffixMap</code>.</p>
         </section>
 
         <section id=""global"">

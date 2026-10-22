@@ -1,0 +1,26 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.DomainViewModel
+@{
+    ViewData["Title"] = "Domain bearbeiten";
+}
+
+<div class="container-fluid">
+    <h1 class="mb-4"><i class="bi bi-pencil me-2"></i>Domain bearbeiten@(string.IsNullOrEmpty(Model.OriginalName) ? "" : ": " + Model.OriginalName)</h1>
+
+    <form asp-action="Edit" method="post" id="domainForm">
+        @Html.AntiForgeryToken()
+        <div class="row">
+            <div class="col-lg-9">
+                <partial name="_DomainForm" model="Model" />
+            </div>
+        </div>
+        <div class="d-flex gap-2 mt-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Speichern</button>
+            <a asp-action="Index" class="btn btn-outline-secondary"><i class="bi bi-x-lg me-1"></i>Abbrechen</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <partial name="_DomainFormScripts" />
+}

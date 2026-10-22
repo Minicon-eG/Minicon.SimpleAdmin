@@ -523,6 +523,13 @@
                 <li><a href="#filemonitoring" class="toc-level-1">16. Datei-/Protokollüberwachung</a></li>
                 <li><a href="#scripts" class="toc-level-1">17. Skripte (PowerShell, WebUI)</a></li>
                 <li><a href="#webui-usage" class="toc-level-1">18. WebUI: Bedienung &amp; Darstellung</a></li>
+                <li><a href="#domains" class="toc-level-1">19. Umgebungen &amp; Domains</a>
+                    <ul>
+                        <li><a href="#domains-config" class="toc-level-2">19.1 Konfiguration</a></li>
+                        <li><a href="#domains-convention" class="toc-level-2">19.2 Namenskonvention</a></li>
+                        <li><a href="#domains-webui" class="toc-level-2">19.3 WebUI</a></li>
+                    </ul>
+                </li>
             </ul>
         </aside>
 
@@ -609,7 +616,9 @@
                 <pre>{
   "history": { ... },    // Verlaufsdaten-Konfiguration
   "output": { ... },     // HTML-Ausgabe-Einstellungen
-  "servers": [ ... ]     // Liste der zu überwachenden Server
+  "servers": [ ... ],    // Liste der zu überwachenden Server
+  "environments": { ... },  // Umgebungen und ihre Server (optional)
+  "domains": [ ... ]     // Domains mit Umgebung, Servern und vServer (optional, siehe Kapitel 19)
 }</pre>
 
                 <!-- 2.2 history -->
@@ -3075,6 +3084,61 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     <li><strong>Auto-Refresh:</strong> Dashboard, Status, Probleme und Server-Detailansicht haben einen Schalter &bdquo;Auto&ldquo; (Neuladen alle 60&nbsp;Sekunden). Er pausiert, solange ein Dialog offen ist, ein Eingabefeld den Fokus hat oder der Tab im Hintergrund liegt. &bdquo;Stand&ldquo; zeigt, wann die Seite geladen wurde.</li>
                     <li><strong>Zeiten:</strong> Alle Zeiten erscheinen in der Ortszeit des Browsers bzw. relativ (&bdquo;vor 5 Minuten&ldquo;); der genaue Zeitpunkt steht im Tooltip.</li>
                     <li><strong>Status-Übersicht:</strong> Eine Karte pro Server mit allen Diensten; Filter-Kacheln (Kritisch, Nicht erreichbar, Beeinträchtigt, Quittiert, Unbekannt, Gesund) und Suche bleiben in der URL erhalten.</li>
+                </ul>
+            </section>
+
+            <!-- 19. Umgebungen & Domains -->
+            <section id="domains">
+                <h2>19. Umgebungen &amp; Domains</h2>
+                <p>Jeder Server gehört über <code>environments</code> genau einer Umgebung an. Darauf bauen die <strong>Domains</strong> auf:
+                    eine Domain (DNS-Name) gehört genau einer Umgebung und wird von einem oder mehreren Servern dieser Umgebung bedient.
+                    Optional steht genau ein NetScaler-vServer davor; mehrere Domains dürfen denselben vServer teilen.
+                    Domains sind reine Zuordnung &ndash; die Checker prüfen weiterhin Server, keine Domains. Eine Gruppierung nach Anwendungen gibt es bewusst nicht.</p>
+
+                <h3 id="domains-config">19.1 Konfiguration</h3>
+                <pre>"domains": [
+  { "name": "app-services-dev",  "environment": "development", "servers": [ "srv-dev-01" ] },
+  { "name": "app-services-ref",  "environment": "ref",         "servers": [ "srv-ref-01" ] },
+  { "name": "app-services",      "environment": "production",  "servers": [ "srv-prod-01", "srv-prod-02" ],
+    "netScalerVServer": "vs_app_services_prod", "healthCheck": "app-health" },
+  { "name": "app-services-prod", "environment": "production",  "servers": [ "srv-prod-02" ],
+    "netScalerVServer": "vs_app_services_prod" },
+  { "name": "legacy-portal",     "environment": "ref",         "servers": [ "srv-ref-01" ],
+    "allowNameMismatch": true, "description": "Altname, bleibt bis zur Migration" }
+],
+"domainSuffixMap": { "-test": "test", "-qs": "ref" }</pre>
+                <table>
+                    <tr><th>Feld</th><th>Bedeutung</th></tr>
+                    <tr><td><code>name</code></td><td>DNS-Name, z.&nbsp;B. <code>app-services-dev</code> oder <code>app-services.example.org</code>. Eindeutig.</td></tr>
+                    <tr><td><code>environment</code></td><td>Schlüssel aus <code>environments</code>. Wird immer explizit gesetzt &ndash; nie allein aus dem Namen abgeleitet.</td></tr>
+                    <tr><td><code>servers</code></td><td>Server, die die Domain bedienen. Nur Server der gewählten Umgebung.</td></tr>
+                    <tr><td><code>netScalerVServer</code></td><td>Optional: vServer vor der Domain (höchstens einer, darf geteilt werden).</td></tr>
+                    <tr><td><code>healthCheck</code></td><td>Optional: Name eines NetScaler-Health-Checks aus der Server-Konfiguration (Information).</td></tr>
+                    <tr><td><code>allowNameMismatch</code></td><td>Ausnahme: Name weicht bewusst von der Konvention der Umgebung ab (keine Warnung). Default <code>false</code>.</td></tr>
+                </table>
+                <div class="info-box">Fehlt der Block <code>domains</code>, gilt eine leere Liste &ndash; bestehende Konfigurationen funktionieren unverändert.</div>
+
+                <h3 id="domains-convention">19.2 Namenskonvention</h3>
+                <table>
+                    <tr><th>Name (erstes DNS-Label)</th><th>Vorschlag</th></tr>
+                    <tr><td><code>&lt;name&gt;-dev</code></td><td>development</td></tr>
+                    <tr><td><code>&lt;name&gt;-ref</code></td><td>ref</td></tr>
+                    <tr><td><code>&lt;name&gt;-prod</code></td><td>production</td></tr>
+                    <tr><td><code>&lt;name&gt;</code> (kein bekanntes Suffix)</td><td>production (mögliche PROD-Domain, nur wenn die Umgebung <code>production</code> existiert)</td></tr>
+                </table>
+                <p>In PROD gibt es beide Varianten (<code>app-services</code> und <code>app-services-prod</code>). Sie gehören zur selben Umgebung,
+                    sind aber <strong>eigenständige Einträge</strong> mit unabhängigen Server- und vServer-Zuordnungen.</p>
+                <p>Die Konvention ist nur ein <em>Vorschlag</em>: Weicht die gewählte Umgebung ab, zeigt die WebUI eine Warnung und speichert erst,
+                    wenn &bdquo;Ausnahme zulassen&ldquo; (<code>allowNameMismatch</code>) gesetzt ist. Weitere Umgebungen oder abweichende Konventionen
+                    lassen sich über <code>domainSuffixMap</code> (Suffix &rarr; Umgebungsschlüssel) ergänzen oder überschreiben; ein leerer Wert entfernt ein
+                    eingebautes Suffix. Bei mehreren passenden Suffixen gewinnt das längste.</p>
+
+                <h3 id="domains-webui">19.3 WebUI</h3>
+                <ul>
+                    <li><strong>Domains:</strong> Liste gruppiert nach Umgebung mit Filter, Anlegen, Bearbeiten, Löschen. Die Umgebung wird beim Tippen des Namens vorbelegt, solange sie nicht von Hand gewählt wurde.</li>
+                    <li><strong>Serverauswahl:</strong> Es werden nur Server der gewählten Umgebung angeboten; die Liste aktualisiert sich beim Wechsel der Umgebung.</li>
+                    <li><strong>Server:</strong> Die Serverliste hat eine Spalte und einen Filter &bdquo;Umgebung&ldquo;.</li>
+                    <li><strong>Statusseiten:</strong> Die Übersichtsseiten zeigen die Domains jeder Umgebung unter der Umgebungsüberschrift.</li>
                 </ul>
             </section>
 

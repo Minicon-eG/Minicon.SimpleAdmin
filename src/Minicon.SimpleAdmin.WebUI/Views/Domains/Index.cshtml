@@ -1,0 +1,184 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.DomainIndexViewModel
+@{
+    ViewData["Title"] = "Domains";
+    var grouped = Model.Items
+        .GroupBy(i => i.Domain.Environment, StringComparer.OrdinalIgnoreCase)
+        .OrderBy(g => Model.Environments.FindIndex(e => e.Equals(g.Key, StringComparison.OrdinalIgnoreCase)) is var i && i < 0 ? int.MaxValue : i)
+        .ToList();
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1><i class="bi bi-globe2 me-2"></i>Domains (<span id="visibleCount">@Model.Items.Count</span>/@Model.Items.Count)</h1>
+        <a asp-action="Create" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Neue Domain</a>
+    </div>
+
+    <p class="text-muted small mb-3">
+        Jede Domain gehört genau einer Umgebung und wird von Servern dieser Umgebung bedient.
+        Namenskonvention (nur Vorschlag/Warnung):
+        @foreach (var kv in Model.SuffixMap.OrderBy(k => k.Key))
+        {
+            <code class="me-1">&lt;name&gt;@kv.Key</code><span class="me-2">→ @kv.Value</span>
+        }
+        <code class="me-1">&lt;name&gt;</code>→ production.
+    </p>
+
+    @if (Model.Environments.Count == 0)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>Es sind keine Umgebungen definiert.
+            Legen Sie zuerst unter <a asp-controller="Environments" asp-action="Index">Umgebungen</a> eine Umgebung an.
+        </div>
+    }
+
+    @if (Model.Items.Count == 0)
+    {
+        <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Noch keine Domains angelegt.</div>
+    }
+    else
+    {
+        <div class="filter-row mb-3 d-flex gap-3 flex-wrap align-items-end">
+            <div>
+                <label class="form-label small mb-1" for="envFilter">Umgebung</label>
+                <select id="envFilter" class="form-select">
+                    <option value="">Alle</option>
+                    @foreach (var env in Model.Environments)
+                    {
+                        <option value="@env.ToLowerInvariant()">@env</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="form-label small mb-1" for="domainSearch">Suche</label>
+                <input id="domainSearch" type="text" class="form-control" placeholder="Domain, Server, vServer…" />
+            </div>
+        </div>
+
+        @foreach (var group in grouped)
+        {
+            <div class="card mb-4 domain-env-group" data-env="@group.Key.ToLowerInvariant()">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-diagram-3 me-2"></i><strong>@(string.IsNullOrEmpty(group.Key) ? "(keine Umgebung)" : group.Key)</strong>
+                        <span class="text-muted small ms-1">(@group.Count() Domain(s))</span></span>
+                    @if (!string.IsNullOrEmpty(group.Key))
+                    {
+                        <a asp-action="Create" asp-route-environment="@group.Key" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i> Domain</a>
+                    }
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>Server</th>
+                                <th>NetScaler-vServer</th>
+                                <th>Health Check</th>
+                                <th>Konvention</th>
+                                <th style="width: 120px;">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in group.OrderBy(i => i.Domain.Name))
+                            {
+                                var d = item.Domain;
+                                <tr class="domain-row" data-search="@($"{d.Name} {string.Join(" ", d.Servers)} {d.NetScalerVServer} {d.HealthCheck} {d.Description}".ToLowerInvariant())">
+                                    <td>
+                                        <strong>@d.Name</strong>
+                                        @if (!string.IsNullOrEmpty(d.Description))
+                                        {
+                                            <div class="small text-muted">@d.Description</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (d.Servers.Count == 0)
+                                        {
+                                            <span class="text-muted">–</span>
+                                        }
+                                        @foreach (var s in d.Servers)
+                                        {
+                                            var outside = item.ServersOutsideEnvironment.Contains(s);
+                                            var unknown = item.UnknownServers.Contains(s);
+                                            <span class="pill pill-soft @(unknown || outside ? "pill-warn" : "pill-info") me-1 mb-1"
+                                                  title="@(unknown ? "Server ist nicht konfiguriert" : outside ? "Server gehört nicht zur Umgebung der Domain" : "")">
+                                                @s @if (unknown || outside) { <i class="bi bi-exclamation-triangle ms-1"></i> }
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>@(string.IsNullOrEmpty(d.NetScalerVServer) ? "–" : d.NetScalerVServer)</td>
+                                    <td>@(string.IsNullOrEmpty(d.HealthCheck) ? "–" : d.HealthCheck)</td>
+                                    <td>
+                                        @if (!item.EnvironmentExists)
+                                        {
+                                            <span class="pill pill-crit" title="Die Umgebung existiert nicht (mehr)">Umgebung fehlt</span>
+                                        }
+                                        else if (item.Convention.IsConsistent)
+                                        {
+                                            <span class="pill pill-ok pill-soft">passt</span>
+                                        }
+                                        else if (d.AllowNameMismatch)
+                                        {
+                                            <span class="pill pill-muted pill-soft" title="Name deutet auf '@item.Convention.SuggestedEnvironment' hin">Ausnahme</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="pill pill-warn" title="Name deutet auf '@item.Convention.SuggestedEnvironment' hin">Vorschlag: @item.Convention.SuggestedEnvironment</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a asp-action="Edit" asp-route-id="@d.Name" class="btn btn-outline-primary" title="Bearbeiten"><i class="bi bi-pencil"></i></a>
+                                            <form asp-action="Delete" asp-route-id="@d.Name" method="post" class="d-inline delete-form">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-danger" title="Löschen"
+                                                        data-confirm-message="Domain '@d.Name' wirklich löschen?"><i class="bi bi-trash"></i></button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const envFilter = document.getElementById('envFilter');
+            const search = document.getElementById('domainSearch');
+            const count = document.getElementById('visibleCount');
+
+            function apply() {
+                if (!envFilter) return;
+                const env = envFilter.value;
+                const term = (search.value || '').toLowerCase();
+                let visible = 0;
+                document.querySelectorAll('.domain-env-group').forEach(group => {
+                    let groupVisible = 0;
+                    const envMatch = !env || group.dataset.env === env;
+                    group.querySelectorAll('.domain-row').forEach(row => {
+                        const show = envMatch && (!term || row.dataset.search.includes(term));
+                        row.style.display = show ? '' : 'none';
+                        if (show) groupVisible++;
+                    });
+                    group.style.display = groupVisible > 0 ? '' : 'none';
+                    visible += groupVisible;
+                });
+                count.textContent = visible;
+            }
+
+            envFilter?.addEventListener('change', apply);
+            search?.addEventListener('input', apply);
+
+            document.querySelectorAll('.delete-form').forEach(form => {
+                form.addEventListener('submit', function (e) {
+                    const btn = this.querySelector('button[data-confirm-message]');
+                    if (!confirm(btn ? btn.dataset.confirmMessage : 'Wirklich löschen?')) e.preventDefault();
+                });
+            });
+        });
+    </script>
+}

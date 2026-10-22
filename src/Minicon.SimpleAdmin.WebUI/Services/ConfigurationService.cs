@@ -314,6 +314,7 @@ public class ConfigurationService
         if (!originalName.Equals(server.Name, StringComparison.OrdinalIgnoreCase))
         {
             UpdateServerNameInEnvironments(originalName, server.Name);
+            UpdateServerNameInDomains(originalName, server.Name);
         }
     }
 
@@ -327,6 +328,7 @@ public class ConfigurationService
         {
             _config.Servers.Remove(server);
             RemoveServerFromEnvironments(name);
+            RemoveServerFromDomains(name);
         }
     }
 
@@ -417,6 +419,114 @@ public class ConfigurationService
             {
                 list[i] = newValue;
             }
+        }
+    }
+
+    #endregion
+
+    #region Domain Operations
+
+    /// <summary>
+    /// Gets all domains, sorted by environment and name
+    /// </summary>
+    public IReadOnlyList<Domain> GetDomains() => (_config.Domains ??= new List<Domain>())
+        .OrderBy(d => d.Environment, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+        .ToList()
+        .AsReadOnly();
+
+    /// <summary>
+    /// Gets a domain by name (case-insensitive)
+    /// </summary>
+    public Domain? GetDomain(string name) =>
+        (_config.Domains ??= new List<Domain>()).FirstOrDefault(d => d.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Adds a new domain
+    /// </summary>
+    public void AddDomain(Domain domain)
+    {
+        if (GetDomain(domain.Name) != null)
+        {
+            throw new InvalidOperationException($"Domain '{domain.Name}' already exists");
+        }
+
+        _config.Domains.Add(domain);
+    }
+
+    /// <summary>
+    /// Replaces an existing domain (the name may change)
+    /// </summary>
+    public void UpdateDomain(string originalName, Domain domain)
+    {
+        var domains = _config.Domains ??= new List<Domain>();
+        var index = domains.FindIndex(d => d.Name.Equals(originalName, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+        {
+            throw new InvalidOperationException($"Domain '{originalName}' not found");
+        }
+
+        if (!originalName.Equals(domain.Name, StringComparison.OrdinalIgnoreCase) && GetDomain(domain.Name) != null)
+        {
+            throw new InvalidOperationException($"Domain '{domain.Name}' already exists");
+        }
+
+        domains[index] = domain;
+    }
+
+    /// <summary>
+    /// Deletes a domain
+    /// </summary>
+    public void DeleteDomain(string name) =>
+        (_config.Domains ??= new List<Domain>()).RemoveAll(d => d.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Gets the names of the servers assigned to an environment (all categories), sorted
+    /// </summary>
+    public List<string> GetServerNamesInEnvironment(string environment) =>
+        _config.GetServersInEnvironment(environment)
+            .Select(s => s.Name)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// Gets all distinct NetScaler health check names configured on any server
+    /// </summary>
+    public List<string> GetHealthCheckNames() =>
+        _config.Servers
+            .SelectMany(s => s.ServiceTypes)
+            .SelectMany(st => st.NetScaler.HealthChecks)
+            .Select(h => h.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// Gets all distinct NetScaler vServer names used by domains
+    /// </summary>
+    public List<string> GetNetScalerVServerNames() =>
+        (_config.Domains ?? new List<Domain>())
+            .Select(d => d.NetScalerVServer)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(v => v, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private void UpdateServerNameInDomains(string oldName, string newName)
+    {
+        foreach (var domain in _config.Domains ?? new List<Domain>())
+        {
+            ReplaceInList(domain.Servers, oldName, newName);
+        }
+    }
+
+    private void RemoveServerFromDomains(string name)
+    {
+        foreach (var domain in _config.Domains ?? new List<Domain>())
+        {
+            domain.Servers.RemoveAll(s => s.Equals(name, StringComparison.OrdinalIgnoreCase));
         }
     }
 

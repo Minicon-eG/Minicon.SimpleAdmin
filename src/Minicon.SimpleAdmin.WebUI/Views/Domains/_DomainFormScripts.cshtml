@@ -1,0 +1,70 @@
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const nameInput = document.getElementById('Name');
+        const envSelect = document.getElementById('Environment');
+        const suggestion = document.getElementById('envSuggestion');
+        const mismatchBox = document.getElementById('mismatchBox');
+        const mismatchText = document.getElementById('mismatchText');
+        const allowBox = document.getElementById('AllowNameMismatch');
+        const serverEmpty = document.getElementById('serverEmpty');
+        const serverNone = document.getElementById('serverNone');
+        const serverCount = document.getElementById('serverCount');
+        const suggestUrl = '@Url.Action("Suggest", "Domains")';
+        // The environment was pre-selected by the suggestion (not chosen by the user) as long as this is true.
+        let envAuto = !envSelect.value;
+        let timer = null;
+
+        function filterServers() {
+            const env = envSelect.value;
+            let shown = 0;
+            document.querySelectorAll('.server-option').forEach(opt => {
+                const match = opt.dataset.env === '*' || (env && opt.dataset.env === env);
+                opt.classList.toggle('d-none', !match);
+                const cb = opt.querySelector('input');
+                // Hidden options must not be posted.
+                cb.disabled = !match;
+                if (!match) cb.checked = false;
+                if (match && opt.dataset.env !== '*') shown++;
+            });
+            serverEmpty.classList.toggle('d-none', !!env);
+            serverNone.classList.toggle('d-none', !env || shown > 0);
+            serverCount.textContent = env ? shown + ' Server in „' + env + '“' : '';
+        }
+
+        async function check() {
+            const name = nameInput.value.trim();
+            if (!name) { suggestion.textContent = ''; mismatchBox.classList.toggle('d-none', !allowBox.checked); return; }
+            try {
+                const r = await fetch(suggestUrl + '?name=' + encodeURIComponent(name) + '&environment=' + encodeURIComponent(envSelect.value));
+                if (!r.ok) return;
+                const data = await r.json();
+                if (data.suggested) {
+                    suggestion.innerHTML = '';
+                    suggestion.append('Vorschlag aus dem Namen: ');
+                    const b = document.createElement('strong'); b.textContent = data.suggested; suggestion.append(b);
+                    suggestion.append(data.suffix ? ' (Suffix ' + data.suffix + ')' : ' (ohne Suffix → mögliche PROD-Domain)');
+                    if (envAuto && envSelect.value !== data.suggested && [...envSelect.options].some(o => o.value === data.suggested)) {
+                        envSelect.value = data.suggested;
+                        filterServers();
+                        return check();
+                    }
+                } else {
+                    suggestion.textContent = 'Kein Vorschlag aus dem Namen möglich (Umgebung nicht vorhanden).';
+                }
+                const mismatch = !!envSelect.value && !data.consistent;
+                if (mismatch) {
+                    mismatchText.innerHTML = '';
+                    const i = document.createElement('i'); i.className = 'bi bi-exclamation-triangle me-2'; mismatchText.append(i);
+                    mismatchText.append('Der Name deutet auf „' + data.suggested + '“ hin, gewählt ist „' + envSelect.value + '“.');
+                }
+                mismatchBox.classList.toggle('d-none', !mismatch && !allowBox.checked);
+            } catch { /* suggestion is optional */ }
+        }
+
+        nameInput.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(check, 250); });
+        envSelect.addEventListener('change', () => { envAuto = false; filterServers(); check(); });
+
+        filterServers();
+        check();
+    });
+</script>

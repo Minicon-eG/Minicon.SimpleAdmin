@@ -41,6 +41,18 @@ public class Config
     public List<Server> Servers { get; set; } = new();
 
     /// <summary>
+    /// Gets or sets the DNS domains with their environment, servers and optional NetScaler vServer.
+    /// A missing block in config.json yields an empty list.
+    /// </summary>
+    public List<Domain> Domains { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets optional additional/overriding domain suffixes for the naming convention
+    /// (suffix → environment key, e.g. <c>"-test": "test"</c>). Built-in: -dev, -ref, -prod.
+    /// </summary>
+    public Dictionary<string, string>? DomainSuffixMap { get; set; }
+
+    /// <summary>
     /// Gets the effective features configuration (with defaults if not set)
     /// </summary>
     public FeaturesConfig GetEffectiveFeatures() => Features ?? new FeaturesConfig();
@@ -103,5 +115,22 @@ public class Config
         var serverNames = envConfig.GetAllServerNames().ToHashSet(StringComparer.OrdinalIgnoreCase);
         return Servers.Where(s => serverNames.Contains(s.Name)).ToList();
     }
-}
 
+    /// <summary>
+    /// Gets all domains assigned to the specified environment (case-insensitive)
+    /// </summary>
+    public List<Domain> GetDomainsInEnvironment(string environmentName) =>
+        (Domains ?? new List<Domain>())
+            .Where(d => string.Equals(d.Environment, environmentName, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
+    /// Gets all domains served by the specified server (case-insensitive)
+    /// </summary>
+    public List<Domain> GetDomainsForServer(string serverName) =>
+        (Domains ?? new List<Domain>())
+            .Where(d => d.Servers.Any(s => s.Equals(serverName, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+}

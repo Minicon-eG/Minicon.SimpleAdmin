@@ -2,6 +2,9 @@
 @model IReadOnlyList<Server>
 @{
     ViewData["Title"] = "Server";
+    var serverEnvironments = ViewData["ServerEnvironments"] as Dictionary<string, string?>
+        ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+    var environments = ViewData["Environments"] as List<string> ?? new List<string>();
 }
 
 <style>
@@ -77,7 +80,18 @@
                         <option value="inactive">Nur inaktive</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Umgebung</label>
+                    <select id="environmentFilter" class="form-select">
+                        <option value="all">Alle</option>
+                        @foreach (var env in environments)
+                        {
+                            <option value="@env.ToLowerInvariant()">@env</option>
+                        }
+                        <option value="none">Ohne Umgebung</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
                     <label class="form-label small mb-1">Service-Typ</label>
                     <select id="serviceTypeFilter" class="form-select">
                         <option value="all">Alle</option>
@@ -90,7 +104,7 @@
                         }
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label small mb-1">&nbsp;</label>
                     <div>
                         <button class="btn btn-outline-secondary" id="resetFilters">
@@ -114,6 +128,9 @@
                         <th class="sortable" data-sort="description">
                             Beschreibung <i class="bi bi-arrow-down-up ms-1"></i>
                         </th>
+                        <th class="sortable" data-sort="environment">
+                            Umgebung <i class="bi bi-arrow-down-up ms-1"></i>
+                        </th>
                         <th>Base URL</th>
                         <th>Service-Typen</th>
                         <th style="width: 200px;">Aktionen</th>
@@ -122,10 +139,12 @@
                 <tbody>
                     @foreach (var server in Model)
                     {
+                        var serverEnv = serverEnvironments.GetValueOrDefault(server.Name);
                         <tr class="server-row @(!server.Active ? "table-secondary" : "")"
                             data-name="@server.Name.ToLower()"
                             data-description="@(server.Description?.ToLower() ?? "")"
                             data-status="@(server.Active ? "active" : "inactive")"
+                            data-environment="@(serverEnv?.ToLowerInvariant() ?? "none")"
                             data-service-types="@string.Join(",", server.ServiceTypes.Select(st => st.Type))">
                             <td class="text-center" data-sort-value="@(server.Active ? "1" : "0")">
                                 @if (server.Active)
@@ -145,6 +164,16 @@
                                 <strong>@server.Name</strong>
                             </td>
                             <td data-sort-value="@(server.Description?.ToLower() ?? "")">@(server.Description ?? "-")</td>
+                            <td data-sort-value="@(serverEnv?.ToLowerInvariant() ?? "~")">
+                                @if (serverEnv != null)
+                                {
+                                    <span class="pill pill-soft pill-info">@serverEnv</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
                             <td>
                                 @if (!string.IsNullOrEmpty(server.BaseUrl))
                                 {
@@ -216,6 +245,7 @@
             const searchInput = document.getElementById('searchInput');
             const statusFilter = document.getElementById('statusFilter');
             const serviceTypeFilter = document.getElementById('serviceTypeFilter');
+            const environmentFilter = document.getElementById('environmentFilter');
             const clearSearchBtn = document.getElementById('clearSearch');
             const resetFiltersBtn = document.getElementById('resetFilters');
             const visibleCountSpan = document.getElementById('visibleCount');
@@ -230,6 +260,7 @@
                 const searchTerm = searchInput.value.toLowerCase();
                 const statusValue = statusFilter.value;
                 const serviceTypeValue = serviceTypeFilter.value;
+                const environmentValue = environmentFilter.value;
 
                 let visibleCount = 0;
                 const rows = document.querySelectorAll('.server-row');
@@ -249,6 +280,11 @@
 
                     // Status filter
                     if (statusValue !== 'all' && status !== statusValue) {
+                        visible = false;
+                    }
+
+                    // Environment filter
+                    if (environmentValue !== 'all' && row.dataset.environment !== environmentValue) {
                         visible = false;
                     }
 
@@ -318,6 +354,9 @@
             if (serviceTypeFilter) {
                 serviceTypeFilter.addEventListener('change', applyFilters);
             }
+            if (environmentFilter) {
+                environmentFilter.addEventListener('change', applyFilters);
+            }
             if (clearSearchBtn) {
                 clearSearchBtn.addEventListener('click', function() {
                     searchInput.value = '';
@@ -329,6 +368,7 @@
                     searchInput.value = '';
                     statusFilter.value = 'all';
                     serviceTypeFilter.value = 'all';
+                    environmentFilter.value = 'all';
                     applyFilters();
                 });
             }

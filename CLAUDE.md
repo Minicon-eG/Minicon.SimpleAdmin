@@ -28,7 +28,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.34.2`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.35.0`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
@@ -213,6 +213,9 @@ A server with no PRTG metrics but a failing email delivery check correctly retur
 - **Prozess-Priorität `BelowNormal`**: `SimpleAdminWorkerHost.RunAsync` setzt den Worker-Prozess beim Start auf `ProcessPriorityClass.BelowNormal`, damit er den eigentlichen Workloads keine Rechenzeit stiehlt.
 - Debug-Log `[CPU] (system median X %, self Y % over Z ms, samples […])` zeigt, wie der Endwert zustande kommt.
 Linux (`/proc/stat`) und macOS waren nicht betroffen (sauberer Delta-Rechenpfad).
+
+### Domains und Namenskonvention (v2.35.0)
+`Config.Domains` (`List<Domain>`, fehlender Block = leer): `Name` (DNS), `Environment` (Key aus `Config.Environments`, **immer explizit**), `Servers`, optional `NetScalerVServer` (darf von mehreren Domains geteilt werden), `HealthCheck` (Name eines NetScaler-HealthChecks, nur Information), `Description`, `AllowNameMismatch`. Beide PROD-Varianten (`app`, `app-prod`) sind eigenständige Einträge. `Shared/Services/DomainNamingConvention`: `SuggestEnvironment`/`IsConsistent`/`Evaluate` – erstes DNS-Label, `-dev`→development, `-ref`→ref, `-prod`/kein bekanntes Suffix→production (nur wenn der Key existiert), längstes Suffix gewinnt; erweiterbar/überschreibbar per `Config.DomainSuffixMap` (leerer Wert entfernt ein Suffix). Nur Vorschlag/Warnung, nie Quelle der Wahrheit. WebUI: `DomainsController` (Liste nach Umgebung, Create/Edit/Delete, `GET /Domains/Suggest`), Serverauswahl nur aus `GetServersInEnvironment(env)`, Mismatch wird erst mit „Ausnahme zulassen“ gespeichert; Serverliste hat Umgebungs-Spalte + Filter; Server-Rename/-Delete pflegt `Domain.Servers` mit. HtmlGenerator: `RenderDomainList` zeigt Domains je Umgebung auf `all.html` und der zentralen Übersicht (die jetzt auch weitere Umgebungen außer production/ref/development rendert). Checker sind unverändert.
 
 ### Status Smoothing (Alert Fatigue Prevention)
 Status changes require N consecutive checks showing the same result (default `minConsecutiveChecks: 5`). `StatusEvaluator.GetConfirmedStatus()` re-evaluates each snapshot's value against current thresholds. If mixed → returns the most frequent; ties broken in favor of least severe. The same mechanism is applied to email probe/delivery via `ConsecutiveFailures` carry-forward.
