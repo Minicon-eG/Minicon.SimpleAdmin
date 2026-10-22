@@ -14,6 +14,21 @@ public class BizTalkFeatureConfig
 
     /// <summary>Default thresholds for BizTalk monitoring.</summary>
     public BizTalkDefaults Defaults { get; set; } = new();
+
+    /// <summary>
+    /// Master toggle for the BizTalk deactivation actions (stop application / orchestration /
+    /// send port, disable receive location). When disabled, the WebUI shows no action buttons and
+    /// the worker ignores pending requests (default: false - opt-in).
+    /// </summary>
+    public bool ActionsEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Directory in which the WebUI and the workers exchange BizTalk action requests and results.
+    /// Must be reachable by the central WebUI and by every worker that may execute an action —
+    /// typically a UNC share (e.g. "\\\\fileserver\\biztalk-actions").
+    /// Empty = the local status directory of the respective process (single-host setup).
+    /// </summary>
+    public string ActionsDirectory { get; set; } = string.Empty;
 }
 
 /// <summary>Default thresholds for BizTalk monitoring.</summary>

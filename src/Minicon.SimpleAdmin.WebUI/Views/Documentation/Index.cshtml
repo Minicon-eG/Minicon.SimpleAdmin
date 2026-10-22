@@ -1507,6 +1507,50 @@ $.version != deprecated</code></pre>
                     Den Laufzeitstatus der <strong>Host-Instanz-Dienste</strong> (<code>BTSSvc$…</code>) liefert die API nicht —
                     diese über die Windows-Dienste-Überwachung auf den BizTalk-Servern abdecken.
                 </div>
+
+                <h4>Deaktivieren aus der Problemliste</h4>
+                <p>
+                    In der <em>Probleme</em>-Ansicht lässt sich ein gemeldetes BizTalk-Element direkt deaktivieren —
+                    einzeln über die Schaltfläche <strong>Deaktivieren</strong> in der Zeile, mehrere ausgewählte
+                    Elemente gesammelt über <strong>Auswahl deaktivieren</strong> in der Bulk-Leiste. Beide Wege
+                    öffnen einen Dialog, in dem der Grund optional angegeben werden kann.
+                </p>
+                <h5>Ablauf</h5>
+                <ol>
+                    <li>Die WebUI schreibt einen Auftrag in das <strong>Austauschverzeichnis</strong> (Request-Kanal).</li>
+                    <li>Der Worker auf dem Zielserver nimmt den Auftrag in seinem nächsten Zyklus auf und führt ihn über die Management-API aus.</li>
+                    <li>Das Ergebnis schreibt der Worker zurück; die WebUI zeigt es über <code>GET /api/biztalkactions/server/{serverId}</code>.</li>
+                    <li>Der nächste Prüfzyklus bildet den neuen Zustand ab — das Problem verschwindet.</li>
+                </ol>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Die Deaktivierung erfolgt <strong>asynchron</strong>: erst wenn der Worker den Auftrag ausgeführt hat,
+                    ist das Element tatsächlich deaktiviert. Angewendete Orchestrierungen und Sendeports nehmen
+                    bis dahin (und anschließend) keine Nachrichten mehr an.
+                </div>
+                <h5>Konfiguration</h5>
+                <ul>
+                    <li><code>features.biztalk.actionsEnabled</code> — Hauptschalter (im WebUI unter <em>Einstellungen → Feature-Toggles → BizTalk → Deaktivierung aus der Problemliste</em>). Ohne ihn erscheinen keine Aktionsschaltflächen und die WebUI lehnt Aufträge ab.</li>
+                    <li><code>features.biztalk.actionsDirectory</code> — der von WebUI und Workern gemeinsam benutzte Ordner (UNC-Pfad). Leer = lokales Statusverzeichnis (nur wenn WebUI und Worker auf demselben Server laufen).</li>
+                    <li>Jeder Worker bearbeitet nur die Aufträge, die an <em>seinen</em> Server gerichtet sind — ein gemeinsames Verzeichnis kann daher mehrere BizTalk-Server bedienen.</li>
+                </ul>
+                <div class="alert alert-info">
+                    <i class="bi bi-shield-lock me-2"></i>
+                    Die WebUI speichert und benötigt <strong>keine</strong> BizTalk-Zugangsdaten. Die Management-API wird
+                    ausschließlich vom Worker auf dem BizTalk-Server aufgerufen, mit dessen integrierter
+                    Windows-Authentifizierung. Die WebUI bestimmt auch die Adressaten (Anwendung einer Orchestrierung,
+                    Empfangsport eines Empfangsorts) aus dem veröffentlichten Status, nicht aus der Anfrage.
+                </div>
+                <h5>Verwendete Management-API-Aufrufe</h5>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light"><tr><th>Element</th><th>Aufruf</th></tr></thead>
+                    <tbody>
+                        <tr><td>Anwendung</td><td><code>PUT /Applications/{name}/Stop</code></td></tr>
+                        <tr><td>Orchestrierung</td><td><code>PUT /Orchestrations/{applicationName}/{orchestrationName}/Stop</code></td></tr>
+                        <tr><td>Sendeport</td><td><code>PUT /SendPorts/{name}/Stop</code></td></tr>
+                        <tr><td>Empfangsort</td><td><code>PUT /ReceiveLocations/Disable/{receivePortName}/{receiveLocationName}</code></td></tr>
+                    </tbody>
+                </table>
             </section>
 
             <!-- Datei-/Protokollüberwachung -->

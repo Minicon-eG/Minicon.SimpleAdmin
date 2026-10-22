@@ -96,6 +96,14 @@ public static class SimpleAdminWebUIExtensions
         services.AddSingleton<IAcknowledgeService>(sp =>
             new AcknowledgeService(acknowledgeDirectory, sp.GetRequiredService<ILogger<AcknowledgeService>>()));
 
+        // BizTalk deactivation actions: the WebUI writes the requests into a shared directory
+        // that the workers on the BizTalk servers read and answer.
+        services.AddSingleton<BizTalkActionStore>(sp =>
+            new BizTalkActionStore(
+                statusDirectory,
+                sp.GetRequiredService<ILogger<BizTalkActionStore>>()));
+        services.AddSingleton<IBizTalkActionStore>(sp => sp.GetRequiredService<BizTalkActionStore>());
+
         AddScriptRunner(services, configuration, ResolveConfigDirectory(configuration));
 
         // Setup assistant for file/log monitoring: dry run against the real shares/logs.

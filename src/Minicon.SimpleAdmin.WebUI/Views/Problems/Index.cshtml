@@ -11,6 +11,9 @@
     var openWarning = open.Count(p => p.Problem.Severity == ProblemSeverity.Warning);
     var acknowledgedCount = all.Count - open.Count;
     var servers = all.Select(p => p.ServerId).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList();
+
+    // BizTalk deactivation actions are only offered when they are enabled in the configuration.
+    var bizTalkActionsEnabled = ViewBag.BizTalkActionsEnabled == true;
 }
 
 <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-4">
@@ -121,6 +124,12 @@ else
             <span><i class="bi bi-check2-square me-2"></i><strong id="selectedCount">0</strong> ausgewählt</span>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-sm btn-outline-light" onclick="toggleSelectAll(false)">Auswahl aufheben</button>
+                @if (bizTalkActionsEnabled)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-warning" onclick="deactivateSelected()">
+                        <i class="bi bi-power me-1"></i>Auswahl deaktivieren
+                    </button>
+                }
                 <button type="button" class="btn btn-sm btn-light" onclick="acknowledgeSelected()">
                     <i class="bi bi-check2-all me-1"></i>Auswahl quittieren
                 </button>
@@ -151,6 +160,28 @@ else
                         var origin = string.IsNullOrWhiteSpace(problem.Source) ? problem.Type : $"{problem.Type} · {problem.Source}";
                         var title = string.IsNullOrWhiteSpace(problem.Message) ? origin : problem.Message;
 
+                        // A BizTalk problem can be deactivated from the list. The artefact type and
+                        // name come from the problem context (filled by the BizTalk checker).
+                        string artifactKind = string.Empty;
+                        string artifactName = string.Empty;
+                        if (problem.Type == "biztalk"
+                            && problem.Context.TryGetValue("artifact", out var artifactValue) && artifactValue is string ak
+                            && problem.Context.TryGetValue("name", out var nameValue) && nameValue is string an)
+                        {
+                            artifactKind = ak;
+                            artifactName = an;
+                        }
+
+                        var isBizTalk = !string.IsNullOrEmpty(artifactKind) && !string.IsNullOrEmpty(artifactName);
+                        var bizTalkLabel = isBizTalk ? artifactKind switch
+                        {
+                            "application" => "Anwendung stoppen",
+                            "orchestration" => "Orchestrierung stoppen",
+                            "sendport" => "Sendeport stoppen",
+                            "receivelocation" => "Empfangsort deaktivieren",
+                            _ => "Deaktivieren"
+                        } : string.Empty;
+
                         <tr class="problem-row severity-@severityKey @(problem.Acknowledged ? "is-acknowledged" : "")"
                             data-status="@(problem.Acknowledged ? "acknowledged" : "open")"
                             data-severity="@problem.Severity"
@@ -161,6 +192,8 @@ else
                                 {
                                     <input type="checkbox" class="form-check-input problem-select"
                                            data-server-id="@serverId" data-problem-id="@problem.Id" data-label="@title"
+                                           data-artifact="@(isBizTalk ? artifactKind : "")"
+                                           data-target-name="@(isBizTalk ? artifactName : "")"
                                            aria-label="Problem auswählen" onchange="updateSelection()" />
                                 }
                             </td>
@@ -228,10 +261,21 @@ else
                             <td class="text-end pe-3 text-nowrap">
                                 @if (!problem.Acknowledged)
                                 {
-                                    <button type="button" class="btn btn-sm btn-primary" data-problem-id="@problem.Id" data-server-id="@serverId"
-                                            onclick="acknowledgeProblem(this.dataset.problemId, this.dataset.serverId)">
-                                        <i class="bi bi-check2 me-1"></i>Quittieren
-                                    </button>
+                                    <div class="d-flex gap-1 justify-content-end">
+                                        @if (bizTalkActionsEnabled && isBizTalk)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-warning"
+                                                    data-server-id="@serverId" data-artifact="@artifactKind" data-target-name="@artifactName"
+                                                    title="@bizTalkLabel — der Auftrag wird auf dem Zielserver ausgeführt"
+                                                    onclick="deactivateBizTalk(this)">
+                                                <i class="bi bi-power me-1"></i>Deaktivieren
+                                            </button>
+                                        }
+                                        <button type="button" class="btn btn-sm btn-primary" data-problem-id="@problem.Id" data-server-id="@serverId"
+                                                onclick="acknowledgeProblem(this.dataset.problemId, this.dataset.serverId)">
+                                            <i class="bi bi-check2 me-1"></i>Quittieren
+                                        </button>
+                                    </div>
                                 }
                                 else
                                 {
@@ -258,6 +302,7 @@ else
 
 @section Scripts {
     <partial name="_AcknowledgeModal" />
+    <partial name="_BizTalkDeactivateModal" />
     <script>
         const filterDefaults = { status: 'open', severity: 'all', server: 'all', q: '' };
 
