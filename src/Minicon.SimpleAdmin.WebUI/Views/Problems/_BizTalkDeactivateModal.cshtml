@@ -4,6 +4,10 @@
 <div class="modal fade" id="bizTalkDeactivateModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
+            @* CSRF token for the ajax request *@
+            <form id="bizTalkDeactivateForm">
+                @Html.AntiForgeryToken()
+            </form>
             <div class="modal-header">
                 <h5 class="modal-title" id="bizTalkDeactivateTitle">BizTalk-Elemente deaktivieren</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -99,7 +103,10 @@
         try {
             const response = await fetch(single ? bizTalkActionsApiUrl : bizTalkActionsApiUrl + '/bulk', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.querySelector('#bizTalkDeactivateForm input[name="__RequestVerificationToken"]').value
+                },
                 body: JSON.stringify(single
                     ? { ...bizTalkDeactivateTargets[0], comment: comment }
                     : { items: bizTalkDeactivateTargets, comment: comment })

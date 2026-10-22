@@ -154,6 +154,39 @@ public class BizTalkActionStoreTests
     }
 
     [Fact]
+    public async Task GetAsync_WithPathTraversalInId_ReturnsNull()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            await store.RequestAsync(new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "App1" });
+
+            // A traversal attempt must not reach a file outside the exchange directory.
+            (await store.GetAsync("srv1", "../../../etc/passwd")).Should().BeNull();
+            (await store.GetAsync("srv1", "..%2F..%2Fsecret")).Should().BeNull();
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task GetAsync_WithInvalidId_ReturnsNull()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            (await store.GetAsync("srv1", "")).Should().BeNull();
+            (await store.GetAsync("srv1", "abc.def")).Should().BeNull();
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
     public async Task SetActionsDirectory_SwitchesTheExchangeDirectory()
     {
         var store = CreateStore(out var dir);

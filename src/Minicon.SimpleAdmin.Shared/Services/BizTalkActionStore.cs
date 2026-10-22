@@ -115,7 +115,7 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
         await WriteJsonAtomicAsync(path, request, cancellationToken);
 
         _logger.LogInformation("BizTalk-Aktion angefordert: {Artifact} '{Target}' für Server '{Server}' (Id {Id})",
-            request.Artifact, request.TargetName, request.ServerId, request.Id);
+            request.Artifact, ForLog(request.TargetName), ForLog(request.ServerId), ForLog(request.Id));
 
         return request;
     }
@@ -137,8 +137,11 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
     /// <inheritdoc />
     public async Task<BizTalkActionView?> GetAsync(string serverId, string requestId, CancellationToken cancellationToken = default)
     {
-        var request = await ReadJsonAsync<BizTalkActionRequest>(
-            Path.Combine(ServerDir(RequestsRoot, serverId), requestId + ".json"), cancellationToken);
+        var requestPath = BuildFilePath(RequestsRoot, serverId, requestId);
+        if (requestPath == null)
+            return null;
+
+        var request = await ReadJsonAsync<BizTalkActionRequest>(requestPath, cancellationToken);
         if (request == null)
             return null;
 
@@ -213,6 +216,30 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
     private static string ServerDir(string root, string serverId)
         => Path.Combine(root, Sanitize(serverId));
 
+    /// <summary>
+    /// Builds the path of a request/result file. The id comes from the URL and must therefore
+    /// never influence the path beyond the file name: it is restricted to a safe character set
+    /// and the resulting path is verified to stay inside the exchange directory.
+    /// </summary>
+    private static string? BuildFilePath(string root, string serverId, string id)
+    {
+        if (!IsValidId(id))
+            return null;
+
+        var dir = Path.GetFullPath(ServerDir(root, serverId));
+        var full = Path.GetFullPath(Path.Combine(dir, id + ".json"));
+
+        var rootFull = Path.GetFullPath(root);
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        if (!full.StartsWith(rootFull + Path.DirectorySeparatorChar, comparison))
+            return null;
+
+        return full;
+    }
+
     /// <summary>Reduces a server id to a safe directory name (path separators, dots and spaces).</summary>
     private static string Sanitize(string value)
     {
@@ -220,6 +247,28 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
             char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '_').ToArray();
         var sanitized = new string(chars);
         return string.IsNullOrWhiteSpace(sanitized) ? "unknown" : sanitized;
+    }
+
+    /// <summary>
+    /// Checks that an id may be used as a file name: only letters, digits, hyphen and underscore.
+    /// Ids come from the URL and must never influence the path beyond the file name.
+    /// </summary>
+    private static bool IsValidId(string? value)
+        => !string.IsNullOrWhiteSpace(value)
+            && value.Length <= 64
+            && value.All(c => char.IsLetterOrDigit(c) || c is '-' or '_');
+
+    /// <summary>
+    /// Prepares a value for a log entry: line breaks would allow forging log lines, so they are
+    /// removed and the value is shortened.
+    /// </summary>
+    private static string ForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        var cleaned = value.Replace("\r", " ").Replace("\n", " ").Trim();
+        return cleaned.Length <= 120 ? cleaned : cleaned[..120];
     }
 
     private async Task<List<BizTalkActionRequest>> ReadRequestsAsync(string serverId, CancellationToken cancellationToken)
@@ -241,8 +290,13 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
     }
 
     private async Task<BizTalkActionResult?> ReadResultAsync(string serverId, string requestId, CancellationToken cancellationToken)
-        => await ReadJsonAsync<BizTalkActionResult>(
-            Path.Combine(ServerDir(ResultsRoot, serverId), requestId + ".json"), cancellationToken);
+    {
+        var path = BuildFilePath(ResultsRoot, serverId, requestId);
+        if (path == null)
+            return null;
+
+        return await ReadJsonAsync<BizTalkActionResult>(path, cancellationToken);
+    }
 
     private async Task<T?> ReadJsonAsync<T>(string path, CancellationToken cancellationToken) where T : class
     {
@@ -256,7 +310,9 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            _logger.LogWarning(ex, "BizTalk-Aktion: Datei '{Path}' konnte nicht gelesen werden", path);
+            // Only the file name goes into the log — the full path would carry user input.
+            _logger.LogWarning(ex, "BizTalk-Aktion: Datei '{File}' konnte nicht gelesen werden",
+                ForLog(Path.GetFileName(path)));
             return null;
         }
     }

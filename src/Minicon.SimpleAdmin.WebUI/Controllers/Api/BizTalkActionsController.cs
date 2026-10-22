@@ -77,6 +77,7 @@ public class BizTalkActionsController : ControllerBase
     /// status — the client cannot choose them.
     /// </summary>
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create([FromBody] CreateBizTalkActionRequest request)
     {
         EnsureActionsDirectory();
@@ -135,6 +136,7 @@ public class BizTalkActionsController : ControllerBase
     /// validated on its own; valid items are requested, invalid ones are reported back.
     /// </summary>
     [HttpPost("bulk")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateBulk([FromBody] BulkBizTalkActionRequest request)
     {
         EnsureActionsDirectory();
