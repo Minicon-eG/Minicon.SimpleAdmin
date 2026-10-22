@@ -164,12 +164,19 @@ else
                         // name come from the problem context (filled by the BizTalk checker).
                         string artifactKind = string.Empty;
                         string artifactName = string.Empty;
+                        string artifactParent = string.Empty;
                         if (problem.Type == "biztalk"
                             && problem.Context.TryGetValue("artifact", out var artifactValue) && artifactValue is string ak
                             && problem.Context.TryGetValue("name", out var nameValue) && nameValue is string an)
                         {
                             artifactKind = ak;
                             artifactName = an;
+
+                            // Orchestrations and receive locations are only unique together with
+                            // their application / receive port.
+                            var parentKey = ak == "orchestration" ? "applicationName" : ak == "receivelocation" ? "receivePortName" : null;
+                            if (parentKey != null && problem.Context.TryGetValue(parentKey, out var parentValue) && parentValue is string ap)
+                                artifactParent = ap;
                         }
 
                         var isBizTalk = !string.IsNullOrEmpty(artifactKind) && !string.IsNullOrEmpty(artifactName);
@@ -194,6 +201,7 @@ else
                                            data-server-id="@serverId" data-problem-id="@problem.Id" data-label="@title"
                                            data-artifact="@(isBizTalk ? artifactKind : "")"
                                            data-target-name="@(isBizTalk ? artifactName : "")"
+                                           data-target-parent="@(isBizTalk ? artifactParent : "")"
                                            aria-label="Problem auswählen" onchange="updateSelection()" />
                                 }
                             </td>
@@ -265,7 +273,7 @@ else
                                         @if (bizTalkActionsEnabled && isBizTalk)
                                         {
                                             <button type="button" class="btn btn-sm btn-outline-warning"
-                                                    data-server-id="@serverId" data-artifact="@artifactKind" data-target-name="@artifactName"
+                                                    data-server-id="@serverId" data-artifact="@artifactKind" data-target-name="@artifactName" data-target-parent="@artifactParent"
                                                     title="@bizTalkLabel — der Auftrag wird auf dem Zielserver ausgeführt"
                                                     onclick="deactivateBizTalk(this)">
                                                 <i class="bi bi-power me-1"></i>Deaktivieren

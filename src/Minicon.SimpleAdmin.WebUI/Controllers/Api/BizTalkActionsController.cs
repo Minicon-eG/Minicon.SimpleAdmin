@@ -108,7 +108,7 @@ public class BizTalkActionsController : ControllerBase
             return BadRequest(new { message = $"Für Server '{request.ServerId}' ist die BizTalk-Überwachung nicht aktiviert." });
         }
 
-        var (targetParent, canonicalName, error) = await ResolveTargetAsync(request.ServerId, artifact, request.TargetName);
+        var (targetParent, canonicalName, error) = await ResolveTargetAsync(request.ServerId, artifact, request.TargetName, request.TargetParent);
         if (error != null)
             return BadRequest(new { message = error });
 
@@ -176,7 +176,7 @@ public class BizTalkActionsController : ControllerBase
                 continue;
             }
 
-            var (targetParent, canonicalName, error) = await ResolveTargetAsync(item.ServerId, artifact, item.TargetName);
+            var (targetParent, canonicalName, error) = await ResolveTargetAsync(item.ServerId, artifact, item.TargetName, item.TargetParent);
             if (error != null)
             {
                 rejected.Add(new { serverId = item.ServerId, targetName = item.TargetName, reason = error });
@@ -216,11 +216,19 @@ public class BizTalkActionsController : ControllerBase
     /// not name an arbitrary running application or send port — only an element that the server
     /// actually reports as a problem can be deactivated.
     /// </para>
+    /// <para>
+    /// Orchestrations and receive locations are only unique together with their parent: two
+    /// applications can each contain an orchestration of the same name. The client passes the
+    /// parent shown in the problem list; it only narrows the match and is never used as is. When
+    /// the status still reports more than one distinct element, the request is refused instead of
+    /// picking one — the wrong element must never be stopped.
+    /// </para>
     /// </summary>
     private async Task<(string? TargetParent, string CanonicalName, string? Error)> ResolveTargetAsync(
         string serverId,
         BizTalkArtifactKind artifact,
-        string targetName)
+        string targetName,
+        string? targetParent)
     {
         var statusReader = _statusReader;
         var server = await statusReader.GetServerAsync(serverId);
@@ -229,30 +237,58 @@ public class BizTalkActionsController : ControllerBase
             return (null, string.Empty, $"Für Server '{serverId}' liegen keine BizTalk-Daten vor.");
 
         var artifactType = ArtifactTypeOf(artifact);
-        var match = bizTalk.Problems
-            .FirstOrDefault(a => string.Equals(a.ArtifactType, artifactType, StringComparison.OrdinalIgnoreCase) &&
-                                  string.Equals(a.Name, targetName.Trim(), StringComparison.OrdinalIgnoreCase));
+        var name = targetName.Trim();
+        var hasParent = artifact is BizTalkArtifactKind.Orchestration or BizTalkArtifactKind.ReceiveLocation;
+        var requestedParent = hasParent && !string.IsNullOrWhiteSpace(targetParent) ? targetParent.Trim() : null;
 
-        if (match == null)
+        // Distinct (name, parent) identities — the same element may appear more than once in the
+        // problem list without being ambiguous.
+        var matches = bizTalk.Problems
+            .Where(a => string.Equals(a.ArtifactType, artifactType, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase))
+            .Where(a => requestedParent == null ||
+                        string.Equals(ParentOf(artifact, a), requestedParent, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(a => (Name: a.Name.ToUpperInvariant(), Parent: hasParent ? ParentOf(artifact, a)?.ToUpperInvariant() : null))
+            .Select(g => g.First())
+            .ToList();
+
+        if (matches.Count == 0)
         {
             // The element is not in the problem list (any more) — the action cannot be assigned
             // unambiguously, so it is refused.
+            var location = requestedParent == null ? string.Empty : $" in '{requestedParent}'";
             return (null, string.Empty,
-                $"'{targetName.Trim()}' wird für Server '{serverId}' aktuell nicht als {LabelOf(artifact)} gemeldet — die Aktion kann nicht zugeordnet werden.");
+                $"'{name}'{location} wird für Server '{serverId}' aktuell nicht als {LabelOf(artifact)} gemeldet — die Aktion kann nicht zugeordnet werden.");
         }
 
+        if (matches.Count > 1)
+        {
+            var parents = string.Join(", ", matches.Select(m => $"'{ParentOf(artifact, m)}'"));
+            return (null, string.Empty,
+                $"'{name}' wird für Server '{serverId}' mehrfach als {LabelOf(artifact)} gemeldet ({parents}) — die Aktion ist nicht eindeutig und wird abgelehnt.");
+        }
+
+        var match = matches[0];
         var canonicalName = match.Name;
 
         // Applications and send ports have no parent; the API expects only their name.
-        if (artifact == BizTalkArtifactKind.Application || artifact == BizTalkArtifactKind.SendPort)
+        if (!hasParent)
             return (null, canonicalName, null);
 
-        var parent = artifact == BizTalkArtifactKind.Orchestration ? match.ApplicationName : match.ReceivePortName;
+        var parent = ParentOf(artifact, match);
         if (string.IsNullOrWhiteSpace(parent))
             return (null, string.Empty, $"Für '{canonicalName}' ist kein übergeordnetes Element bekannt.");
 
         return (parent, canonicalName, null);
     }
+
+    /// <summary>The parent the Management API needs: owning application or receive port.</summary>
+    private static string? ParentOf(BizTalkArtifactKind artifact, BizTalkArtifact element) => artifact switch
+    {
+        BizTalkArtifactKind.Orchestration => element.ApplicationName,
+        BizTalkArtifactKind.ReceiveLocation => element.ReceivePortName,
+        _ => null
+    };
 
     /// <summary>The artefact type as the checker publishes it in the problem list.</summary>
     private static string ArtifactTypeOf(BizTalkArtifactKind artifact) => artifact switch

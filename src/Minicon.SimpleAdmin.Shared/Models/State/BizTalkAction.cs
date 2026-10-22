@@ -132,6 +132,13 @@ public class BizTalkActionClaim
     /// action may have been executed, so it is never repeated automatically.
     /// </summary>
     public bool OutcomeUncertain { get; set; }
+
+    /// <summary>
+    /// True when a claim file exists but could not be read (e.g. empty or cut off because the
+    /// worker stopped while writing it). The request still counts as taken over; the claim time
+    /// is the time of the file.
+    /// </summary>
+    public bool Unreadable { get; set; }
 }
 
 /// <summary>

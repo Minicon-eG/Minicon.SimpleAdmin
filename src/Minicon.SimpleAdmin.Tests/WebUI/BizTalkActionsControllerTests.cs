@@ -260,4 +260,106 @@ public class BizTalkActionsControllerTests : IDisposable
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
+
+    // --- ambiguous names: the same name under different parents must never pick one ---
+
+    [Fact]
+    public async Task Create_WithDuplicateOrchestrationName_IsRejected()
+    {
+        PublishBizTalkStatus(
+            Artifact("orchestration", "Same.Orch", application: "AppA"),
+            Artifact("orchestration", "Same.Orch", application: "AppB"));
+
+        var result = await CreateController().Create(new CreateBizTalkActionRequest
+        {
+            ServerId = "srv1",
+            Artifact = "Orchestration",
+            TargetName = "Same.Orch"
+        });
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        (await _store.ListAsync("srv1")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_WithDuplicateOrchestrationNameAndParent_TakesTheNamedParent()
+    {
+        PublishBizTalkStatus(
+            Artifact("orchestration", "Same.Orch", application: "AppA"),
+            Artifact("orchestration", "Same.Orch", application: "AppB"));
+
+        var result = await CreateController().Create(new CreateBizTalkActionRequest
+        {
+            ServerId = "srv1",
+            Artifact = "orchestration",
+            TargetName = "Same.Orch",
+            TargetParent = "appb"
+        });
+
+        result.Should().BeOfType<AcceptedResult>();
+        var actions = await _store.ListAsync("srv1");
+        actions.Should().ContainSingle();
+        actions[0].Request.TargetParent.Should().Be("AppB");
+    }
+
+    [Fact]
+    public async Task Create_WithParentThatIsNotReported_IsRejected()
+    {
+        PublishBizTalkStatus(Artifact("receivelocation", "Loc1", receivePort: "PortA"));
+
+        var result = await CreateController().Create(new CreateBizTalkActionRequest
+        {
+            ServerId = "srv1",
+            Artifact = "receivelocation",
+            TargetName = "Loc1",
+            TargetParent = "PortB"
+        });
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        (await _store.ListAsync("srv1")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_WithSameElementReportedTwice_IsAccepted()
+    {
+        // The same element listed twice is not ambiguous — it is one target.
+        PublishBizTalkStatus(
+            Artifact("receivelocation", "Loc1", receivePort: "PortA"),
+            Artifact("receivelocation", "Loc1", receivePort: "PortA"));
+
+        var result = await CreateController().Create(new CreateBizTalkActionRequest
+        {
+            ServerId = "srv1",
+            Artifact = "receivelocation",
+            TargetName = "Loc1"
+        });
+
+        result.Should().BeOfType<AcceptedResult>();
+        (await _store.ListAsync("srv1")).Single().Request.TargetParent.Should().Be("PortA");
+    }
+
+    [Fact]
+    public async Task CreateBulk_RejectsAmbiguousItemsAndKeepsTheUniqueOnes()
+    {
+        PublishBizTalkStatus(
+            Artifact("receivelocation", "Same.Loc", receivePort: "PortA"),
+            Artifact("receivelocation", "Same.Loc", receivePort: "PortB"),
+            Artifact("orchestration", "Same.Orch", application: "AppA"),
+            Artifact("orchestration", "Same.Orch", application: "AppB"));
+
+        var result = await CreateController().CreateBulk(new BulkBizTalkActionRequest
+        {
+            Items = new List<CreateBizTalkActionRequest>
+            {
+                new() { ServerId = "srv1", Artifact = "receivelocation", TargetName = "Same.Loc" },
+                new() { ServerId = "srv1", Artifact = "orchestration", TargetName = "Same.Orch", TargetParent = "AppB" }
+            }
+        });
+
+        result.Should().BeOfType<OkObjectResult>();
+        var actions = await _store.ListAsync("srv1");
+        actions.Should().ContainSingle();
+        actions[0].Request.TargetName.Should().Be("Same.Orch");
+        actions[0].Request.TargetParent.Should().Be("AppB");
+    }
 }

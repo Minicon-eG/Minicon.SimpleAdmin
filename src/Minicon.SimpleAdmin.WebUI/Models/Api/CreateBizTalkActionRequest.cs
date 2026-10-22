@@ -16,6 +16,13 @@ public class CreateBizTalkActionRequest
     /// <summary>The name of the artefact (as shown in the problem message).</summary>
     public string TargetName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional parent as shown in the problem list: the application of an orchestration or the
+    /// receive port of a receive location. Only narrows the match in the published status — the
+    /// parent that is requested always comes from the status.
+    /// </summary>
+    public string? TargetParent { get; set; }
+
     /// <summary>Who requests the action (falls back to the authenticated Windows user).</summary>
     public string? RequestedBy { get; set; }
 

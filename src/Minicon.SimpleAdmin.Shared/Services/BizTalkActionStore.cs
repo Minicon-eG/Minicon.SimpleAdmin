@@ -169,7 +169,7 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
             return null;
 
         var request = await ReadJsonAsync<BizTalkActionRequest>(requestPath, cancellationToken);
-        if (request == null)
+        if (request == null || !IsOwnedBy(request.ServerId, request.Id, serverId, requestId, "Auftrag"))
             return null;
 
         var result = await ReadResultAsync(serverId, requestId, cancellationToken);
@@ -339,23 +339,49 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
     // --- internals ---
 
     /// <summary>
-    /// Directory of one server inside a root folder. The name carries a hash of the exact server
-    /// id, so two different ids can never share a folder ("bt.prod" and "bt_prod" would both
-    /// reduce to "bt_prod" otherwise) and the mapping stays stable across processes.
+    /// Directory of one server inside a root folder. The name carries the full SHA-256 of the
+    /// exact server id, so two different ids never share a folder ("bt.prod" and "bt_prod" would
+    /// both reduce to "bt_prod" otherwise) and the mapping stays stable across processes. The
+    /// folder is still only an address: every file read from it is checked against the server
+    /// and request id it is read for.
     /// </summary>
     private static string ServerDir(string root, string serverId)
         => Path.Combine(root, ServerDirName(serverId));
 
     /// <summary>
-    /// The folder name of one server: the readable part plus a short hash of the exact id.
+    /// The folder name of one server: the (shortened) readable part plus the full SHA-256 of the
+    /// exact id. A shortened hash is not enough — 32 bits collide for real server ids.
     /// Internal so the tests can assert the layout.
     /// </summary>
     internal static string ServerDirName(string serverId)
     {
-        var readable = Sanitize(serverId);
+        var readable = Sanitize(serverId ?? string.Empty);
+        if (readable.Length > MaxReadableDirLength)
+            readable = readable[..MaxReadableDirLength];
+
         var hash = Convert.ToHexString(
-            SHA256.HashData(Encoding.UTF8.GetBytes(serverId ?? string.Empty)))[..8].ToLowerInvariant();
+            SHA256.HashData(Encoding.UTF8.GetBytes(serverId ?? string.Empty))).ToLowerInvariant();
         return $"{readable}-{hash}";
+    }
+
+    /// <summary>Length limit of the readable part of a server folder (keeps paths short on SMB shares).</summary>
+    private const int MaxReadableDirLength = 40;
+
+    /// <summary>
+    /// Checks that a file read for (<paramref name="serverId"/>, <paramref name="requestId"/>)
+    /// really belongs to it. The folder and file name are only derived from the ids; the ids
+    /// inside the file are authoritative.
+    /// </summary>
+    private bool IsOwnedBy(string? fileServerId, string? fileRequestId, string serverId, string requestId, string kind)
+    {
+        if (string.Equals(fileServerId, serverId, StringComparison.Ordinal) &&
+            string.Equals(fileRequestId, requestId, StringComparison.Ordinal))
+            return true;
+
+        _logger.LogWarning(
+            "BizTalk-Aktion: {Kind} '{Id}' im Ordner von Server '{Server}' gehoert zu Server '{Owner}' / Auftrag '{OwnerId}' — wird ignoriert",
+            kind, ForLog(requestId), ForLog(serverId), ForLog(fileServerId), ForLog(fileRequestId));
+        return false;
     }
 
     /// <summary>
@@ -428,14 +454,11 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
                 continue;
 
             // The folder name is derived from the server id, but the file itself is authoritative:
-            // a request that belongs to a different server must never be executed here.
-            if (!string.Equals(request.ServerId, serverId, StringComparison.Ordinal))
-            {
-                _logger.LogWarning(
-                    "BizTalk-Aktion: Auftrag im Ordner von Server '{Server}' gehoert zu Server '{Owner}' — wird uebersprungen",
-                    ForLog(serverId), ForLog(request.ServerId));
+            // a request that belongs to a different server (or carries a different id than its
+            // file name) must never be executed here.
+            if (!IsValidId(request.Id) ||
+                !IsOwnedBy(request.ServerId, request.Id, serverId, Path.GetFileNameWithoutExtension(file), "Auftrag"))
                 continue;
-            }
 
             requests.Add(request);
         }
@@ -449,16 +472,51 @@ public sealed class BizTalkActionStore : IBizTalkActionStore
         if (path == null)
             return null;
 
-        return await ReadJsonAsync<BizTalkActionResult>(path, cancellationToken);
+        var result = await ReadJsonAsync<BizTalkActionResult>(path, cancellationToken);
+        return result != null && IsOwnedBy(result.ServerId, result.RequestId, serverId, requestId, "Ergebnis")
+            ? result
+            : null;
     }
 
+    /// <summary>
+    /// Reads the claim of a request. A claim file that exists but cannot be read — empty or cut
+    /// off because the worker died while writing it, locked, or belonging to another request — is
+    /// still a claim: the request may already be executing, so it must not be handed out again.
+    /// Such a claim is reported with the file time as claim time, so it turns into
+    /// <see cref="BizTalkActionState.Uncertain"/> once <see cref="BizTalkActionView.ClaimStaleAfter"/>
+    /// has passed.
+    /// </summary>
     private async Task<BizTalkActionClaim?> ReadClaimAsync(string serverId, string requestId, CancellationToken cancellationToken)
     {
         var path = BuildFilePath(ClaimsRoot, serverId, requestId);
-        if (path == null)
+        if (path == null || !File.Exists(path))
             return null;
 
-        return await ReadJsonAsync<BizTalkActionClaim>(path, cancellationToken);
+        var claim = await ReadJsonAsync<BizTalkActionClaim>(path, cancellationToken);
+        if (claim != null && IsOwnedBy(claim.ServerId, claim.RequestId, serverId, requestId, "Claim"))
+            return claim;
+
+        return new BizTalkActionClaim
+        {
+            RequestId = requestId,
+            ServerId = serverId,
+            WorkerId = string.Empty,
+            ClaimedAt = LastWriteTimeUtcOrNow(path),
+            Unreadable = true
+        };
+    }
+
+    /// <summary>Time of the last write of a file; now when it cannot be determined (keeps the claim fresh).</summary>
+    private static DateTime LastWriteTimeUtcOrNow(string path)
+    {
+        try
+        {
+            return File.GetLastWriteTimeUtc(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return DateTime.UtcNow;
+        }
     }
 
     private async Task<T?> ReadJsonAsync<T>(string path, CancellationToken cancellationToken) where T : class

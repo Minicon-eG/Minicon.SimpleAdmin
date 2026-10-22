@@ -40,7 +40,7 @@
 
 <script>
     let bizTalkDeactivateModal;
-    // The elements the open dialog applies to: [{ serverId, artifact, targetName }]
+    // The elements the open dialog applies to: [{ serverId, artifact, targetName, targetParent }]
     let bizTalkDeactivateTargets = [];
     const bizTalkActionsApiUrl = '@Url.Content("~/api/biztalkactions")';
 
@@ -64,7 +64,8 @@
         const list = document.getElementById('bizTalkDeactivateList');
         list.replaceChildren(...targets.map(t => {
             const li = document.createElement('li');
-            li.textContent = artifactLabel(t.artifact) + ' „' + t.targetName + '“ (' + t.serverId + ')';
+            li.textContent = artifactLabel(t.artifact) + ' „' + t.targetName + '“'
+                + (t.targetParent ? ' in „' + t.targetParent + '“' : '') + ' (' + t.serverId + ')';
             return li;
         }));
 
@@ -76,7 +77,12 @@
         const artifact = button.dataset.artifact;
         const targetName = button.dataset.targetName;
         if (!artifact || !targetName) return;
-        openBizTalkDeactivateModal([{ serverId: button.dataset.serverId, artifact: artifact, targetName: targetName }]);
+        openBizTalkDeactivateModal([{
+            serverId: button.dataset.serverId,
+            artifact: artifact,
+            targetName: targetName,
+            targetParent: button.dataset.targetParent || null
+        }]);
     }
 
     function deactivateSelected() {
@@ -85,7 +91,8 @@
             .map(cb => ({
                 serverId: cb.dataset.serverId,
                 artifact: cb.dataset.artifact,
-                targetName: cb.dataset.targetName
+                targetName: cb.dataset.targetName,
+                targetParent: cb.dataset.targetParent || null
             }));
         if (targets.length === 0) {
             alert('Es sind keine BizTalk-Elemente ausgewählt.');

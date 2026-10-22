@@ -330,4 +330,166 @@ public class BizTalkActionStoreTests
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
+
+    // --- unreadable claims: a claim file that exists always blocks the request ---
+
+    private static string ClaimPath(string dir, string serverId, string requestId)
+    {
+        var folder = Path.Combine(dir, "claims", BizTalkActionStore.ServerDirName(serverId));
+        Directory.CreateDirectory(folder);
+        return Path.Combine(folder, requestId + ".json");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("{")]
+    [InlineData("{\"requestId\": \"abc")]
+    public async Task UnreadableClaim_BlocksTheRequest_AndTurnsUncertainWhenStale(string content)
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            var request = new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "App" };
+            await store.RequestAsync(request);
+            var path = ClaimPath(dir, "srv1", request.Id);
+            await File.WriteAllTextAsync(path, content);
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-20));
+
+            (await store.GetPendingAsync("srv1")).Should().BeEmpty();
+            (await store.ClaimAsync("srv1", request.Id, "second")).Should().BeNull();
+
+            var view = await store.GetAsync("srv1", request.Id);
+            view!.Claim!.Unreadable.Should().BeTrue();
+            view.State.Should().Be(BizTalkActionState.Uncertain);
+            (await store.ListAsync("srv1")).Single().State.Should().Be(BizTalkActionState.Uncertain);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task FreshUnreadableClaim_IsShownAsRunning()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            var request = new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "App" };
+            await store.RequestAsync(request);
+            await File.WriteAllTextAsync(ClaimPath(dir, "srv1", request.Id), string.Empty);
+
+            (await store.GetPendingAsync("srv1")).Should().BeEmpty();
+            (await store.GetAsync("srv1", request.Id))!.State.Should().Be(BizTalkActionState.Running);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ClaimAborted_WhileWriting_KeepsTheRequestBlocked()
+    {
+        // The worker stops after the claim file was created but before it was written
+        // (here: cancelled). The request must not be handed out again.
+        var store = CreateStore(out var dir);
+        try
+        {
+            var request = new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "App" };
+            await store.RequestAsync(request);
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            var claim = () => store.ClaimAsync("srv1", request.Id, "first", cts.Token);
+            await claim.Should().ThrowAsync<OperationCanceledException>();
+
+            File.Exists(ClaimPath(dir, "srv1", request.Id)).Should().BeTrue();
+            (await store.GetPendingAsync("srv1")).Should().BeEmpty();
+            (await store.ClaimAsync("srv1", request.Id, "second")).Should().BeNull();
+            (await store.GetAsync("srv1", request.Id))!.Claim!.Unreadable.Should().BeTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    // --- server separation: folders are only an address, the file content is authoritative ---
+
+    private const string CollidingServerA = "bt.._._._._.__._._____prod";
+    private const string CollidingServerB = "bt..____._..___.__.___prod";
+
+    [Fact]
+    public void ServerDirName_SeparatesIdsWhoseShortHashCollides()
+    {
+        // Both ids reduce to the same readable name and share the SHA-256 prefix fce38590.
+        BizTalkActionStore.ServerDirName(CollidingServerA)
+            .Should().NotBe(BizTalkActionStore.ServerDirName(CollidingServerB));
+    }
+
+    [Fact]
+    public async Task CollidingServer_DoesNotSeeTheForeignRequest()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            var request = new BizTalkActionRequest { ServerId = CollidingServerA, Artifact = BizTalkArtifactKind.Application, TargetName = "App" };
+            await store.RequestAsync(request);
+
+            (await store.GetPendingAsync(CollidingServerB)).Should().BeEmpty();
+            (await store.ListAsync(CollidingServerB)).Should().BeEmpty();
+            (await store.GetAsync(CollidingServerB, request.Id)).Should().BeNull();
+            (await store.GetAsync(CollidingServerA, request.Id)).Should().NotBeNull();
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ForeignFilesInTheServerFolder_AreNotAttributedToTheServer()
+    {
+        // Simulates a shared folder (old layout, manual copy): the files of srv2 lie in the
+        // folder of srv1. Request, claim and result must all be checked against their owner.
+        var store = CreateStore(out var dir);
+        try
+        {
+            var foreign = new BizTalkActionRequest { ServerId = "srv2", Artifact = BizTalkArtifactKind.Application, TargetName = "App" };
+            await store.RequestAsync(foreign);
+            await store.SaveResultAsync(new BizTalkActionResult { ServerId = "srv2", RequestId = foreign.Id, State = BizTalkActionState.Succeeded });
+
+            foreach (var root in new[] { "requests", "results" })
+            {
+                var from = Path.Combine(dir, root, BizTalkActionStore.ServerDirName("srv2"), foreign.Id + ".json");
+                var to = Path.Combine(dir, root, BizTalkActionStore.ServerDirName("srv1"), foreign.Id + ".json");
+                Directory.CreateDirectory(Path.GetDirectoryName(to)!);
+                File.Move(from, to);
+            }
+
+            (await store.GetAsync("srv1", foreign.Id)).Should().BeNull();
+            (await store.GetPendingAsync("srv1")).Should().BeEmpty();
+
+            // An own request with a foreign result and claim: the result is ignored, the claim
+            // still blocks the request (conservative).
+            var own = new BizTalkActionRequest { ServerId = "srv1", Artifact = BizTalkArtifactKind.Application, TargetName = "App" };
+            await store.RequestAsync(own);
+            var resultDir = Path.Combine(dir, "results", BizTalkActionStore.ServerDirName("srv1"));
+            await File.WriteAllTextAsync(Path.Combine(resultDir, own.Id + ".json"),
+                $"{{\"requestId\":\"{own.Id}\",\"serverId\":\"srv2\",\"state\":\"succeeded\"}}");
+            await File.WriteAllTextAsync(ClaimPath(dir, "srv1", own.Id),
+                $"{{\"requestId\":\"other\",\"serverId\":\"srv1\",\"workerId\":\"w\",\"claimedAt\":\"{DateTime.UtcNow:O}\"}}");
+
+            var view = await store.GetAsync("srv1", own.Id);
+            view!.Result.Should().BeNull();
+            view.Claim!.Unreadable.Should().BeTrue();
+            view.State.Should().Be(BizTalkActionState.Running);
+            (await store.GetPendingAsync("srv1")).Should().BeEmpty();
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
 }
