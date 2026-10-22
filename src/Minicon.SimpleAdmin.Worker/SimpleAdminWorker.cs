@@ -39,6 +39,8 @@ public class SimpleAdminWorker
     private readonly IEventLogChecker _eventLogChecker;
     private readonly ICertificateChecker _certificateChecker;
     private readonly IBizTalkChecker _bizTalkChecker;
+    private readonly IBizTalkActionExecutor _bizTalkActionExecutor;
+    private readonly BizTalkActionStore _bizTalkActionStore;
     private readonly IFileMonitoringChecker _fileMonitoringChecker;
     private readonly SqlQueryChecker _sqlQueryChecker;
     private readonly IEmailProbeSender _emailProbeSender;
@@ -61,6 +63,8 @@ public class SimpleAdminWorker
         IEventLogChecker eventLogChecker,
         ICertificateChecker certificateChecker,
         IBizTalkChecker bizTalkChecker,
+        IBizTalkActionExecutor bizTalkActionExecutor,
+        BizTalkActionStore bizTalkActionStore,
         IFileMonitoringChecker fileMonitoringChecker,
         SqlQueryChecker sqlQueryChecker,
         IEmailProbeSender emailProbeSender,
@@ -82,6 +86,8 @@ public class SimpleAdminWorker
         _eventLogChecker = eventLogChecker;
         _certificateChecker = certificateChecker;
         _bizTalkChecker = bizTalkChecker;
+        _bizTalkActionExecutor = bizTalkActionExecutor;
+        _bizTalkActionStore = bizTalkActionStore;
         _fileMonitoringChecker = fileMonitoringChecker;
         _sqlQueryChecker = sqlQueryChecker;
         _emailProbeSender = emailProbeSender;
@@ -298,6 +304,35 @@ public class SimpleAdminWorker
                     bizTalkState.ApiReachable, bizTalkState.Problems.Count, bizTalkState.SuspendedTotal);
         }
         catch (Exception ex) { _logger.LogError(ex, "Error checking BizTalk"); }
+
+        // Execute the BizTalk deactivation requests the WebUI has written for this server.
+        // Runs after the status check so the next cycle already reflects the new state.
+        if (features.BizTalk.Enabled && features.BizTalk.ActionsEnabled && biztalkCfg?.Enabled == true)
+        {
+            try
+            {
+                _bizTalkActionStore.SetActionsDirectory(features.BizTalk.ActionsDirectory);
+                var actionResults = await _bizTalkActionExecutor.ExecutePendingAsync(
+                    currentServer.Name,
+                    biztalkCfg.BaseUrl);
+
+                if (actionResults.Count > 0)
+                {
+                    _logger.LogInformation("    BizTalk-Aktionen: {Count} ausgeführt ({Succeeded} erfolgreich, {Failed} fehlgeschlagen)",
+                        actionResults.Count,
+                        actionResults.Count(r => r.State == Models.State.BizTalkActionState.Succeeded),
+                        actionResults.Count(r => r.State == Models.State.BizTalkActionState.Failed));
+                }
+
+                // Remove requests and results that are older than a day, so the exchange
+                // directory does not grow without bounds.
+                await _bizTalkActionStore.CleanupAsync(TimeSpan.FromDays(1));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing BizTalk actions");
+            }
+        }
 
         FileMonitoringState? fileMonitoringState = null;
         try

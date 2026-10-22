@@ -48,11 +48,14 @@ public sealed class BizTalkChecker(IBizTalkApiClient apiClient, ILogger<BizTalkC
             };
 
             state.Problems.AddRange(EvaluateArtifacts("application",
-                apps.Select(a => (a.Name ?? string.Empty, a.Status ?? string.Empty, a.IsSystem)), config.Applications));
+                apps.Select(a => (a.Name ?? string.Empty, a.Status ?? string.Empty, a.IsSystem, (string?)null)),
+                config.Applications));
             state.Problems.AddRange(EvaluateArtifacts("orchestration",
-                orchestrations.Select(o => (o.FullName ?? string.Empty, o.Status ?? string.Empty, false)), config.Orchestrations));
+                orchestrations.Select(o => (o.FullName ?? string.Empty, o.Status ?? string.Empty, false, o.ApplicationName)),
+                config.Orchestrations));
             state.Problems.AddRange(EvaluateArtifacts("sendport",
-                sendPorts.Select(s => (s.Name ?? string.Empty, s.Status ?? string.Empty, false)), config.SendPorts));
+                sendPorts.Select(s => (s.Name ?? string.Empty, s.Status ?? string.Empty, false, (string?)null)),
+                config.SendPorts));
             state.Problems.AddRange(EvaluateReceiveLocations(receiveLocations, config.ReceiveLocations));
 
             if (config.SuspendedInstances.Enabled)
@@ -71,20 +74,40 @@ public sealed class BizTalkChecker(IBizTalkApiClient apiClient, ILogger<BizTalkC
 
     internal static IEnumerable<BizTalkArtifact> EvaluateArtifacts(
         string artifactType,
-        IEnumerable<(string Name, string Status, bool IsSystem)> items,
+        IEnumerable<(string Name, string Status, bool IsSystem, string? ApplicationName)> items,
         BizTalkArtifactMonitor monitor)
     {
         if (string.Equals(monitor.Monitor, "none", StringComparison.OrdinalIgnoreCase))
             yield break;
 
-        foreach (var (name, status, isSystem) in items)
+        foreach (var (name, status, isSystem, applicationName) in items)
         {
             if (string.IsNullOrEmpty(name) || !IsMonitored(name, isSystem, monitor))
                 continue;
             if (!IsStarted(status))
-                yield return new BizTalkArtifact { ArtifactType = artifactType, Name = name, Status = status, IsCritical = true };
+                yield return new BizTalkArtifact
+                {
+                    ArtifactType = artifactType,
+                    Name = name,
+                    Status = status,
+                    IsCritical = true,
+                    ApplicationName = applicationName
+                };
         }
     }
+
+    /// <summary>
+    /// Overload without the owning application — used for artefacts that do not belong to an
+    /// application (applications, send ports).
+    /// </summary>
+    internal static IEnumerable<BizTalkArtifact> EvaluateArtifacts(
+        string artifactType,
+        IEnumerable<(string Name, string Status, bool IsSystem)> items,
+        BizTalkArtifactMonitor monitor)
+        => EvaluateArtifacts(
+            artifactType,
+            items.Select(i => (i.Name, i.Status, i.IsSystem, (string?)null)),
+            monitor);
 
     internal static IEnumerable<BizTalkArtifact> EvaluateReceiveLocations(
         IEnumerable<BtReceiveLocation> receiveLocations,
@@ -102,7 +125,14 @@ public sealed class BizTalkChecker(IBizTalkApiClient apiClient, ILogger<BizTalkC
             {
                 var critical = string.Equals(monitor.DisabledSeverity, "Critical", StringComparison.OrdinalIgnoreCase)
                                || monitor.CriticalList.Contains(name, StringComparer.OrdinalIgnoreCase);
-                yield return new BizTalkArtifact { ArtifactType = "receivelocation", Name = name, Status = "Disabled", IsCritical = critical };
+                yield return new BizTalkArtifact
+                {
+                    ArtifactType = "receivelocation",
+                    Name = name,
+                    Status = "Disabled",
+                    IsCritical = critical,
+                    ReceivePortName = rl.ReceivePortName
+                };
             }
         }
     }

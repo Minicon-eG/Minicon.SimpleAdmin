@@ -1,0 +1,130 @@
+@* Confirmation dialog for the BizTalk deactivation actions (single element and group).
+   Entry points: deactivateBizTalk(button), deactivateSelected(). *@
+
+<div class="modal fade" id="bizTalkDeactivateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bizTalkDeactivateTitle">BizTalk-Elemente deaktivieren</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-body-secondary mb-2">
+                    Der Auftrag wird an den Zielserver weitergeleitet und dort ausgeführt. Erst nach der
+                    Ausführung durch den Server ist das Element deaktiviert.
+                </p>
+                <ul class="small mb-3" id="bizTalkDeactivateList"></ul>
+                <div class="mb-3">
+                    <label for="bizTalkDeactivateComment" class="form-label">Grund (optional)</label>
+                    <textarea class="form-control" id="bizTalkDeactivateComment" rows="2"
+                              placeholder="z. B. Störung, Wartungsfenster …"></textarea>
+                </div>
+                <div class="alert alert-warning small mb-0 py-2">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Angewendete Orchestrierungen und Sendeports nehmen keine Nachrichten mehr an.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-warning" onclick="submitBizTalkDeactivation()">
+                    <i class="bi bi-power me-1"></i>Deaktivieren
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let bizTalkDeactivateModal;
+    // The elements the open dialog applies to: [{ serverId, artifact, targetName }]
+    let bizTalkDeactivateTargets = [];
+    const bizTalkActionsApiUrl = '@Url.Content("~/api/biztalkactions")';
+
+    function artifactLabel(artifact) {
+        switch (artifact) {
+            case 'application': return 'Anwendung';
+            case 'orchestration': return 'Orchestrierung';
+            case 'sendport': return 'Sendeport';
+            case 'receivelocation': return 'Empfangsort';
+            default: return artifact;
+        }
+    }
+
+    function openBizTalkDeactivateModal(targets) {
+        bizTalkDeactivateTargets = targets;
+        document.getElementById('bizTalkDeactivateTitle').textContent =
+            targets.length > 1
+                ? targets.length + ' BizTalk-Elemente deaktivieren'
+                : 'BizTalk-Element deaktivieren';
+
+        const list = document.getElementById('bizTalkDeactivateList');
+        list.replaceChildren(...targets.map(t => {
+            const li = document.createElement('li');
+            li.textContent = artifactLabel(t.artifact) + ' „' + t.targetName + '“ (' + t.serverId + ')';
+            return li;
+        }));
+
+        bizTalkDeactivateModal = bizTalkDeactivateModal || new bootstrap.Modal(document.getElementById('bizTalkDeactivateModal'));
+        bizTalkDeactivateModal.show();
+    }
+
+    function deactivateBizTalk(button) {
+        const artifact = button.dataset.artifact;
+        const targetName = button.dataset.targetName;
+        if (!artifact || !targetName) return;
+        openBizTalkDeactivateModal([{ serverId: button.dataset.serverId, artifact: artifact, targetName: targetName }]);
+    }
+
+    function deactivateSelected() {
+        const targets = selectedProblemBoxes()
+            .filter(cb => cb.dataset.artifact && cb.dataset.targetName)
+            .map(cb => ({
+                serverId: cb.dataset.serverId,
+                artifact: cb.dataset.artifact,
+                targetName: cb.dataset.targetName
+            }));
+        if (targets.length === 0) {
+            alert('Es sind keine BizTalk-Elemente ausgewählt.');
+            return;
+        }
+        openBizTalkDeactivateModal(targets);
+    }
+
+    async function submitBizTalkDeactivation() {
+        if (bizTalkDeactivateTargets.length === 0) return;
+
+        const comment = document.getElementById('bizTalkDeactivateComment').value;
+        const single = bizTalkDeactivateTargets.length === 1;
+
+        try {
+            const response = await fetch(single ? bizTalkActionsApiUrl : bizTalkActionsApiUrl + '/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(single
+                    ? { ...bizTalkDeactivateTargets[0], comment: comment }
+                    : { items: bizTalkDeactivateTargets, comment: comment })
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                alert('Der Deaktivierungsauftrag konnte nicht angelegt werden' + (err.message ? ': ' + err.message : ''));
+                return;
+            }
+
+            const result = await response.json().catch(() => ({}));
+            const rejected = result.rejected || [];
+
+            bizTalkDeactivateModal.hide();
+
+            if (rejected.length > 0) {
+                alert(rejected.length + ' Element(e) konnten nicht beauftragt werden:\n'
+                    + rejected.map(r => r.targetName + ': ' + r.reason).join('\n'));
+            }
+
+            location.reload();
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Der Deaktivierungsauftrag konnte nicht angelegt werden');
+        }
+    }
+</script>
