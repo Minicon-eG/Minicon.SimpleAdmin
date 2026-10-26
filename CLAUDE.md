@@ -28,7 +28,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.35.0`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.36.0`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
@@ -39,9 +39,12 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 - Every package additionally ships its project files under `sources/` (copied via `obj/simpleadmin-sources/` because NuGet drops `Content` items with `Pack=false`, which Razor sets on all `.cshtml`) and the shared files (`Directory.Build.props`, `build/`, README, LICENSE) under `sources-root/`.
 - `src/build/Minicon.SimpleAdmin.Sources.targets` is packed as `buildTransitive/<PackageId>.targets`: on build, the host extracts every referenced SimpleAdmin package to `SimpleAdmin.Sources/<PackageId>/` (re-extracted only when the package path/version changes, marker `.simpleadmin-package`; local edits are overwritten on upgrade). The folder is added to `DefaultItemExcludes`, so the host keeps compiling against the package DLLs. Opt-out: `<SimpleAdminExtractSources>false</SimpleAdminExtractSources>`, target folder: `SimpleAdminSourcesDirectory`.
 - Customer namespace: `<SimpleAdminSourcesNamespace>Kunde.Monitoring</SimpleAdminSourcesNamespace>` replaces the token `Minicon.SimpleAdmin` (whole identifier, not after `Minicon-eG/`) in text files and in file/folder names during extraction (inline `RoslynCodeTaskFactory` task — netstandard2.0, so no `Path.GetRelativePath`). Namespaces, project names, `_content/<PackageId>` paths and logger categories stay consistent; LICENSE, `Authors` and repository URLs are kept. Keep `Minicon.SimpleAdmin` as the only spelling of the prefix in code so the rename stays complete.
+- Test project (v2.36.0): the **Worker** package additionally packs `src/Minicon.SimpleAdmin.Tests` (without bin/obj/TestResults) under `sources-tests/` (target `_SimpleAdminPackTestSources` in `Directory.Build.props`). With `<SimpleAdminExtractTests>true</SimpleAdminExtractTests>` (default false) the host extracts it to `<SimpleAdminSourcesDirectory>/<Prefix>.Tests/` (own marker, renamed like the rest incl. `InternalsVisibleTo`). It references all six projects, so Worker and WebUI host must share one `SimpleAdminSourcesDirectory` (e.g. `../SimpleAdmin.Sources`); the build warns when the WebUI sources are missing there. Verified end-to-end: packed → two hosts with `Kunde.Monitoring` → `dotnet test` on the extracted project passes. Keep tests free of repo-relative paths so they keep working when extracted.
 
 ### Release Notes
-- `CHANGELOG.md` (repo root, German, newest first, Keep-a-Changelog style: `## [X.Y.Z] – date – headline` with `### Neu / Geändert / Behoben / Intern`) is the changelog of record and **must** get an entry in every release commit. The GitHub Release notes are extracted from that section (see `.claude/skills/release/SKILL.md`).
+- `CHANGELOG.md` (repo root, German, newest first, Keep-a-Changelog style: `## [X.Y.Z] – date – headline` with `### Neu / Geändert / Behoben / Sicherheit / Performance / Hinweise / Entwickler / Intern`) is the changelog of record and **must** get an entry in every release commit. The GitHub Release notes are extracted from that section (see `.claude/skills/release/SKILL.md`).
+- **Two audiences (v2.36.0)**: the WebUI page „Neuigkeiten“ shows headline, bold summary and every section except `Entwickler`/`Intern`. Those user sections (and headline/summary) must describe only what a WebUI user notices, in plain German — no package/host/REST/config-key/dependency/test/build details. Technical content goes to `### Entwickler` (operators/integrators: config keys, appsettings, hosts, REST, dependencies) or `### Intern` (refactorings, tests). A release with only technical changes gets a neutral headline (e.g. „Technische Korrekturen“).
+- **In the WebUI (v2.36.0)**: `CHANGELOG.md` is embedded into the WebUI DLL (`EmbeddedResource` via `$(_SimpleAdminRepoRoot)`, LogicalName `Minicon.SimpleAdmin.WebUI.CHANGELOG.md`; every package also ships it in `sources-root/` so hosts built from extracted sources have it). `ChangelogParser` (Markdown subset, HTML-encoded, only http(s)/relative links) + `ChangelogProvider` (singleton, cached) → `DocumentationController.Changelog` / `Views/Documentation/Changelog.cshtml`. Footer version links there; `site.js` shows a „Neu“ pill when the installed version is newer than `localStorage['sa-seen-version']` and marks newer releases on the page. The test `Provider_EmbeddedChangelog_ContainsTheInstalledVersion` fails when the newest CHANGELOG entry ≠ package version — write the entry before running the tests of a release.
 
 ### Publishing
 - Trusted Publishing to nuget.org is configured via GitHub Actions (`Add NuGet publish workflow (Trusted Publishing)` commit). The workflow publishes all seven packages on release.
@@ -155,7 +158,7 @@ Razor Class Library. The host application provides only the entry point + appset
 | `/Environments` | `EnvironmentsController` | Environment matrix |
 | `/Servers` | `ServersController` | CRUD for server config + service types |
 | `/Settings` | `SettingsController` | History, Output, Features, Time Profile settings |
-| `/Documentation` | `DocumentationController` | Built-in docs page |
+| `/Documentation` | `DocumentationController` | Built-in docs page; `/Documentation/Changelog` = „Neuigkeiten“ (release notes, v2.36.0) |
 | `/Scripts` | `ScriptsController` | PowerShell script runner (v2.31.0, see below) |
 
 ### REST API (all under `/api/...`)

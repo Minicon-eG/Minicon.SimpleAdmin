@@ -132,6 +132,7 @@
                     <li><a href="#console-app">Konsolenanwendung</a></li>
                     <li><a href="#workflow">Typischer Workflow</a></li>
                     <li><a href="#debug-logging">Debug-Logging</a></li>
+                    <li><a href="#changelog">Neuigkeiten</a></li>
                     <li><a href="#faq">FAQ</a></li>
                 </ul>
             </div>
@@ -139,9 +140,12 @@
 
         <!-- Main Content -->
         <div class="col-lg-9">
-            <h1 class="mb-4">
-                <i class="bi bi-book me-2"></i>SimpleAdmin WebUI Dokumentation
-            </h1>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+                <h1 class="mb-0">
+                    <i class="bi bi-book me-2"></i>SimpleAdmin WebUI Dokumentation
+                </h1>
+                <a asp-action="Changelog" class="btn btn-glass btn-sm"><i class="bi bi-stars me-1"></i>Neuigkeiten</a>
+            </div>
 
             <!-- Overview -->
             <section id="overview" class="doc-section">
@@ -2193,6 +2197,21 @@ All parallel checkers finished in 3201ms total</code></pre>
                 <pre><code>Programm:   cmd.exe
 Argumente:  /c "C:\Pfad\zu\SimpleAdmin.exe &gt;&gt; C:\Logs\simpleadmin.log 2&gt;&amp;1"</code></pre>
                 <p><strong>Option B — File-Logger via NuGet</strong> (<code>Microsoft.Extensions.Logging.File</code> oder Serilog) für rotierende Log-Dateien.</p>
+            </section>
+
+            <!-- Neuigkeiten -->
+            <section id="changelog" class="doc-section">
+                <h2><i class="bi bi-stars me-2"></i>Neuigkeiten</h2>
+                <p>
+                    Die Seite <a asp-action="Changelog">Neuigkeiten</a> zeigt, was sich in jeder Version geändert hat –
+                    neue Funktionen, Änderungen und behobene Fehler. Sie ist über die Versionsnummer unten links und über
+                    den Button oben auf dieser Seite erreichbar.
+                </p>
+                <ul>
+                    <li>Die installierte Version ist aufgeklappt und als <em>Installiert</em> markiert, ältere Versionen lassen sich aufklappen.</li>
+                    <li>Nach einem Update erscheint neben der Versionsnummer ein <strong>„Neu“</strong>-Hinweis. Auf der Seite sind alle Versionen seit Ihrem letzten Besuch markiert; der Hinweis verschwindet, sobald Sie die Seite geöffnet haben (gespeichert im Browser).</li>
+                    <li>Die Hinweise sind Teil der installierten Version und brauchen keinen Internetzugriff.</li>
+                </ul>
             </section>
 
             <!-- FAQ -->

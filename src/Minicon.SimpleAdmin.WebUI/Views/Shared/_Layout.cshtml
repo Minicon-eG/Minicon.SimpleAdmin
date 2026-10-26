@@ -131,7 +131,12 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col text-muted small">
-                    <i class="bi bi-shield-check me-1"></i>Minicon.SimpleAdmin v@(typeof(Minicon.SimpleAdmin.WebUI.SimpleAdminWebUIExtensions).Assembly.GetName().Version?.ToString(3))
+                    @{ var installedVersion = Minicon.SimpleAdmin.WebUI.Services.ChangelogProvider.InstalledVersion; }
+                    <i class="bi bi-shield-check me-1"></i>Minicon.SimpleAdmin
+                    <a asp-controller="Documentation" asp-action="Changelog" class="footer-version" title="Neuigkeiten dieser Version">v@(installedVersion)</a>
+                    @* Shown by site.js when this version is newer than the last visit of the Neuigkeiten page *@
+                    <a asp-controller="Documentation" asp-action="Changelog" class="pill pill-info pill-soft ms-1 d-none text-decoration-none"
+                       data-new-version-badge="@installedVersion" title="Was ist neu?">Neu</a>
                 </div>
                 <div class="col text-end text-muted small">
                     <span id="configStatus" class="me-3">

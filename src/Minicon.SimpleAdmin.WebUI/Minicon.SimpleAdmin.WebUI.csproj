@@ -8,7 +8,7 @@
     <RootNamespace>Minicon.SimpleAdmin.WebUI</RootNamespace>
     <AssemblyName>Minicon.SimpleAdmin.WebUI</AssemblyName>
     <PackageId>Minicon.SimpleAdmin.WebUI</PackageId>
-    <Version>2.35.0</Version>
+    <Version>2.36.0</Version>
     <Authors>Minicon Contributors</Authors>
     <Description>Razor Class Library providing the full SimpleAdmin admin UI (controllers, views, REST API and services) for the Minicon SimpleAdmin monitoring platform. A host application only needs to call AddSimpleAdminWebUI / UseSimpleAdminWebUI.</Description>
     <PackageTags>monitoring;simpleadmin;webui;mvc;razor-class-library</PackageTags>
@@ -33,6 +33,15 @@
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <!-- SimpleAdminWebUIHost: Windows-Dienst-Betrieb. HttpSys ist Teil der ASP.NET-Core-SharedFramework. -->
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
+  </ItemGroup>
+
+  <!-- CHANGELOG.md als Ressource einbetten (Seite "Neuigkeiten"). Im Repo liegt es zwei Ebenen
+       hoeher, im entpackten Quellcode (SimpleAdmin.Sources/) eine Ebene hoeher - beides deckt
+       _SimpleAdminRepoRoot aus Directory.Build.props ab. -->
+  <ItemGroup Condition="Exists('$(_SimpleAdminRepoRoot)CHANGELOG.md')">
+    <EmbeddedResource Include="$(_SimpleAdminRepoRoot)CHANGELOG.md"
+                      LogicalName="Minicon.SimpleAdmin.WebUI.CHANGELOG.md"
+                      Link="CHANGELOG.md" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>

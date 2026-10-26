@@ -98,6 +98,9 @@ public static class SimpleAdminWebUIExtensions
 
         AddScriptRunner(services, configuration, ResolveConfigDirectory(configuration));
 
+        // Release notes ("Neuigkeiten") from the embedded CHANGELOG.md.
+        services.AddSingleton<ChangelogProvider>();
+
         // Setup assistant for file/log monitoring: dry run against the real shares/logs.
         services.AddSingleton<IFileSystemAccess, FileSystemAccess>();
         services.AddSingleton<FileMonitoringPreviewService>();

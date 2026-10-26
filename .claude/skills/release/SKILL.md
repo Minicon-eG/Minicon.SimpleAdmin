@@ -66,18 +66,29 @@ PREV=$(git tag --sort=-v:refname | grep '^v' | head -1)
 git log --no-merges --pretty="- %s" ${PREV}..HEAD
 git diff --stat ${PREV}..HEAD
 ```
-Prepend directly below the intro (newest first), in German, operator-oriented (what changes for the user,
-config keys in `code`), no "Generated with" footer:
-```markdown
-## [NEW] – YYYY-MM-DD – <Headline = commit topic>
+Prepend directly below the intro (newest first), in German, no "Generated with" footer.
 
-**<one-sentence summary>**
+**Two audiences.** The WebUI page „Neuigkeiten“ renders the headline, the bold summary and every section
+except `Entwickler` and `Intern`. Those parts are read by WebUI users: describe only what they notice, in
+plain language — no package/host names, REST endpoints, config keys, appsettings, dependency or version
+upgrades, tests, build or repo details. Put all of that under `### Entwickler` (operators/integrators) or
+`### Intern` (refactorings, tests). If a release has nothing user-visible, use a neutral headline such as
+„Technische Korrekturen“ and only the technical sections.
+```markdown
+## [NEW] – YYYY-MM-DD – <Headline in user terms>
+
+**<one-sentence summary in user terms>**
 
 ### Neu
 ### Geändert
 ### Behoben
-### Intern        <!-- optional: refactorings, tests, build -->
+### Sicherheit    <!-- optional, user terms ("Bibliothek mit Sicherheitslücke aktualisiert") -->
+### Hinweise      <!-- optional -->
+### Entwickler    <!-- optional, hidden in the WebUI: config keys, hosts, REST, dependencies -->
+### Intern        <!-- optional, hidden in the WebUI: refactorings, tests, build -->
 ```
+Write the entry **before** running the tests: `Provider_EmbeddedChangelog_ContainsTheInstalledVersion`
+fails when the newest entry does not match the bumped `<Version>`.
 Omit empty groups. Security fixes go under **Behoben** with the advisory ID. Add the compare link at the
 bottom of the file: `[NEW]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/vPREV...vNEW`.
 The same section is reused verbatim as the GitHub Release notes (step 7).

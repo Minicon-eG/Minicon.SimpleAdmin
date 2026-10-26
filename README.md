@@ -36,7 +36,7 @@ return await SimpleAdminWorkerHost.RunAsync(args);
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.34.2" />
+<PackageReference Include="Minicon.SimpleAdmin.Worker" Version="2.36.0" />
 ```
 
 ### Admin UI
@@ -48,7 +48,7 @@ return await SimpleAdminWebUIHost.RunAsync(args);
 ```
 
 ```xml
-<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.34.2" />
+<PackageReference Include="Minicon.SimpleAdmin.WebUI" Version="2.36.0" />
 ```
 
 `SimpleAdminWebUIHost.RunAsync` handles the regular WebApplication build and, when
@@ -145,8 +145,16 @@ host's compilation — the host keeps using the package DLLs until you switch to
 
   <!-- Optional: different target folder. -->
   <SimpleAdminSourcesDirectory>SimpleAdmin.Sources</SimpleAdminSourcesDirectory>
+
+  <!-- Optional: also extract the test project (shipped in the Worker package). -->
+  <SimpleAdminExtractTests>true</SimpleAdminExtractTests>
 </PropertyGroup>
 ```
+
+The test project references all packages including the WebUI, so the worker host and
+the WebUI host must extract into the **same** folder (e.g.
+`<SimpleAdminSourcesDirectory>..\SimpleAdmin.Sources</SimpleAdminSourcesDirectory>` in
+both). Run it with `dotnet test` on the extracted `*.Tests` project (requires the .NET SDK).
 
 To switch extraction off, set `<SimpleAdminExtractSources>false</SimpleAdminExtractSources>`.
 

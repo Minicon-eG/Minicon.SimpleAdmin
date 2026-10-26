@@ -1,4 +1,5 @@
-// SimpleAdmin WebUI — page-independent helpers: theme switch, relative times, auto-refresh.
+// SimpleAdmin WebUI — page-independent helpers: theme switch, relative times, auto-refresh,
+// release-notes hints ("Neu" next to the footer version, Neuigkeiten page).
 
 (function () {
     'use strict';
@@ -101,6 +102,44 @@
         } catch { /* badge is optional */ }
     }
 
+    // ---------- Release notes: "Neu" since the last visit of the Neuigkeiten page ----------
+
+    const seenVersionKey = 'sa-seen-version';
+
+    function compareVersions(a, b) {
+        const pa = String(a).split(/[.-]/).map(n => parseInt(n, 10) || 0);
+        const pb = String(b).split(/[.-]/).map(n => parseInt(n, 10) || 0);
+        for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+            const diff = (pa[i] || 0) - (pb[i] || 0);
+            if (diff !== 0) return diff;
+        }
+        return 0;
+    }
+
+    function initReleaseNotes() {
+        let seen = null;
+        try { seen = localStorage.getItem(seenVersionKey); } catch { /* private mode */ }
+
+        const page = document.querySelector('[data-changelog]');
+        if (page) {
+            const installed = page.dataset.installedVersion;
+            // Never visited before: nothing is marked, otherwise every release would be "new".
+            if (seen) {
+                page.querySelectorAll('[data-release-version]').forEach(release => {
+                    if (compareVersions(release.dataset.releaseVersion, seen) > 0) {
+                        release.querySelector('[data-release-new]')?.classList.remove('d-none');
+                        release.open = true;
+                    }
+                });
+            }
+            try { localStorage.setItem(seenVersionKey, installed); } catch { /* private mode */ }
+            seen = installed;
+        }
+
+        document.querySelectorAll('[data-new-version-badge]').forEach(badge =>
+            badge.classList.toggle('d-none', seen !== null && compareVersions(badge.dataset.newVersionBadge, seen) <= 0));
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         applyTheme(currentTheme());
         document.querySelectorAll('[data-theme-toggle]').forEach(button =>
@@ -111,6 +150,7 @@
 
         document.querySelectorAll('[data-auto-refresh]').forEach(initAutoRefresh);
         loadOpenProblemCount();
+        initReleaseNotes();
     });
 
     window.simpleAdmin = { renderRelativeTimes, applyTheme };
