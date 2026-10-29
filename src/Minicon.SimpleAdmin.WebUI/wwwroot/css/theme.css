@@ -158,9 +158,20 @@ h2, h3, h4, h5, .h2, .h3, .h4, .h5 { font-weight: 650; letter-spacing: -.01em; }
     gap: .6rem;
     font-weight: 700;
     color: var(--bs-body-color);
+    /* A long general.title (max. 60 chars) is shortened instead of pushing the nav off-screen. */
+    min-width: 0;
+    flex-shrink: 1;
+    max-width: calc(100% - 6rem); /* keeps the collapsed-menu toggler on the same line */
+}
+
+.app-nav .app-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .app-logo {
+    flex-shrink: 0;
     width: 32px;
     height: 32px;
     border-radius: 10px;

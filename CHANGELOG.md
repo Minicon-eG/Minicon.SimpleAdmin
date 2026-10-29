@@ -9,6 +9,31 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
+## [2.36.1] – 2026-10-29 – Verlässlichere CPU-Werte, Übersichten ohne seitliches Scrollen
+
+**Die CPU-Auslastung entspricht jetzt der tatsächlichen Last, und lange Problemtexte passen auf den Bildschirm.**
+
+### Behoben
+- Server meldeten trotz Korrektur in 2.34.1 weiterhin hohe CPU-Last, obwohl sie kaum ausgelastet waren. Die Überwachung misst die CPU jetzt erst, wenn ihre übrigen Prüfungen fertig sind, und nimmt den Durchschnitt über eine Minute. Kurze Spitzen lösen keinen Alarm mehr aus.
+- Die Probleme-Übersicht musste bei langen Einträgen (z. B. BizTalk-Orchestrierungen) seitlich gescrollt werden, Status und „Quittieren“ lagen außerhalb des Bildes. Lange Texte brechen jetzt um, alle Spalten bleiben sichtbar.
+- Dasselbe gilt für die Liste „Aktive Probleme“ und die BizTalk- und Dateiüberwachungstabellen auf der Serverseite sowie für das Dashboard.
+- Die Navigationsleiste ragte bei mittleren Fensterbreiten über den Rand. Sie wechselt jetzt rechtzeitig zum Menü-Knopf, ein langer Anwendungstitel wird gekürzt.
+
+### Geändert
+- In schmalen Fenstern und auf dem Handy werden Probleme als Karten angezeigt: Schweregrad, Server und Zeit oben, darunter der vollständige Text, unten Status und „Quittieren“.
+
+### Hinweise
+- Ein Überwachungslauf dauert wegen der einminütigen CPU-Messung etwa eine Minute länger.
+
+### Entwickler
+- Worker: `MetricsCollector` läuft nach `Task.WhenAll` der Checker statt parallel; deren Kindprozesse (`powershell.exe`, `sc.exe`, `appcmd.exe`, `netsh`) fielen vorher ins Messfenster und wurden vom Eigenanteil nicht erfasst.
+- CPU = Mittelwert statt Median. Neue Defaults `Metrics:Cpu:WindowMs` = 60000 (200 ms … 180 s), `Metrics:Cpu:Samples` = 12 (2 … 120). Neu `Metrics:Cpu:RuntimeBudgetSeconds` = 240 (30 … 3600): Fenster wird ab Prozessstart so verkürzt, dass inkl. 30 s Reserve das Budget eingehalten wird, mindestens 1 s. Der CPU-Wert wird je Lauf einmal gemessen und für weitere ServiceTypes wiederverwendet.
+- Hosts mit explizit gesetztem `Metrics:Cpu:WindowMs` behalten ihr Fenster. Läuft der Worker im Minutentakt: Takt verlängern oder Fenster verkürzen, damit sich Läufe nicht überlappen.
+- WebUI: `.problem-table` (fixes Tabellenlayout + `<colgroup>`, Karten-Grid unter 1200 px, Variante `.problem-table-compact` für Status/Details), Hilfsklasse `.text-wrap-anywhere`, Navbar `navbar-expand-xl`.
+
+### Intern
+- Tests für Mittelwert, Fensterverkürzung und Konfigurationsgrenzen; Windows-Provider-Test mit kurzem Fenster.
+
 ## [2.36.0] – 2026-10-26 – Neuigkeiten-Seite
 
 **Was ist neu? Die WebUI zeigt jetzt selbst, was sich in jeder Version geändert hat.**
@@ -291,6 +316,7 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.36.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.0...v2.36.1
 [2.36.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.35.0...v2.36.0
 [2.35.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.34.2...v2.35.0
 [2.34.2]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.34.1...v2.34.2

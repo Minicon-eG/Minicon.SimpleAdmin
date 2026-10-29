@@ -148,7 +148,7 @@ public class SimpleAdminWorker
         var encryptionKey = _configuration["Encryption:ConnectionStringKey"] ?? "";
 
         // Run all optional checkers in parallel
-        _logger.LogInformation("  - Running checkers in parallel (Metrics, AppPools, Services, EventLog, SqlQueries, EmailProbes, EmailDelivery)");
+        _logger.LogInformation("  - Running checkers in parallel (AppPools, Services, EventLog, SqlQueries, EmailProbes, EmailDelivery), then metrics");
 
         // Load previous status from the first service type's JSON for state carry-forward
         RuntimeStatus? previousStatus = null;
@@ -222,10 +222,23 @@ public class SimpleAdminWorker
             ? TrackAsync("FileMonitoring", () => _fileMonitoringChecker.CheckAsync(fileMonCfg, features.FileMonitoring.Defaults))!
             : Task.FromResult<FileMonitoringState?>(null);
 
-        // Collect metrics for all ServiceTypes in parallel to the other checkers.
-        // Within this task, ServiceTypes are processed sequentially because the platform
-        // metrics providers (e.g. WindowsMetricsProvider) share counter instances and are
-        // not safe to call concurrently.
+        try
+        {
+            await Task.WhenAll(appPoolTask, serviceTask, eventLogTask, sqlTask, emailProbeTask, emailDeliveryTask, certificateTask, bizTalkTask, fileMonitoringTask);
+        }
+        catch
+        {
+            // Individual task exceptions are handled below
+        }
+
+        // Collect metrics for all ServiceTypes AFTER the other checkers have finished:
+        // their child processes (powershell.exe, sc.exe, appcmd.exe, netsh) would
+        // otherwise land in the CPU sampling window and report load the server does not
+        // have. The CPU is averaged over a long window (Metrics:Cpu:WindowMs, default
+        // 60 s), shortened to keep the run within Metrics:Cpu:RuntimeBudgetSeconds.
+        // ServiceTypes are processed sequentially because the platform metrics providers
+        // (e.g. WindowsMetricsProvider) share counter instances and are not safe to call
+        // concurrently.
         var metricsTask = TrackAsync("Metrics", () => Task.Run(async () =>
         {
             var metricsLogger = _loggerFactory.CreateLogger("Minicon.SimpleAdmin.Checkers.Metrics");
@@ -248,13 +261,14 @@ public class SimpleAdminWorker
 
         try
         {
-            await Task.WhenAll(appPoolTask, serviceTask, eventLogTask, sqlTask, emailProbeTask, emailDeliveryTask, certificateTask, bizTalkTask, fileMonitoringTask, metricsTask);
+            await metricsTask;
         }
         catch
         {
-            // Individual task exceptions are handled below
+            // Handled below
         }
-        _logger.LogDebug("All parallel checkers finished in {ElapsedMs}ms total", overallSw.ElapsedMilliseconds);
+
+        _logger.LogDebug("All checkers and metrics finished in {ElapsedMs}ms total", overallSw.ElapsedMilliseconds);
 
         Dictionary<string, AppPoolState>? appPoolStates = null;
         try { appPoolStates = await appPoolTask; _logger.LogInformation("    AppPools: {Count}", appPoolStates?.Count ?? 0); }

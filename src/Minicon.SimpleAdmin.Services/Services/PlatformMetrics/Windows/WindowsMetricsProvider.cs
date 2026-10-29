@@ -12,6 +12,10 @@ public class WindowsMetricsProvider : IPlatformMetricsProvider
     private readonly CpuSamplingOptions _cpuOptions;
     private readonly Dictionary<string, PerformanceCounter> _counters = new();
     private bool _initialized;
+    private (double Value, DateTime MeasuredAt)? _cachedCpu;
+
+    /// <summary>A CPU value measured in this run is reused for further service types.</summary>
+    private static readonly TimeSpan CpuCacheDuration = TimeSpan.FromMinutes(2);
 
     /// <summary>
     /// Initializes a new instance of the WindowsMetricsProvider class
@@ -78,18 +82,25 @@ public class WindowsMetricsProvider : IPlatformMetricsProvider
     }
 
     /// <summary>
-    /// Gets system CPU usage percentage. Samples the <c>% Processor Time</c> rate
-    /// counter multiple times over a configurable window (default 900 ms, 3 samples)
-    /// and returns the median — a single 100 ms snapshot easily lands inside a
-    /// JIT/DI/checker burst and read 100 % even on an idle box. On top of that,
-    /// the worker's own CPU share over the same window is subtracted, so the
-    /// metrics collector does not measure itself.
+    /// Gets system CPU usage percentage as the average over a long window (default
+    /// 60 s, 12 samples of the <c>% Processor Time</c> rate counter). The worker calls
+    /// this after all other checkers have finished, so their child processes
+    /// (powershell.exe, sc.exe, appcmd.exe, …) are no longer part of the measurement.
+    /// The window is shortened so the worker stays inside its runtime budget, and the
+    /// worker's own CPU share over the window is subtracted. The value is measured
+    /// once per run and reused for further service types.
     /// </summary>
     public async Task<double> GetCpuUsageAsync()
     {
         if (!_initialized)
         {
             await InitializeAsync();
+        }
+
+        if (_cachedCpu is { } cached && DateTime.UtcNow - cached.MeasuredAt < CpuCacheDuration)
+        {
+            _logger.LogDebug("CPU usage: {Value:F1}% (reused from this run)", cached.Value);
+            return cached.Value;
         }
 
         if (!_counters.TryGetValue("cpu", out var counter))
@@ -100,15 +111,17 @@ public class WindowsMetricsProvider : IPlatformMetricsProvider
 
         try
         {
+            var process = System.Diagnostics.Process.GetCurrentProcess();
+            var window = _cpuOptions.EffectiveWindow(ElapsedSinceProcessStart(process));
+
             // Discard the first sample (always 0 / stale) and prime the counter.
             counter.NextValue();
 
-            var process = System.Diagnostics.Process.GetCurrentProcess();
             var cpuBefore = process.TotalProcessorTime;
             var swStart = System.Diagnostics.Stopwatch.StartNew();
 
             var samples = new List<double>(_cpuOptions.Samples);
-            var perSampleDelay = Math.Max(50, _cpuOptions.WindowMilliseconds / _cpuOptions.Samples);
+            var perSampleDelay = TimeSpan.FromMilliseconds(Math.Max(50, window.TotalMilliseconds / _cpuOptions.Samples));
             for (var i = 0; i < _cpuOptions.Samples; i++)
             {
                 await Task.Delay(perSampleDelay);
@@ -129,18 +142,35 @@ public class WindowsMetricsProvider : IPlatformMetricsProvider
 
             var effective = CpuSamplingOptions.CombineSamples(samples, selfPercent, _cpuOptions.SubtractSelfCpu);
             _logger.LogDebug(
-                "CPU usage: {Value:F1}% (system median {System:F1}%, self {Self:F1}% over {Elapsed} ms, samples [{Samples}])",
+                "CPU usage: {Value:F1}% (system mean {System:F1}%, median {Median:F1}%, self {Self:F1}% over {Elapsed:F0} ms, window {Window:F0} ms, samples [{Samples}])",
                 effective,
+                CpuSamplingOptions.Mean(samples),
                 CpuSamplingOptions.Median(samples),
                 selfPercent,
                 swStart.Elapsed.TotalMilliseconds,
+                window.TotalMilliseconds,
                 string.Join(", ", samples.Select(s => s.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))));
+
+            _cachedCpu = (effective, DateTime.UtcNow);
             return effective;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error reading CPU counter");
             return 0;
+        }
+    }
+
+    private static TimeSpan ElapsedSinceProcessStart(System.Diagnostics.Process process)
+    {
+        try
+        {
+            var elapsed = DateTime.Now - process.StartTime;
+            return elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed;
+        }
+        catch
+        {
+            return TimeSpan.Zero;
         }
     }
 

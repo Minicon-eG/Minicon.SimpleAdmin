@@ -28,7 +28,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.36.0`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.36.1`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
@@ -181,6 +181,7 @@ Razor Class Library. The host application provides only the entry point + appset
 - Building blocks: `.pill pill-{ok|warn|crit|ack|info|muted}` (+ `pill-soft`, `pill-lg`), `.kpi-tile kpi-{tone}` (or `tone-{tone}`), `.btn-glass`, `.card-alert`, `.status-dot status-dot-{tone}`, `.page-head`.
 - `Helpers/Display` (internal): all view times go through `Display.LocalTime/LocalTimeSeconds/LocalShort` (status timestamps are UTC, unspecified kind = UTC); German labels/tones/icons for `ServiceStatus`, metric/check status and `ProblemSeverity`; `Duration` includes days. `<time class="relative-time" data-utc="@Display.Iso(t)">` is rendered relative by `site.js`.
 - `Helpers/ChartGeometry` renders sparklines and history charts as server-side SVG (no chart library, invariant-culture coordinates). Status/Details: metric tiles, service badges and cpu/memory/disk problems link to `#chart-<metric>`; per metric the history of the service with the most samples is used (services are never mixed).
+- **No horizontal scrolling (v2.36.1)**: problem lists (`Views/Problems/Index.cshtml`, Status/Details „Aktive Probleme“ with `.problem-table-compact`) use `.problem-table` = `table-layout: fixed` + `<colgroup>` widths, the problem text wraps (`overflow-wrap: anywhere`), below 1200px the rows become CSS-grid cards (cells `cell-select/-severity/-server/-since/-status/-action`, `problem-main`). Long identifiers elsewhere get `.text-wrap-anywhere` (only on long-text cells — on every cell it would split short words). Navbar collapses below xl; a long `general.title` is truncated. Don't wrap such tables in `.table-responsive`.
 - Shared partials: `_AcknowledgeModal` (acknowledge dialog for Problems + Status/Details), `_AutoRefresh` (60 s reload toggle, pauses while a dialog is open, a field has focus or the tab is hidden). The nav "Probleme" count is loaded asynchronously from `/api/problems` so the layout never blocks on status reads.
 
 ### PowerShell Script Runner (v2.31.0)
@@ -219,6 +220,12 @@ A server with no PRTG metrics but a failing email delivery check correctly retur
 - **Prozess-Priorität `BelowNormal`**: `SimpleAdminWorkerHost.RunAsync` setzt den Worker-Prozess beim Start auf `ProcessPriorityClass.BelowNormal`, damit er den eigentlichen Workloads keine Rechenzeit stiehlt.
 - Debug-Log `[CPU] (system median X %, self Y % over Z ms, samples […])` zeigt, wie der Endwert zustande kommt.
 Linux (`/proc/stat`) und macOS waren nicht betroffen (sauberer Delta-Rechenpfad).
+
+**Nachtrag (v2.36.1):** Der Median über 900 ms reichte nicht, weil die Messung parallel zu den Checkern lief und deren **Kindprozesse** (`powershell.exe`, `sc.exe` je Dienst, `appcmd.exe`, `netsh`, plus Defender-Scans) nicht vom Eigenanteil erfasst werden. Jetzt:
+- Der Worker sammelt die Metriken **erst nach** `Task.WhenAll` der Checker.
+- CPU = **Mittelwert** (nicht Median) über ein langes Fenster: Default 60 s / 12 Samples (`Metrics:Cpu:WindowMs` 200 ms…180 s, `Metrics:Cpu:Samples` 2…120).
+- `Metrics:Cpu:RuntimeBudgetSeconds` (Default 240, 30…3600): Das Fenster wird verkürzt, sodass Prozessstart + Checker + Fenster + 30 s Reserve (`CpuSamplingOptions.RuntimeReserve`) im Budget bleiben, mindestens 1 s (`EffectiveWindow`, Basis `Process.StartTime`, weil der Worker one-shot ist).
+- Der CPU-Wert wird pro Lauf einmal gemessen und für weitere ServiceTypes 2 min wiederverwendet (sonst 60 s je ServiceType).
 
 ### Domains und Namenskonvention (v2.35.0)
 `Config.Domains` (`List<Domain>`, fehlender Block = leer): `Name` (DNS), `Environment` (Key aus `Config.Environments`, **immer explizit**), `Servers`, optional `NetScalerVServer` (darf von mehreren Domains geteilt werden), `HealthCheck` (Name eines NetScaler-HealthChecks, nur Information), `Description`, `AllowNameMismatch`. Beide PROD-Varianten (`app`, `app-prod`) sind eigenständige Einträge. `Shared/Services/DomainNamingConvention`: `SuggestEnvironment`/`IsConsistent`/`Evaluate` – erstes DNS-Label, `-dev`→development, `-ref`→ref, `-prod`/kein bekanntes Suffix→production (nur wenn der Key existiert), längstes Suffix gewinnt; erweiterbar/überschreibbar per `Config.DomainSuffixMap` (leerer Wert entfernt ein Suffix). Nur Vorschlag/Warnung, nie Quelle der Wahrheit. WebUI: `DomainsController` (Liste nach Umgebung, Create/Edit/Delete, `GET /Domains/Suggest`), Serverauswahl nur aus `GetServersInEnvironment(env)`, Mismatch wird erst mit „Ausnahme zulassen“ gespeichert; Serverliste hat Umgebungs-Spalte + Filter; Server-Rename/-Delete pflegt `Domain.Servers` mit. HtmlGenerator: `RenderDomainList` zeigt Domains je Umgebung auf `all.html` und der zentralen Übersicht (die jetzt auch weitere Umgebungen außer production/ref/development rendert). Checker sind unverändert.

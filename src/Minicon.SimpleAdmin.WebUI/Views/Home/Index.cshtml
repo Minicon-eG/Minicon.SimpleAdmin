@@ -80,7 +80,7 @@ else if (monitoring != null)
                         <span class="pill pill-@Display.Tone(problem.Severity)">
                             <i class="bi @Display.Icon(problem.Severity)"></i>@Display.Label(problem.Severity)
                         </span>
-                        <span class="flex-grow-1 fw-semibold">@(string.IsNullOrWhiteSpace(problem.Message) ? problem.Type : problem.Message)</span>
+                        <span class="flex-grow-1 fw-semibold text-wrap-anywhere">@(string.IsNullOrWhiteSpace(problem.Message) ? problem.Type : problem.Message)</span>
                         <a href="@Url.Action("Details", "Status", new { id = serverId })" class="server-chip">
                             <i class="bi bi-hdd-network"></i>@serverId
                         </a>

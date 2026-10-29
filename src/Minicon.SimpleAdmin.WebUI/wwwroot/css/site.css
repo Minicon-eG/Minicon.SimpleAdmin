@@ -317,6 +317,13 @@ a:hover {
 }
 
 
+/* Long identifiers without spaces (BizTalk artefacts, paths, log lines) may break
+   anywhere so they never widen a table or list beyond the page. */
+.text-wrap-anywhere {
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+
 /* ---------- Problems page ---------- */
 /* KPI tiles use .kpi-tile (theme.css); .problem-kpi only marks them for the filter script. */
 
@@ -397,67 +404,122 @@ a:hover {
     border-left-color: var(--bs-border-color);
 }
 
-.problem-main {
-    min-width: 280px;
+/* Fixed column widths: the problem column takes the rest and wraps, so the table
+   never gets wider than the page (no horizontal scrolling for long messages). */
+.problem-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.problem-table .col-select { width: 3rem; }
+.problem-table .col-severity { width: 7.5rem; }
+.problem-table .col-server { width: 11rem; }
+.problem-table .col-since { width: 8.5rem; }
+.problem-table .col-status { width: 8.5rem; }
+.problem-table .col-action { width: 9rem; }
+
+.problem-table td {
+    min-width: 0;
+}
+
+.problem-main,
+.problem-row .cell-status {
+    overflow-wrap: anywhere;
+}
+
+.problem-row .cell-since {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.problem-row .server-chip {
+    max-width: 100%;
 }
 
 .problem-origin {
     color: var(--bs-secondary-color);
     font-size: 0.8rem;
+    overflow-wrap: anywhere;
 }
 
-.problem-steps summary {
-    cursor: pointer;
-    color: var(--brand-accent);
+/* Below 1200px the columns get too narrow: every row becomes a card.
+   Area layout: checkbox | severity · server · since / problem / status · action.
+   .problem-table-compact (Status/Details) has no checkbox and server column. */
+@media (max-width: 1199.98px) {
+    .problem-table,
+    .problem-table tbody {
+        display: block;
+    }
+
+    .problem-table colgroup {
+        display: none;
+    }
+
+    .problem-table thead tr {
+        display: flex;
+        align-items: center;
+    }
+
+    .problem-table thead th:not(:first-child) {
+        display: none;
+    }
+
+    .problem-table:not(.problem-table-compact) thead th:first-child::after {
+        content: "Alle angezeigten auswählen";
+        margin-left: 0.6rem;
+    }
+
+    .problem-table-compact thead {
+        display: none;
+    }
+
+    .problem-table tbody > tr {
+        display: grid;
+        grid-template-columns: 3rem auto minmax(0, 1fr) auto;
+        grid-template-areas:
+            "select severity server since"
+            "select main main main"
+            "select status status action";
+        align-items: center;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+
+    .problem-table-compact tbody > tr {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-areas:
+            "severity . since"
+            "main main main"
+            "status status action";
+    }
+
+    .problem-table tbody > tr > td {
+        border-bottom: 0;
+        padding: 0.35rem 0.5rem;
+    }
+
+    .problem-table tbody > tr > .cell-select { grid-area: select; align-self: stretch; padding-top: 0.75rem; }
+    .problem-table tbody > tr > .cell-severity { grid-area: severity; padding-top: 0.75rem; }
+    .problem-table tbody > tr > .problem-main { grid-area: main; }
+    .problem-table tbody > tr > .cell-server { grid-area: server; padding-top: 0.75rem; }
+    .problem-table tbody > tr > .cell-since { grid-area: since; padding-top: 0.75rem; text-align: end; }
+    .problem-table tbody > tr > .cell-status { grid-area: status; padding-bottom: 0.75rem; }
+    .problem-table tbody > tr > .cell-action { grid-area: action; padding-bottom: 0.75rem; }
+
+    .problem-table-compact tbody > tr > .cell-severity,
+    .problem-table-compact tbody > tr > .problem-main,
+    .problem-table-compact tbody > tr > .cell-status { padding-left: 1rem !important; }
 }
 
-.severity-pill,
-.state-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.2rem 0.6rem;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.severity-pill-critical { color: var(--sa-crit); background: color-mix(in srgb, var(--sa-crit) 14%, transparent); }
-.severity-pill-warning { color: color-mix(in srgb, var(--sa-warn) 70%, var(--bs-body-color)); background: color-mix(in srgb, var(--sa-warn) 18%, transparent); }
-.severity-pill-info { color: var(--sa-info); background: color-mix(in srgb, var(--sa-info) 14%, transparent); }
-
-.state-open { color: var(--sa-crit); background: color-mix(in srgb, var(--sa-crit) 14%, transparent); }
-.state-open i { font-size: 0.5rem; }
-.state-acknowledged { color: var(--sa-info); background: color-mix(in srgb, var(--sa-info) 14%, transparent); }
-
-.server-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.15rem 0.55rem;
-    border: 1px solid var(--bs-border-color);
-    border-radius: 0.4rem;
-    font-size: 0.85rem;
-    color: var(--bs-body-color);
-    text-decoration: none;
-    white-space: nowrap;
-}
-
-.server-chip:hover {
-    border-color: var(--brand-accent);
-    color: var(--brand-accent);
-}
-
-.problem-empty {
-    padding: 3rem 1rem;
-    text-align: center;
-}
-
-.problem-empty > i {
-    display: block;
-    font-size: 2.5rem;
-    margin-bottom: 0.5rem;
+@media (max-width: 575.98px) {
+    .problem-table:not(.problem-table-compact) tbody > tr {
+        grid-template-columns: 2.5rem auto minmax(0, 1fr);
+        grid-template-areas:
+            "select severity since"
+            "select main main"
+            "select server server"
+            "select status action";
+    }
 }
 
 /* ---------- Scripts (PowerShell runner) ---------- */

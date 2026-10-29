@@ -24,10 +24,10 @@
     <link rel="stylesheet" href="~/_content/Minicon.SimpleAdmin.WebUI/css/pages.css" asp-append-version="true" />
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg sticky-top app-nav">
+    <nav class="navbar navbar-expand-xl sticky-top app-nav">
         <div class="container-fluid">
-            <a class="navbar-brand" asp-controller="Home" asp-action="Index">
-                <span class="app-logo"><i class="bi bi-activity"></i></span>@ConfigService.GetApplicationTitle()
+            <a class="navbar-brand" asp-controller="Home" asp-action="Index" title="@ConfigService.GetApplicationTitle()">
+                <span class="app-logo"><i class="bi bi-activity"></i></span><span class="app-title">@ConfigService.GetApplicationTitle()</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>

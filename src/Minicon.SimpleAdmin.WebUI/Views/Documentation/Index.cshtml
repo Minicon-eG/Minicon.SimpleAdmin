@@ -71,6 +71,17 @@
         border-radius: 8px;
         overflow-x: auto;
     }
+    /* Long config keys in tables wrap instead of widening the page. */
+    .doc-section td code {
+        overflow-wrap: anywhere;
+    }
+    /* On phones a wide reference table scrolls inside itself, never the whole page. */
+    @@media (max-width: 575.98px) {
+        .doc-section table {
+            display: block;
+            overflow-x: auto;
+        }
+    }
     pre code {
         background: transparent;
         padding: 0;
@@ -514,6 +525,31 @@
                         </tr>
                     </tbody>
                 </table>
+
+                <h4>So wird die CPU gemessen</h4>
+                <p>
+                    Der Worker misst die CPU erst, wenn alle anderen Prüfungen eines Laufs fertig sind, und bildet den
+                    <strong>Durchschnitt über 60 Sekunden</strong> (12 Messungen). Kurze Lastspitzen, auch die der
+                    Überwachung selbst (PowerShell, <code>sc.exe</code>, <code>appcmd.exe</code>), führen so nicht mehr zu
+                    Fehlalarmen. Damit ein Lauf höchstens 4 Minuten dauert, wird das Messfenster verkürzt, wenn die
+                    Prüfungen vorher lange gebraucht haben (30 Sekunden bleiben für die Ausgabe reserviert).
+                    Einstellbar in der <code>appsettings.json</code> des Workers (nicht in <code>config.json</code>):
+                </p>
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr><th>Einstellung</th><th>Beschreibung</th><th>Standard</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>Metrics:Cpu:WindowMs</code></td><td>Länge des Messfensters (200 ms bis 180 s)</td><td>60000</td></tr>
+                        <tr><td><code>Metrics:Cpu:Samples</code></td><td>Anzahl Messungen im Fenster (2 bis 120)</td><td>12</td></tr>
+                        <tr><td><code>Metrics:Cpu:RuntimeBudgetSeconds</code></td><td>Maximale Gesamtlaufzeit des Workers, nach der sich das Messfenster richtet (30 s bis 1 h)</td><td>240</td></tr>
+                        <tr><td><code>Metrics:Cpu:SubtractSelf</code></td><td>Eigene CPU-Last des Workers abziehen</td><td>true</td></tr>
+                    </tbody>
+                </table>
+                <p class="small text-body-secondary">
+                    Läuft der Worker im Minutentakt, verlängern Sie den Takt oder verkürzen Sie <code>Metrics:Cpu:WindowMs</code>,
+                    damit sich die Läufe nicht überlappen.
+                </p>
 
                 <h4>Threshold-Operatoren</h4>
                 <p>Folgende Operatoren sind verfügbar: <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>==</code>, <code>!=</code></p>
