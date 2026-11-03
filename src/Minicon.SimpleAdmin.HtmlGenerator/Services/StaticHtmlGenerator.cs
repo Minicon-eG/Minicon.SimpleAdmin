@@ -735,7 +735,9 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
         }
 
         var minConsecutiveChecks = _config.History?.MinConsecutiveChecks ?? 5;
-        var aggregatedValues = GetLogarithmicAggregatedValues(values, maxBars, minConsecutiveChecks);
+
+        // The shared aggregator works chronologically (oldest first); the history list here is newest first.
+        var aggregatedValues = MetricHistoryAggregator.Aggregate(values.AsEnumerable().Reverse().ToList(), maxBars, minConsecutiveChecks);
 
         if (aggregatedValues.Count < 6)
         {
@@ -762,119 +764,6 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
 
         html.AppendLine("</div>");
         return (html.ToString(), values.Count, aggregatedValues.Count, actualExactBars);
-    }
-
-    /// <summary>
-    /// Aggregates history values logarithmically: newest entries 1:1, older entries aggregated with increasing bucket sizes.
-    /// </summary>
-    /// <param name="values">Values ordered by timestamp descending (newest first)</param>
-    /// <param name="maxBars">Maximum number of bars to display</param>
-    /// <param name="exactBars">Number of newest entries to show 1:1 (minConsecutiveChecks)</param>
-    /// <returns>List of aggregated values ordered from oldest to newest</returns>
-    private List<double> GetLogarithmicAggregatedValues(List<double> values, int maxBars, int exactBars)
-    {
-        var result = new List<double>();
-
-        // Ensure exactBars doesn't exceed maxBars
-        exactBars = Math.Min(exactBars, maxBars);
-        var aggregatedBars = maxBars - exactBars;
-
-        // If we have fewer or equal values than maxBars, show all 1:1
-        if (values.Count <= maxBars)
-        {
-            // Reverse to get oldest first
-            result.AddRange(values.AsEnumerable().Reverse());
-            return result;
-        }
-
-        // Split: newest exactBars entries (1:1) and the rest (to be aggregated)
-        var exactValues = values.Take(exactBars).ToList(); // newest entries
-        var remainingValues = values.Skip(exactBars).ToList(); // older entries
-
-        if (remainingValues.Count == 0 || aggregatedBars <= 0)
-        {
-            // Only exact values, reverse to get oldest first
-            result.AddRange(exactValues.AsEnumerable().Reverse());
-            return result;
-        }
-
-        // Calculate logarithmic bucket sizes for remaining values
-        var bucketSizes = CalculateLogarithmicBucketSizes(remainingValues.Count, aggregatedBars);
-
-        // Aggregate older values into buckets (remainingValues is newest-to-oldest, buckets go from newest-old to oldest)
-        var currentIndex = 0;
-        var aggregatedBuckets = new List<double>();
-
-        foreach (var bucketSize in bucketSizes)
-        {
-            if (currentIndex >= remainingValues.Count)
-                break;
-
-            var bucketValues = remainingValues.Skip(currentIndex).Take(bucketSize).ToList();
-            if (bucketValues.Count > 0)
-            {
-                aggregatedBuckets.Add(bucketValues.Average());
-            }
-            currentIndex += bucketSize;
-        }
-
-        // Build result: oldest (aggregated) first, then newest (1:1)
-        // aggregatedBuckets is in order from "newest old" to "oldest", so reverse it
-        aggregatedBuckets.Reverse();
-        result.AddRange(aggregatedBuckets);
-
-        // Add exact values (reverse to get oldest of the exact ones first)
-        exactValues.Reverse();
-        result.AddRange(exactValues);
-
-        return result;
-    }
-
-    /// <summary>
-    /// Calculates logarithmically increasing bucket sizes.
-    /// Smaller buckets for newer data, larger buckets for older data.
-    /// </summary>
-    /// <param name="totalEntries">Total number of entries to distribute</param>
-    /// <param name="bucketCount">Number of buckets to create</param>
-    /// <returns>List of bucket sizes (first = smallest/newest, last = largest/oldest)</returns>
-    private List<int> CalculateLogarithmicBucketSizes(int totalEntries, int bucketCount)
-    {
-        if (bucketCount <= 0 || totalEntries <= 0)
-            return new List<int>();
-
-        // Use exponential growth for bucket sizes
-        // Bucket sizes: b_i = base^i, normalized to sum to totalEntries
-        var logBase = Math.Pow(totalEntries, 1.0 / bucketCount);
-
-        var rawSizes = new List<double>();
-        for (int i = 0; i < bucketCount; i++)
-        {
-            // Smaller exponent = smaller bucket (for newer data)
-            // i=0 is newest-old data, i=bucketCount-1 is oldest data
-            rawSizes.Add(Math.Pow(logBase, i));
-        }
-
-        var rawSum = rawSizes.Sum();
-        var bucketSizes = rawSizes.Select(s => (int)Math.Round(s / rawSum * totalEntries)).ToList();
-
-        // Adjust for rounding errors - add/remove from largest bucket
-        var diff = totalEntries - bucketSizes.Sum();
-        if (diff != 0 && bucketSizes.Count > 0)
-        {
-            var largestIndex = bucketSizes.IndexOf(bucketSizes.Max());
-            bucketSizes[largestIndex] += diff;
-        }
-
-        // Ensure no bucket is empty (minimum size 1)
-        for (int i = 0; i < bucketSizes.Count; i++)
-        {
-            if (bucketSizes[i] <= 0)
-            {
-                bucketSizes[i] = 1;
-            }
-        }
-
-        return bucketSizes;
     }
 
     /// <summary>
