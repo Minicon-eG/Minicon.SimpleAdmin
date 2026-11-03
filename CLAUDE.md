@@ -28,7 +28,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.35.0`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.36.1`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
@@ -39,6 +39,12 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 - Every package additionally ships its project files under `sources/` (copied via `obj/simpleadmin-sources/` because NuGet drops `Content` items with `Pack=false`, which Razor sets on all `.cshtml`) and the shared files (`Directory.Build.props`, `build/`, README, LICENSE) under `sources-root/`.
 - `src/build/Minicon.SimpleAdmin.Sources.targets` is packed as `buildTransitive/<PackageId>.targets`: on build, the host extracts every referenced SimpleAdmin package to `SimpleAdmin.Sources/<PackageId>/` (re-extracted only when the package path/version changes, marker `.simpleadmin-package`; local edits are overwritten on upgrade). The folder is added to `DefaultItemExcludes`, so the host keeps compiling against the package DLLs. Opt-out: `<SimpleAdminExtractSources>false</SimpleAdminExtractSources>`, target folder: `SimpleAdminSourcesDirectory`.
 - Customer namespace: `<SimpleAdminSourcesNamespace>Kunde.Monitoring</SimpleAdminSourcesNamespace>` replaces the token `Minicon.SimpleAdmin` (whole identifier, not after `Minicon-eG/`) in text files and in file/folder names during extraction (inline `RoslynCodeTaskFactory` task — netstandard2.0, so no `Path.GetRelativePath`). Namespaces, project names, `_content/<PackageId>` paths and logger categories stay consistent; LICENSE, `Authors` and repository URLs are kept. Keep `Minicon.SimpleAdmin` as the only spelling of the prefix in code so the rename stays complete.
+- Test project (v2.36.0): the **Worker** package additionally packs `src/Minicon.SimpleAdmin.Tests` (without bin/obj/TestResults) under `sources-tests/` (target `_SimpleAdminPackTestSources` in `Directory.Build.props`). With `<SimpleAdminExtractTests>true</SimpleAdminExtractTests>` (default false) the host extracts it to `<SimpleAdminSourcesDirectory>/<Prefix>.Tests/` (own marker, renamed like the rest incl. `InternalsVisibleTo`). It references all six projects, so Worker and WebUI host must share one `SimpleAdminSourcesDirectory` (e.g. `../SimpleAdmin.Sources`); the build warns when the WebUI sources are missing there. Verified end-to-end: packed → two hosts with `Kunde.Monitoring` → `dotnet test` on the extracted project passes. Keep tests free of repo-relative paths so they keep working when extracted.
+
+### Release Notes
+- `CHANGELOG.md` (repo root, German, newest first, Keep-a-Changelog style: `## [X.Y.Z] – date – headline` with `### Neu / Geändert / Behoben / Sicherheit / Performance / Hinweise / Entwickler / Intern`) is the changelog of record and **must** get an entry in every release commit. The GitHub Release notes are extracted from that section (see `.claude/skills/release/SKILL.md`).
+- **Two audiences (v2.36.0)**: the WebUI page „Neuigkeiten“ shows headline, bold summary and every section except `Entwickler`/`Intern`. Those user sections (and headline/summary) must describe only what a WebUI user notices, in plain German — no package/host/REST/config-key/dependency/test/build details. Technical content goes to `### Entwickler` (operators/integrators: config keys, appsettings, hosts, REST, dependencies) or `### Intern` (refactorings, tests). A release with only technical changes gets a neutral headline (e.g. „Technische Korrekturen“).
+- **In the WebUI (v2.36.0)**: `CHANGELOG.md` is embedded into the WebUI DLL (`EmbeddedResource` via `$(_SimpleAdminRepoRoot)`, LogicalName `Minicon.SimpleAdmin.WebUI.CHANGELOG.md`; every package also ships it in `sources-root/` so hosts built from extracted sources have it). `ChangelogParser` (Markdown subset, HTML-encoded, only http(s)/relative links) + `ChangelogProvider` (singleton, cached) → `DocumentationController.Changelog` / `Views/Documentation/Changelog.cshtml`. Footer version links there; `site.js` shows a „Neu“ pill when the installed version is newer than `localStorage['sa-seen-version']` and marks newer releases on the page. The test `Provider_EmbeddedChangelog_ContainsTheInstalledVersion` fails when the newest CHANGELOG entry ≠ package version — write the entry before running the tests of a release.
 
 ### Publishing
 - Trusted Publishing to nuget.org is configured via GitHub Actions (`Add NuGet publish workflow (Trusted Publishing)` commit). The workflow publishes all seven packages on release.
@@ -152,7 +158,7 @@ Razor Class Library. The host application provides only the entry point + appset
 | `/Environments` | `EnvironmentsController` | Environment matrix |
 | `/Servers` | `ServersController` | CRUD for server config + service types |
 | `/Settings` | `SettingsController` | History, Output, Features, Time Profile settings |
-| `/Documentation` | `DocumentationController` | Built-in docs page |
+| `/Documentation` | `DocumentationController` | Built-in docs page; `/Documentation/Changelog` = „Neuigkeiten“ (release notes, v2.36.0) |
 | `/Scripts` | `ScriptsController` | PowerShell script runner (v2.31.0, see below) |
 
 ### REST API (all under `/api/...`)
@@ -175,6 +181,7 @@ Razor Class Library. The host application provides only the entry point + appset
 - Building blocks: `.pill pill-{ok|warn|crit|ack|info|muted}` (+ `pill-soft`, `pill-lg`), `.kpi-tile kpi-{tone}` (or `tone-{tone}`), `.btn-glass`, `.card-alert`, `.status-dot status-dot-{tone}`, `.page-head`.
 - `Helpers/Display` (internal): all view times go through `Display.LocalTime/LocalTimeSeconds/LocalShort` (status timestamps are UTC, unspecified kind = UTC); German labels/tones/icons for `ServiceStatus`, metric/check status and `ProblemSeverity`; `Duration` includes days. `<time class="relative-time" data-utc="@Display.Iso(t)">` is rendered relative by `site.js`.
 - `Helpers/ChartGeometry` renders sparklines and history charts as server-side SVG (no chart library, invariant-culture coordinates). Status/Details: metric tiles, service badges and cpu/memory/disk problems link to `#chart-<metric>`; per metric the history of the service with the most samples is used (services are never mixed).
+- **No horizontal scrolling (v2.36.1)**: problem lists (`Views/Problems/Index.cshtml`, Status/Details „Aktive Probleme“ with `.problem-table-compact`) use `.problem-table` = `table-layout: fixed` + `<colgroup>` widths, the problem text wraps (`overflow-wrap: anywhere`), below 1200px the rows become CSS-grid cards (cells `cell-select/-severity/-server/-since/-status/-action`, `problem-main`). Long identifiers elsewhere get `.text-wrap-anywhere` (only on long-text cells — on every cell it would split short words). Navbar collapses below xl; a long `general.title` is truncated. Don't wrap such tables in `.table-responsive`.
 - Shared partials: `_AcknowledgeModal` (acknowledge dialog for Problems + Status/Details), `_AutoRefresh` (60 s reload toggle, pauses while a dialog is open, a field has focus or the tab is hidden). The nav "Probleme" count is loaded asynchronously from `/api/problems` so the layout never blocks on status reads.
 
 ### PowerShell Script Runner (v2.31.0)
@@ -213,6 +220,12 @@ A server with no PRTG metrics but a failing email delivery check correctly retur
 - **Prozess-Priorität `BelowNormal`**: `SimpleAdminWorkerHost.RunAsync` setzt den Worker-Prozess beim Start auf `ProcessPriorityClass.BelowNormal`, damit er den eigentlichen Workloads keine Rechenzeit stiehlt.
 - Debug-Log `[CPU] (system median X %, self Y % over Z ms, samples […])` zeigt, wie der Endwert zustande kommt.
 Linux (`/proc/stat`) und macOS waren nicht betroffen (sauberer Delta-Rechenpfad).
+
+**Nachtrag (v2.36.1):** Der Median über 900 ms reichte nicht, weil die Messung parallel zu den Checkern lief und deren **Kindprozesse** (`powershell.exe`, `sc.exe` je Dienst, `appcmd.exe`, `netsh`, plus Defender-Scans) nicht vom Eigenanteil erfasst werden. Jetzt:
+- Der Worker sammelt die Metriken **erst nach** `Task.WhenAll` der Checker.
+- CPU = **Mittelwert** (nicht Median) über ein langes Fenster: Default 60 s / 12 Samples (`Metrics:Cpu:WindowMs` 200 ms…180 s, `Metrics:Cpu:Samples` 2…120).
+- `Metrics:Cpu:RuntimeBudgetSeconds` (Default 240, 30…3600): Das Fenster wird verkürzt, sodass Prozessstart + Checker + Fenster + 30 s Reserve (`CpuSamplingOptions.RuntimeReserve`) im Budget bleiben, mindestens 1 s (`EffectiveWindow`, Basis `Process.StartTime`, weil der Worker one-shot ist).
+- Der CPU-Wert wird pro Lauf einmal gemessen und für weitere ServiceTypes 2 min wiederverwendet (sonst 60 s je ServiceType).
 
 ### Domains und Namenskonvention (v2.35.0)
 `Config.Domains` (`List<Domain>`, fehlender Block = leer): `Name` (DNS), `Environment` (Key aus `Config.Environments`, **immer explizit**), `Servers`, optional `NetScalerVServer` (darf von mehreren Domains geteilt werden), `HealthCheck` (Name eines NetScaler-HealthChecks, nur Information), `Description`, `AllowNameMismatch`. Beide PROD-Varianten (`app`, `app-prod`) sind eigenständige Einträge. `Shared/Services/DomainNamingConvention`: `SuggestEnvironment`/`IsConsistent`/`Evaluate` – erstes DNS-Label, `-dev`→development, `-ref`→ref, `-prod`/kein bekanntes Suffix→production (nur wenn der Key existiert), längstes Suffix gewinnt; erweiterbar/überschreibbar per `Config.DomainSuffixMap` (leerer Wert entfernt ein Suffix). Nur Vorschlag/Warnung, nie Quelle der Wahrheit. WebUI: `DomainsController` (Liste nach Umgebung, Create/Edit/Delete, `GET /Domains/Suggest`), Serverauswahl nur aus `GetServersInEnvironment(env)`, Mismatch wird erst mit „Ausnahme zulassen“ gespeichert; Serverliste hat Umgebungs-Spalte + Filter; Server-Rename/-Delete pflegt `Domain.Servers` mit. HtmlGenerator: `RenderDomainList` zeigt Domains je Umgebung auf `all.html` und der zentralen Übersicht (die jetzt auch weitere Umgebungen außer production/ref/development rendert). Checker sind unverändert.

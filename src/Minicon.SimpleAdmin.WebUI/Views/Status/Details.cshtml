@@ -178,8 +178,17 @@ else
                 <small class="text-body-secondary">@(Model.ActiveProblems.Count - openProblems) quittiert</small>
             }
         </div>
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
+        @* Same fixed layout as the Problems page (site.css .problem-table): long texts wrap,
+           below 1200px the rows become cards — no horizontal scrolling. *@
+        <div>
+            <table class="table table-hover mb-0 problem-table problem-table-compact">
+                <colgroup>
+                    <col />
+                    <col class="col-severity" />
+                    <col class="col-since" />
+                    <col class="col-status" />
+                    <col class="col-action" />
+                </colgroup>
                 <thead>
                     <tr>
                         <th class="ps-3">Problem</th>
@@ -197,7 +206,7 @@ else
                         var title = string.IsNullOrWhiteSpace(problem.Message) ? origin : problem.Message;
 
                         <tr class="@(problem.Acknowledged ? "text-body-secondary" : "")">
-                            <td class="ps-3">
+                            <td class="ps-3 problem-main">
                                 @if (problemChartLink != null)
                                 {
                                     <a href="@problemChartLink" class="fw-semibold" title="Verlauf anzeigen">@title<i class="bi bi-graph-up ms-2"></i></a>
@@ -206,7 +215,7 @@ else
                                 {
                                     <span class="fw-semibold">@title</span>
                                 }
-                                <div class="small text-body-secondary"><code>@origin</code></div>
+                                <div class="small text-body-secondary"><code class="problem-origin">@origin</code></div>
                                 @if (!string.IsNullOrEmpty(problem.WikiUrl) || problem.RemediationSteps.Count > 0)
                                 {
                                     <div class="small mt-1 d-flex flex-wrap gap-3">
@@ -229,12 +238,12 @@ else
                                     </div>
                                 }
                             </td>
-                            <td><span class="pill pill-@Display.Tone(problem.Severity)"><i class="bi @Display.Icon(problem.Severity)"></i>@Display.Label(problem.Severity)</span></td>
-                            <td class="text-nowrap">
+                            <td class="cell-severity"><span class="pill pill-@Display.Tone(problem.Severity)"><i class="bi @Display.Icon(problem.Severity)"></i>@Display.Label(problem.Severity)</span></td>
+                            <td class="cell-since">
                                 <time class="relative-time" data-utc="@Display.Iso(problem.FirstOccurrence)"
                                       title="Erstmals: @Display.LocalTime(problem.FirstOccurrence) · Zuletzt: @Display.LocalTime(problem.LastOccurrence)">@Display.LocalTime(problem.FirstOccurrence)</time>
                             </td>
-                            <td>
+                            <td class="cell-status">
                                 @if (problem.Acknowledged)
                                 {
                                     <span class="pill pill-soft pill-ack"><i class="bi bi-check2-circle"></i>Quittiert</span>
@@ -251,7 +260,7 @@ else
                                     <span class="pill pill-soft pill-crit"><i class="bi bi-circle-fill" style="font-size: .5rem;"></i>Offen</span>
                                 }
                             </td>
-                            <td class="text-end pe-3 text-nowrap">
+                            <td class="text-end pe-3 text-nowrap cell-action">
                                 @if (!problem.Acknowledged)
                                 {
                                     <button type="button" class="btn btn-sm btn-primary"
@@ -956,7 +965,7 @@ else
                             {
                                 <tr>
                                     <td>@p.ArtifactType</td>
-                                    <td>@p.Name</td>
+                                    <td class="text-wrap-anywhere">@p.Name</td>
                                     <td>@p.Status</td>
                                     <td><span class="badge @(p.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(p.IsCritical ? "Kritisch" : "Warnung")</span></td>
                                 </tr>
@@ -1016,8 +1025,8 @@ else
                             {
                                 var ageLabel = s.AgeMinutes >= 120 ? $"{s.AgeMinutes / 60.0:N1} h" : $"{s.AgeMinutes:N0} min";
                                 <tr>
-                                    <td>@s.Directory</td>
-                                    <td title="@s.FilePath">@System.IO.Path.GetFileName(s.FilePath)</td>
+                                    <td class="text-wrap-anywhere">@s.Directory</td>
+                                    <td class="text-wrap-anywhere" title="@s.FilePath">@System.IO.Path.GetFileName(s.FilePath)</td>
                                     <td>@ageLabel</td>
                                     <td>@(string.Equals(s.Reason, "cutoff", StringComparison.OrdinalIgnoreCase) ? "Nach Cutoff" : "Zu alt")</td>
                                     <td><span class="badge @(s.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(s.IsCritical ? "Kritisch" : "Warnung")</span></td>
@@ -1042,10 +1051,10 @@ else
                             @foreach (var m in fm.LogMatches)
                             {
                                 <tr>
-                                    <td title="@m.LogPath">@m.LogScan</td>
+                                    <td class="text-wrap-anywhere" title="@m.LogPath">@m.LogScan</td>
                                     <td><span class="badge @(m.IsCritical ? "bg-danger" : "bg-warning text-dark")">@m.Pattern</span></td>
                                     <td>@m.Count</td>
-                                    <td><code class="small">@m.SampleLine</code></td>
+                                    <td class="text-wrap-anywhere"><code class="small">@m.SampleLine</code></td>
                                     <td>
                                         @if (!string.IsNullOrEmpty(m.WikiUrl))
                                         {

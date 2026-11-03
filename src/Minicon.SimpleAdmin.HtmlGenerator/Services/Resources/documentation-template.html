@@ -930,6 +930,19 @@ Nächste Messung mit [92%, 88%, 65%, 70%, 68%]:
                     </tr>
                 </table>
 
+                <h5>Messverfahren</h5>
+                <p>Die CPU wird gemessen, nachdem alle anderen Prüfungen des Laufs fertig sind, und über
+                60 Sekunden gemittelt (12 Messungen). Kurze Spitzen, auch die der Überwachung selbst, lösen so keinen
+                Alarm aus. Das Messfenster wird verkürzt, damit ein Lauf höchstens 4 Minuten dauert (30 Sekunden Reserve).
+                Einstellbar in der <code>appsettings.json</code> des Workers (nicht in <code>config.json</code>):</p>
+                <table>
+                    <tr><th>Einstellung</th><th>Standard</th><th>Beschreibung</th></tr>
+                    <tr><td><code>Metrics:Cpu:WindowMs</code></td><td>60000</td><td>Länge des Messfensters (200 ms bis 180 s)</td></tr>
+                    <tr><td><code>Metrics:Cpu:Samples</code></td><td>12</td><td>Anzahl Messungen im Fenster (2 bis 120)</td></tr>
+                    <tr><td><code>Metrics:Cpu:RuntimeBudgetSeconds</code></td><td>240</td><td>Maximale Gesamtlaufzeit des Workers (30 s bis 1 h)</td></tr>
+                    <tr><td><code>Metrics:Cpu:SubtractSelf</code></td><td>true</td><td>Eigene CPU-Last des Workers abziehen</td></tr>
+                </table>
+
                 <h5>Beispiel</h5>
                 <pre>{
   "metric": "cpu",

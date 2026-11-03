@@ -1,0 +1,103 @@
+@using Minicon.SimpleAdmin.WebUI.Services
+@model IReadOnlyList<ChangelogRelease>
+@{
+    ViewData["Title"] = "Neuigkeiten";
+    var installed = ChangelogProvider.InstalledVersion;
+
+    static (string Tone, string Icon) SectionStyle(string title) => title.ToLowerInvariant() switch
+    {
+        "neu" => ("ok", "bi-plus-circle"),
+        "geändert" => ("info", "bi-arrow-repeat"),
+        "behoben" => ("warn", "bi-bug"),
+        "sicherheit" => ("crit", "bi-shield-lock"),
+        "performance" => ("info", "bi-speedometer2"),
+        "hinweise" => ("muted", "bi-lightbulb"),
+        _ => ("muted", "bi-info-circle")
+    };
+}
+
+<div class="page-head">
+    <div>
+        <h1><i class="bi bi-stars"></i>Neuigkeiten</h1>
+        <div class="page-sub">Änderungen je Version · installiert: <strong>v@(installed)</strong></div>
+    </div>
+    <div class="page-actions">
+        <a asp-action="Index" class="btn btn-glass btn-sm"><i class="bi bi-book me-1"></i>Hilfe</a>
+    </div>
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>Für diese Version sind keine Versionshinweise enthalten.
+    </div>
+}
+
+<div class="changelog" data-changelog data-installed-version="@installed">
+    @for (var i = 0; i < Model.Count; i++)
+    {
+        var release = Model[i];
+        var isInstalled = release.Version == installed;
+        @* Only what users notice — developer sections ("Entwickler", "Intern") are never rendered. *@
+        var userSections = release.Sections.Where(s => !s.IsTechnical).ToList();
+        <details class="card changelog-release mb-3" data-release-version="@release.Version" open="@(i == 0 || isInstalled)">
+            <summary class="card-header changelog-summary">
+                <span class="changelog-version">v@(release.Version)</span>
+                @if (isInstalled)
+                {
+                    <span class="pill pill-ok pill-soft">Installiert</span>
+                }
+                <span class="pill pill-info pill-soft d-none" data-release-new>Neu seit Ihrem letzten Besuch</span>
+                @if (release.TitleHtml != null)
+                {
+                    <span class="changelog-title">@Html.Raw(release.TitleHtml)</span>
+                }
+                @if (release.Date != null && DateOnly.TryParse(release.Date, System.Globalization.CultureInfo.InvariantCulture, out var date))
+                {
+                    <span class="changelog-date text-muted small ms-auto">@date.ToString("dd.MM.yyyy")</span>
+                }
+            </summary>
+            <div class="card-body">
+                @foreach (var paragraph in release.SummaryHtml)
+                {
+                    <p class="changelog-lead">@Html.Raw(paragraph)</p>
+                }
+                @if (userSections.Count == 0 && release.SummaryHtml.Count == 0)
+                {
+                    <p class="text-muted small mb-0">Keine sichtbaren Änderungen – nur technische Anpassungen.</p>
+                }
+                @foreach (var part in userSections)
+                {
+                    var (tone, icon) = SectionStyle(part.Title);
+                    <section class="changelog-section">
+                        <h2 class="changelog-section-title"><span class="pill pill-@tone pill-soft"><i class="bi @icon"></i>@part.Title</span></h2>
+                        @foreach (var paragraph in part.ParagraphsHtml)
+                        {
+                            <p>@Html.Raw(paragraph)</p>
+                        }
+                        @if (part.Items.Count > 0)
+                        {
+                            <ul>
+                                @foreach (var item in part.Items)
+                                {
+                                    <li>
+                                        @Html.Raw(item.Html)
+                                        @if (item.ChildrenHtml.Count > 0)
+                                        {
+                                            <ul>
+                                                @foreach (var child in item.ChildrenHtml)
+                                                {
+                                                    <li>@Html.Raw(child)</li>
+                                                }
+                                            </ul>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </section>
+                }
+            </div>
+        </details>
+    }
+</div>

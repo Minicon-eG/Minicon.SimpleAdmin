@@ -46,6 +46,7 @@
     <None Include="$(MSBuildThisFileDirectory)build/Minicon.SimpleAdmin.Sources.targets" Pack="true" PackagePath="sources-root/build/" Visible="false" />
     <None Include="$(_SimpleAdminRepoRoot)README.md" Pack="true" PackagePath="sources-root/" Visible="false" Condition="Exists('$(_SimpleAdminRepoRoot)README.md')" />
     <None Include="$(_SimpleAdminRepoRoot)LICENSE" Pack="true" PackagePath="sources-root/" Visible="false" Condition="Exists('$(_SimpleAdminRepoRoot)LICENSE')" />
+    <None Include="$(_SimpleAdminRepoRoot)CHANGELOG.md" Pack="true" PackagePath="sources-root/" Visible="false" Condition="Exists('$(_SimpleAdminRepoRoot)CHANGELOG.md')" />
   </ItemGroup>
 
   <!-- Die Projektdateien erst beim Packen anhaengen: als None-Items im Projekt
@@ -71,6 +72,32 @@
       <_SimpleAdminPackSourceCopy Include="$(_SimpleAdminPackSourceDir)**/*" />
       <TfmSpecificPackageFile Include="@(_SimpleAdminPackSourceCopy)"
                               PackagePath="sources/" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Das Worker-Paket liefert zusaetzlich das Testprojekt unter "sources-tests/" mit. Der Host
+       entpackt es nur auf Wunsch (SimpleAdminExtractTests=true, siehe
+       build/Minicon.SimpleAdmin.Sources.targets). Worker, weil das Testprojekt alle Pakete
+       referenziert und der Worker die meisten davon mitbringt. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Minicon.SimpleAdmin.Worker'">
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_SimpleAdminPackTestSources</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Target Name="_SimpleAdminPackTestSources">
+    <PropertyGroup>
+      <_SimpleAdminTestsDir>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', 'Minicon.SimpleAdmin.Tests'))</_SimpleAdminTestsDir>
+      <_SimpleAdminPackTestsDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'simpleadmin-tests'))</_SimpleAdminPackTestsDir>
+    </PropertyGroup>
+    <ItemGroup Condition="Exists('$(_SimpleAdminTestsDir)')">
+      <_SimpleAdminPackTest Include="$(_SimpleAdminTestsDir)**/*"
+                            Exclude="$(_SimpleAdminTestsDir)bin/**;$(_SimpleAdminTestsDir)obj/**;$(_SimpleAdminTestsDir)**/*.user;$(_SimpleAdminTestsDir)**/.DS_Store;$(_SimpleAdminTestsDir)TestResults/**" />
+    </ItemGroup>
+    <RemoveDir Directories="$(_SimpleAdminPackTestsDir)" />
+    <Copy SourceFiles="@(_SimpleAdminPackTest)"
+          DestinationFiles="@(_SimpleAdminPackTest->'$(_SimpleAdminPackTestsDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <ItemGroup>
+      <_SimpleAdminPackTestCopy Include="$(_SimpleAdminPackTestsDir)**/*" />
+      <TfmSpecificPackageFile Include="@(_SimpleAdminPackTestCopy)" PackagePath="sources-tests/" />
     </ItemGroup>
   </Target>
 

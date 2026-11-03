@@ -16,6 +16,11 @@
           in Namespaces, Projekt-/Datei-/Ordnernamen, Views (_content-Pfade),
           Logger-Kategorien und Texten. LICENSE bleibt unveraendert (MIT verlangt
           den Copyright-Hinweis), Repository-URLs ebenfalls.
+      <SimpleAdminExtractTests>true</SimpleAdminExtractTests>
+          entpackt zusaetzlich das Testprojekt (aus dem Worker-Paket) nach
+          <Zielordner>/Minicon.SimpleAdmin.Tests/. Es referenziert alle Pakete, auch die
+          WebUI - Worker- und WebUI-Host muessen dafuer denselben
+          SimpleAdminSourcesDirectory verwenden (z. B. ..\SimpleAdmin.Sources).
 
     Entpackt wird nur, wenn sich Paketversion oder Namespace geaendert haben
     (Marker-Datei); lokale Aenderungen an den entpackten Dateien werden dann
@@ -29,6 +34,7 @@
   <PropertyGroup>
     <SimpleAdminExtractSources Condition="'$(SimpleAdminExtractSources)' == ''">true</SimpleAdminExtractSources>
     <SimpleAdminSourcesDirectory Condition="'$(SimpleAdminSourcesDirectory)' == ''">SimpleAdmin.Sources</SimpleAdminSourcesDirectory>
+    <SimpleAdminExtractTests Condition="'$(SimpleAdminExtractTests)' == ''">false</SimpleAdminExtractTests>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(_SimpleAdminSourcesExcluded)' != 'true'">
@@ -132,6 +138,39 @@
                       File="$(_SaMarker)" Lines="$(_SaMarkerExpected)" Overwrite="true" />
     <Message Condition="'$(_SaUpToDate)' != 'true'" Importance="high"
              Text="SimpleAdmin: Quellcode von %(SimpleAdminSourcePackage.Identity) nach $(_SaTargetDir) entpackt." />
+
+    <!-- Testprojekt (nur das Worker-Paket liefert "sources-tests" mit). -->
+    <PropertyGroup>
+      <_SaTestsSource>$(_SaPackageRoot)sources-tests</_SaTestsSource>
+      <_SaExtractTests>false</_SaExtractTests>
+      <_SaExtractTests Condition="'$(SimpleAdminExtractTests)' == 'true' And Exists('$(_SaTestsSource)')">true</_SaExtractTests>
+      <_SaPrefix>Minicon.SimpleAdmin</_SaPrefix>
+      <_SaPrefix Condition="'$(SimpleAdminSourcesNamespace)' != ''">$(SimpleAdminSourcesNamespace)</_SaPrefix>
+      <_SaTestsDir>$([MSBuild]::NormalizeDirectory('$(_SaBaseDir)', '$(_SaPrefix).Tests'))</_SaTestsDir>
+      <_SaTestsMarker>$(_SaTestsDir).simpleadmin-package</_SaTestsMarker>
+      <_SaTestsMarkerValue></_SaTestsMarkerValue>
+    </PropertyGroup>
+
+    <ReadLinesFromFile File="$(_SaTestsMarker)" Condition="'$(_SaExtractTests)' == 'true' And Exists('$(_SaTestsMarker)')">
+      <Output TaskParameter="Lines" PropertyName="_SaTestsMarkerValue" />
+    </ReadLinesFromFile>
+
+    <PropertyGroup>
+      <_SaTestsUpToDate>true</_SaTestsUpToDate>
+      <_SaTestsUpToDate Condition="'$(_SaExtractTests)' == 'true' And '$(_SaTestsMarkerValue)' != '$(_SaMarkerExpected)'">false</_SaTestsUpToDate>
+    </PropertyGroup>
+
+    <RemoveDir Directories="$(_SaTestsDir)" Condition="'$(_SaTestsUpToDate)' != 'true'" />
+    <SimpleAdminCopySources Condition="'$(_SaTestsUpToDate)' != 'true'"
+                            SourceDirectory="$(_SaTestsSource)"
+                            TargetDirectory="$(_SaTestsDir)"
+                            Namespace="$(SimpleAdminSourcesNamespace)" />
+    <WriteLinesToFile Condition="'$(_SaTestsUpToDate)' != 'true'"
+                      File="$(_SaTestsMarker)" Lines="$(_SaMarkerExpected)" Overwrite="true" />
+    <Message Condition="'$(_SaTestsUpToDate)' != 'true'" Importance="high"
+             Text="SimpleAdmin: Testprojekt nach $(_SaTestsDir) entpackt." />
+    <Warning Condition="'$(_SaTestsUpToDate)' != 'true' And !Exists('$(_SaBaseDir)$(_SaPrefix).WebUI')"
+             Text="SimpleAdmin: Das Testprojekt referenziert auch $(_SaPrefix).WebUI, dessen Quellcode in $(_SaBaseDir) (noch) fehlt. Worker- und WebUI-Host muessen denselben SimpleAdminSourcesDirectory verwenden; der WebUI-Quellcode erscheint dort beim Build des WebUI-Hosts." />
   </Target>
 
 </Project>

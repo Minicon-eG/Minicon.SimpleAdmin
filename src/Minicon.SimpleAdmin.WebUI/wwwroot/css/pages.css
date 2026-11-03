@@ -1,4 +1,4 @@
-/* Page-specific styles for Dashboard, Status overview and Problems.
+/* Page-specific styles for Dashboard, Status overview, Problems and Neuigkeiten (changelog).
    Colours come from Bootstrap variables only, so light and dark theme both work. */
 
 /* ---------- Tone → KPI colour (used with .kpi-tile from theme.css) ---------- */
@@ -79,3 +79,30 @@ a.kpi-tile { color: inherit; text-decoration: none; }
 }
 .dashboard-config-item > i { font-size: 1.25rem; color: var(--bs-secondary-color); }
 a.dashboard-config-item:hover { background: var(--bs-secondary-bg); color: inherit; }
+
+/* ---------- Changelog page ("Neuigkeiten") ---------- */
+.changelog-release > summary { list-style: none; cursor: pointer; }
+.changelog-release > summary::-webkit-details-marker { display: none; }
+.changelog-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem .75rem;
+}
+.changelog-summary::before {
+    content: "\F285"; /* bootstrap-icons chevron-right */
+    font-family: "bootstrap-icons";
+    font-size: .8rem;
+    transition: transform .15s ease;
+}
+.changelog-release[open] > .changelog-summary::before { transform: rotate(90deg); }
+.changelog-version { font-weight: 700; font-size: 1.1rem; }
+.changelog-title { font-weight: 500; }
+.changelog-lead { font-size: 1.02rem; }
+.changelog-section + .changelog-section { margin-top: 1rem; }
+.changelog-section-title { font-size: 1rem; margin-bottom: .5rem; }
+.changelog-section ul { margin-bottom: 0; padding-left: 1.25rem; }
+.changelog-section li + li { margin-top: .3rem; }
+.changelog-section ul ul { margin-top: .3rem; }
+.changelog code { font-size: .85em; }
+.footer-version { color: inherit; }

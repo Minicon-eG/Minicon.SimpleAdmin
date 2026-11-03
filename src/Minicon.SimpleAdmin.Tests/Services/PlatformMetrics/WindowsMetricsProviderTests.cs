@@ -1,3 +1,4 @@
+using Minicon.SimpleAdmin.Services.PlatformMetrics;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -16,7 +17,8 @@ public class WindowsMetricsProviderTests
     public WindowsMetricsProviderTests()
     {
         _mockLogger = new Mock<ILogger>();
-        _provider = new WindowsMetricsProvider(_mockLogger.Object);
+        // Short window so the real-counter tests on Windows do not take a minute.
+        _provider = new WindowsMetricsProvider(_mockLogger.Object, new CpuSamplingOptions(500, 2, true));
     }
 
     [Fact]
