@@ -13,6 +13,12 @@ public class FileMonitoringState
     /// <summary>Number of log files that were scanned this cycle.</summary>
     public int LogFilesScanned { get; set; }
 
+    /// <summary>
+    /// Number of log files that were rotated or truncated since the last cycle (the remembered read
+    /// position was no longer valid, the file was read from the beginning again).
+    /// </summary>
+    public int LogFilesRotated { get; set; }
+
     /// <summary>True when at least one watched path could not be reached (share offline, access denied, ...).</summary>
     public bool AnyError { get; set; }
 

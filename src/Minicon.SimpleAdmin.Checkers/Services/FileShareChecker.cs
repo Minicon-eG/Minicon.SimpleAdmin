@@ -16,8 +16,11 @@ public interface IFileMonitoringChecker
 }
 
 /// <inheritdoc />
-public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileShareChecker> logger) : IFileMonitoringChecker
+public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileShareChecker> logger, ILogFileOffsetStore? offsetStore = null) : IFileMonitoringChecker
 {
+    /// <summary>The store with the remembered read positions; <c>null</c> disables the offset tracking.</summary>
+    private readonly ILogFileOffsetStore? _offsetStore = offsetStore;
+
     public Task<FileMonitoringState> CheckAsync(ServerFileMonitoringConfig config, FileMonitoringDefaults defaults, CancellationToken cancellationToken = default)
         => Task.Run(() => Check(config, defaults, DateTime.Now, cancellationToken), cancellationToken);
 
@@ -76,10 +79,11 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
                 }
 
                 var lines = new List<string>();
+                var useOffsets = defaults.OffsetTrackingEnabled && _offsetStore is not null;
                 foreach (var file in resolved)
                 {
                     state.LogFilesScanned++;
-                    lines.AddRange(fileSystem.ReadLines(file.FullPath, scan.MaxLines));
+                    lines.AddRange(ReadNewLines(scan, file, state, useOffsets));
                 }
 
                 var sampleLogPath = resolved.Count > 0 ? resolved[0].FullPath : scan.Path;
@@ -112,7 +116,64 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
                 .Take(defaults.MaxReportedItems).ToList();
         }
 
+        // The positions must survive a restart, otherwise every cycle would report the same lines again.
+        _offsetStore?.Save();
+
         return state;
+    }
+
+    // --- offset tracking (stateful log de-duplication) ---
+
+    /// <summary>
+    /// Reads the lines of a log file that were written since the last cycle. Without a store the whole
+    /// tail is read (old behaviour). With a store only the new lines are read and the position is
+    /// advanced afterwards, so the same hit is not reported twice.
+    /// </summary>
+    private IReadOnlyList<string> ReadNewLines(LogScanConfig scan, FileEntry file, FileMonitoringState state, bool useOffsets)
+    {
+        if (!useOffsets || _offsetStore is null)
+        {
+            return fileSystem.ReadLines(file.FullPath, scan.MaxLines);
+        }
+
+        var previous = _offsetStore.Get(file.FullPath);
+
+        LogFileReadResult result;
+        try
+        {
+            // First cycle without a known position: read the tail (as before), and remember where it ends.
+            // Later cycles: read only what was appended since the remembered position.
+            result = previous is null
+                ? fileSystem.ReadTail(file.FullPath, scan.MaxLines)
+                : fileSystem.ReadFrom(file.FullPath, previous.Offset, scan.MaxLines);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "FileMonitoring: Log '{Path}' nicht lesbar, Versatz bleibt unverändert", file.FullPath);
+            return Array.Empty<string>();
+        }
+
+        // Rotation / truncation: the file is shorter than the remembered position, the file was read
+        // from the beginning again. That is intended, the whole new file is reported once.
+        if (previous is not null && result.Length < previous.Offset)
+        {
+            state.LogFilesRotated++;
+        }
+
+        _offsetStore.Set(file.FullPath, new LogFileOffset
+        {
+            Offset = result.Offset,
+            Length = result.Length,
+            LastWriteTime = result.LastWriteTime
+        });
+
+        if (result.Lines.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        // More new lines than the configured maximum: the rest is read in the next cycle.
+        return result.Lines;
     }
 
     // --- pure evaluation (testable) ---
