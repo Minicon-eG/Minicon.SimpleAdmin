@@ -97,6 +97,15 @@ public static class SimpleAdminWorkerHost
                 sp.GetRequiredService<ILogger<BizTalkApiClient>>()));
         services.AddSingleton<IBizTalkChecker, BizTalkChecker>();
 
+        // BizTalk deactivation actions: the WebUI writes requests into a shared directory, the
+        // worker on the target server executes them and writes the result back.
+        services.AddSingleton<BizTalkActionStore>(sp =>
+            new BizTalkActionStore(
+                paths.StatusDirectory,
+                sp.GetRequiredService<ILogger<BizTalkActionStore>>()));
+        services.AddSingleton<IBizTalkActionStore>(sp => sp.GetRequiredService<BizTalkActionStore>());
+        services.AddSingleton<IBizTalkActionExecutor, BizTalkActionExecutor>();
+
         // Register file-share / log monitoring checker
         services.AddSingleton<IFileSystemAccess, FileSystemAccess>();
         services.AddSingleton<IFileMonitoringChecker, FileShareChecker>();

@@ -342,6 +342,33 @@
                                        class="form-control form-control-sm" min="1" />
                             </div>
                         </div>
+                        <hr />
+                        <h6>Deaktivierung aus der Problemliste</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input type="checkbox" name="Features.BizTalk.ActionsEnabled" value="true"
+                                   class="form-check-input feature-toggle" id="bizTalkActionsEnabled"
+                                   @(Model.Features.BizTalk.ActionsEnabled ? "checked" : "") />
+                            <input type="hidden" name="Features.BizTalk.ActionsEnabled" value="false" />
+                            <label class="form-check-label" for="bizTalkActionsEnabled">
+                                Deaktivierung erlauben
+                            </label>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Austauschverzeichnis (Aufträge und Ergebnisse)</label>
+                            <input type="text" name="Features.BizTalk.ActionsDirectory"
+                                   value="@Model.Features.BizTalk.ActionsDirectory"
+                                   class="form-control form-control-sm font-monospace"
+                                   placeholder="\\fileserver\biztalk-actions" />
+                            <div class="form-text">
+                                Von der WebUI und den Workern gemeinsam benutzter Ordner (UNC-Pfad). Leer = lokales
+                                Statusverzeichnis (nur bei WebUI und Worker auf demselben Server).
+                            </div>
+                        </div>
+                        <p class="text-muted small mb-0">
+                            Die WebUI legt nur einen Auftrag ab; die Ausführung übernimmt der Worker auf dem
+                            Zielserver über die BizTalk-Management-API. Die WebUI benötigt daher keine
+                            BizTalk-Zugangsdaten.
+                        </p>
                     </div>
                 </div>
             </div>
