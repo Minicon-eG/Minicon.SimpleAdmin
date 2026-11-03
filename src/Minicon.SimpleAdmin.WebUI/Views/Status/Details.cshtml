@@ -1009,7 +1009,8 @@ else
             {
                 <p class="text-muted mb-3">
                     Verzeichnisse geprüft: @fm.DirectoriesChecked · Logdateien gescannt: @fm.LogFilesScanned ·
-                    Hängende Dateien: <strong>@fm.StuckFiles.Count</strong> · Log-Treffer: <strong>@fm.LogMatches.Count</strong>
+                    Hängende Dateien: <strong>@fm.StuckFiles.Count</strong> · Log-Treffer: <strong>@fm.LogMatches.Count</strong> ·
+                    Größenänderungen: <strong>@fm.SizeChanges.Count</strong>
                 </p>
                 @if (fm.AnyError && !string.IsNullOrEmpty(fm.Error))
                 {
@@ -1067,9 +1068,36 @@ else
                         </tbody>
                     </table>
                 }
-                @if (fm.StuckFiles.Count == 0 && fm.LogMatches.Count == 0 && !fm.AnyError)
+                @if (fm.SizeChanges.Count > 0)
                 {
-                    <p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i>Keine hängenden Dateien oder Log-Fehler.</p>
+                    <h6>Größenänderungen</h6>
+                    <table class="table table-sm table-hover mb-3">
+                        <thead><tr><th>Verzeichnis</th><th>Datei</th><th>Vorher</th><th>Jetzt</th><th>Änderung</th><th>Schweregrad</th><th>Lösung</th></tr></thead>
+                        <tbody>
+                            @foreach (var c in fm.SizeChanges)
+                            {
+                                <tr>
+                                    <td class="text-wrap-anywhere">@c.Directory</td>
+                                    <td class="text-wrap-anywhere" title="@c.FilePath">@System.IO.Path.GetFileName(c.FilePath)</td>
+                                    <td>@c.PreviousSize.ToString("N0") B</td>
+                                    <td>@c.CurrentSize.ToString("N0") B</td>
+                                    <td>@c.ChangePercent.ToString("N0") %</td>
+                                    <td><span class="badge @(c.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(c.IsCritical ? "Kritisch" : "Warnung")</span></td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(c.WikiUrl))
+                                        {
+                                            <a href="@c.WikiUrl" target="_blank" rel="noopener">Anleitung <i class="bi bi-box-arrow-up-right"></i></a>
+                                        }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                @if (fm.StuckFiles.Count == 0 && fm.LogMatches.Count == 0 && fm.SizeChanges.Count == 0 && !fm.AnyError)
+                {
+                    <p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i>Keine hängenden Dateien, Log-Fehler oder Größenänderungen.</p>
                 }
             }
         </div>

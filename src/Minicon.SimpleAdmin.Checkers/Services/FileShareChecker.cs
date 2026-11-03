@@ -13,18 +13,51 @@ namespace Minicon.SimpleAdmin.Checkers;
 public interface IFileMonitoringChecker
 {
     Task<FileMonitoringState> CheckAsync(ServerFileMonitoringConfig config, FileMonitoringDefaults defaults, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Checks the watched directories / log scans and compares the file sizes with the ones observed in
+    /// the previous cycle (<paramref name="previousFileSizes"/>) to detect strong size changes.
+    /// </summary>
+    Task<FileMonitoringState> CheckAsync(
+        ServerFileMonitoringConfig config,
+        FileMonitoringDefaults defaults,
+        IReadOnlyDictionary<string, long>? previousFileSizes,
+        CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
 public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileShareChecker> logger) : IFileMonitoringChecker
 {
     public Task<FileMonitoringState> CheckAsync(ServerFileMonitoringConfig config, FileMonitoringDefaults defaults, CancellationToken cancellationToken = default)
-        => Task.Run(() => Check(config, defaults, DateTime.Now, cancellationToken), cancellationToken);
+        => CheckAsync(config, defaults, null, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<FileMonitoringState> CheckAsync(
+        ServerFileMonitoringConfig config,
+        FileMonitoringDefaults defaults,
+        IReadOnlyDictionary<string, long>? previousFileSizes,
+        CancellationToken cancellationToken = default)
+        => Task.Run(() => Check(config, defaults, previousFileSizes, DateTime.Now, cancellationToken), cancellationToken);
+
+    /// <summary>Synchronous core without a size predecessor — no size change can be detected.</summary>
+    internal FileMonitoringState Check(
+        ServerFileMonitoringConfig config,
+        FileMonitoringDefaults defaults,
+        DateTime now,
+        CancellationToken cancellationToken = default)
+        => Check(config, defaults, null, now, cancellationToken);
 
     /// <summary>Synchronous core with an injected <paramref name="now"/> for deterministic testing.</summary>
-    internal FileMonitoringState Check(ServerFileMonitoringConfig config, FileMonitoringDefaults defaults, DateTime now, CancellationToken cancellationToken = default)
+    internal FileMonitoringState Check(
+        ServerFileMonitoringConfig config,
+        FileMonitoringDefaults defaults,
+        IReadOnlyDictionary<string, long>? previousFileSizes,
+        DateTime now,
+        CancellationToken cancellationToken = default)
     {
         var state = new FileMonitoringState();
+        // Sizes observed in this cycle - they become the predecessor of the next cycle.
+        var observedSizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
         // Business-hours gate (reuses the TimeProfile schedule syntax, e.g. "Mon-Fri 06:00-22:00").
         if (!string.IsNullOrWhiteSpace(config.Schedule)
@@ -47,6 +80,11 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
             {
                 var files = fileSystem.EnumerateFiles(dir.Path, dir.Recursive);
                 state.StuckFiles.AddRange(EvaluateDirectory(files, dir, defaults, now));
+                state.SizeChanges.AddRange(EvaluateSizeChanges(files, dir, defaults, previousFileSizes));
+                foreach (var f in files)
+                {
+                    observedSizes[f.FullPath] = f.Size;
+                }
             }
             catch (Exception ex)
             {
@@ -112,6 +150,16 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
                 .Take(defaults.MaxReportedItems).ToList();
         }
 
+        if (state.SizeChanges.Count > defaults.MaxReportedItems)
+        {
+            state.SizeChanges = state.SizeChanges
+                .OrderByDescending(c => c.IsCritical).ThenByDescending(c => Math.Abs(c.ChangePercent))
+                .Take(defaults.MaxReportedItems).ToList();
+        }
+
+        // The sizes of this cycle are the predecessor for the next cycle (persisted with the status JSON).
+        state.PreviousFileSizes = observedSizes;
+
         return state;
     }
 
@@ -164,6 +212,56 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
                 LastModified = f.LastWriteTime,
                 AgeMinutes = Math.Round(ageMin, 1),
                 Reason = reason,
+                IsCritical = isCritical,
+                WikiUrl = dir.WikiUrl,
+                RemediationSteps = new List<string>(dir.RemediationSteps)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Compares the current file sizes with the ones observed in the previous cycle and yields a
+    /// finding for every file whose relative size change reaches the configured threshold.
+    /// Files without a usable predecessor (unknown size, or not seen in the previous cycle) are skipped.
+    /// </summary>
+    internal static IEnumerable<FileSizeChange> EvaluateSizeChanges(
+        IReadOnlyList<FileEntry> files,
+        WatchedDirectory dir,
+        FileMonitoringDefaults defaults,
+        IReadOnlyDictionary<string, long>? previousFileSizes)
+    {
+        var warnT = dir.SizeChangePercentWarning ?? defaults.SizeChangePercentWarning;
+        var critT = dir.SizeChangePercentCritical ?? defaults.SizeChangePercentCritical;
+        if (warnT <= 0 || previousFileSizes is null || previousFileSizes.Count == 0)
+        {
+            yield break;
+        }
+
+        foreach (var f in files)
+        {
+            if (!previousFileSizes.TryGetValue(f.FullPath, out var previous) || previous <= 0 || f.Size <= 0)
+            {
+                continue;
+            }
+
+            var delta = f.Size - previous;
+            var percent = Math.Round(delta * 100.0 / previous, 1);
+            var absPercent = Math.Abs(percent);
+
+            if (absPercent < warnT)
+            {
+                continue;
+            }
+
+            var isCritical = critT > 0 && absPercent >= critT;
+
+            yield return new FileSizeChange
+            {
+                Directory = dir.Name,
+                FilePath = f.FullPath,
+                PreviousSize = previous,
+                CurrentSize = f.Size,
+                ChangePercent = percent,
                 IsCritical = isCritical,
                 WikiUrl = dir.WikiUrl,
                 RemediationSteps = new List<string>(dir.RemediationSteps)

@@ -41,6 +41,14 @@
                     <input type="number" name="@(p).AgeMinutesCritical" value="@(d?.AgeMinutesCritical)" class="form-control form-control-sm" placeholder="(Standard)" />
                 </div>
                 <div class="col-md-3">
+                    <label class="form-label small mb-0">Größenänderung Warnung (%)</label>
+                    <input type="number" name="@(p).SizeChangePercentWarning" value="@(d?.SizeChangePercentWarning)" class="form-control form-control-sm" placeholder="(Standard)" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Größenänderung Kritisch (%)</label>
+                    <input type="number" name="@(p).SizeChangePercentCritical" value="@(d?.SizeChangePercentCritical)" class="form-control form-control-sm" placeholder="(Standard)" />
+                </div>
+                <div class="col-md-3">
                     <label class="form-label small mb-0">Cutoff-Zeit (HH:mm)</label>
                     <input type="text" name="@(p).CutoffTime" value="@(d?.CutoffTime)" class="form-control form-control-sm" placeholder="21:45" />
                 </div>
