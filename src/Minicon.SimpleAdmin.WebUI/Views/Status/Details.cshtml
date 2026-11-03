@@ -1,6 +1,8 @@
 @model Minicon.SimpleAdmin.WebUI.ViewModels.ServerStatusView
 @using StatusNs = Minicon.SimpleAdmin.Models.Status
 @using StateNs = Minicon.SimpleAdmin.Models.State
+@using Minicon.SimpleAdmin.Services
+@inject Minicon.SimpleAdmin.WebUI.Services.ConfigurationService ConfigService
 
 @{
     ViewData["Title"] = $"Status - {Model.ServerId}";
@@ -51,6 +53,17 @@
 
     var openProblems = Model.ActiveProblems.Count(p => !p.Acknowledged);
     var staticBase = Model.BaseUrl?.TrimEnd('/');
+
+    // Number of newest measurements that are shown as individual bars (1:1); older ones are
+    // aggregated into logarithmically growing buckets. Same rule as the static HTML report.
+    var historyExactBars = Math.Max(0, ConfigService.GetHistorySettings().MinConsecutiveChecks);
+    var historyMaxBars = MetricHistoryAggregator.DefaultMaxBars;
+
+    // Color of a history bar: the thresholds of the metric decide, like the status of the tile.
+    static string BarTone(double value, StatusNs.MetricThreshold? threshold) =>
+        Exceeds(value, threshold?.Critical, threshold?.Operator ?? ">") ? "crit"
+        : Exceeds(value, threshold?.Warning, threshold?.Operator ?? ">") ? "warn"
+        : "ok";
 }
 
 <div class="page-head" id="top">
@@ -106,6 +119,14 @@ else
                 _ => "bi-speedometer2"
             };
 
+            // History bars: the newest measurements 1:1, older ones aggregated (see MetricHistoryAggregator).
+            var historyBars = metricHistory.TryGetValue(key, out var barPoints)
+                ? MetricHistoryAggregator.Aggregate(barPoints.Select(p => p.Value).ToList(), historyMaxBars, historyExactBars)
+                : new List<double>();
+            var barTitle = metricHistory.TryGetValue(key, out var barSource)
+                ? $"{barSource.Count} Messwerte → {historyBars.Count} Balken"
+                : "";
+
             <div class="col-sm-6 @metricColumn">
                 <div class="card h-100 metric-tile @(chartLink != null ? "metric-chart-link" : "") @(metric.Status == StatusNs.MetricStatus.Critical ? "card-alert" : "")">
                     <div class="card-body">
@@ -157,6 +178,19 @@ else
                             <div class="progress-bar bg-@(tone switch { "ok" => "success", "warn" => "warning", "crit" => "danger", _ => "secondary" })"
                                  style="width: @progressValue.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
                         </div>
+                        @if (historyBars.Count > 0)
+                        {
+                            <div class="metric-bars mt-3" title="@barTitle" aria-label="Verlauf @metric.DisplayName">
+                                @foreach (var barValue in historyBars)
+                                {
+                                    var barHeight = Math.Clamp(barValue, 0, 100);
+                                    var barTone = BarTone(barValue, metric.Threshold);
+                                    <span class="metric-bar bar-@barTone" style="height: @barHeight.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)%"
+                                          title="@barValue.ToString("F1")@metric.Unit"></span>
+                                }
+                            </div>
+                            <div class="small text-body-secondary mt-1">@barTitle</div>
+                        }
                     </div>
                 </div>
             </div>
