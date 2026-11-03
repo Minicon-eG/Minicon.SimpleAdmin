@@ -9,7 +9,7 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
-## [2.37.0] – 2026-11-03 – Alarm bei stark wachsenden oder schrumpfenden Dateien
+## [2.38.0] – 2026-11-03 – Alarm bei stark wachsenden oder schrumpfenden Dateien
 
 **Die Dateiüberwachung meldet jetzt, wenn eine überwachte Datei seit dem letzten Prüfzyklus deutlich gewachsen oder geschrumpft ist.**
 
@@ -336,6 +336,7 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.38.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.0...v2.38.0
 [2.36.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.0...v2.36.1
 [2.36.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.35.0...v2.36.0
 [2.35.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.34.2...v2.35.0
