@@ -9,7 +9,7 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
-## [2.38.0] – 2026-11-03 – Protokolle melden nur noch neue Zeilen
+## [2.39.0] – 2026-11-03 – Protokolle melden nur noch neue Zeilen
 
 **Die Dateiüberwachung meldet bei Logdateien jetzt nur noch das, was seit dem letzten Prüfzyklus dazugekommen ist. Ein Fehler im Protokoll wird nicht mehr in jedem Zyklus erneut gemeldet.**
 
@@ -341,6 +341,7 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.39.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.38.0...v2.39.0
 [2.38.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.0...v2.38.0
 [2.36.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.0...v2.36.1
 [2.36.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.35.0...v2.36.0
