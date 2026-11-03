@@ -389,6 +389,23 @@
                                        class="form-control form-control-sm" min="1" />
                             </div>
                         </div>
+                        <hr />
+                        <h6>Protokolle</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input type="checkbox" name="Features.FileMonitoring.Defaults.OffsetTrackingEnabled"
+                                   value="true"
+                                   class="form-check-input" id="fileMonitoringOffsetTracking"
+                                   @(Model.Features.FileMonitoring.Defaults.OffsetTrackingEnabled ? "checked" : "") />
+                            <input type="hidden" name="Features.FileMonitoring.Defaults.OffsetTrackingEnabled" value="false" />
+                            <label class="form-check-label" for="fileMonitoringOffsetTracking">
+                                <strong>Nur neue Logzeilen melden</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small">
+                            Pro überwachter Logdatei wird mitgezählt, wie weit gelesen wurde. Gemeldet
+                            werden dann nur die Zeilen, die seit dem letzten Prüfzyklus dazugekommen sind.
+                            Ausgeschaltet wird bei jedem Zyklus wieder der Dateiende gelesen.
+                        </p>
                     </div>
                 </div>
             </div>

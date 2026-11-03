@@ -99,7 +99,21 @@ public static class SimpleAdminWorkerHost
 
         // Register file-share / log monitoring checker
         services.AddSingleton<IFileSystemAccess, FileSystemAccess>();
-        services.AddSingleton<IFileMonitoringChecker, FileShareChecker>();
+        // The offset store holds the read position of every watched log file, so a log line is
+        // reported only once. It survives a restart (JSON file next to the status files).
+        services.AddSingleton<ILogFileOffsetStore>(sp =>
+        {
+            var logger = sp.GetRequiredService<ILogger<JsonLogFileOffsetStore>>();
+            var storePath = Path.Combine(paths.StatusDirectory, "log-offsets.json");
+            return new JsonLogFileOffsetStore(storePath, logger);
+        });
+        services.AddSingleton<IFileMonitoringChecker>(sp =>
+        {
+            var fileSystem = sp.GetRequiredService<IFileSystemAccess>();
+            var logger = sp.GetRequiredService<ILogger<FileShareChecker>>();
+            var store = sp.GetRequiredService<ILogFileOffsetStore>();
+            return new FileShareChecker(fileSystem, logger, store);
+        });
 
         // Register SQL Query checker (pass encryption key if configured)
         services.AddSingleton<ISqlQueryExecutor>(sp =>

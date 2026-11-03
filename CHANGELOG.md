@@ -9,6 +9,31 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
+## [2.39.0] – 2026-11-03 – Protokolle melden nur noch neue Zeilen
+
+**Die Dateiüberwachung meldet bei Logdateien jetzt nur noch das, was seit dem letzten Prüfzyklus dazugekommen ist. Ein Fehler im Protokoll wird nicht mehr in jedem Zyklus erneut gemeldet.**
+
+### Neu
+- Die Protokollüberwachung merkt sich pro überwachter Logdatei, wie weit sie gelesen hat. Gemeldet werden dadurch nur die Zeilen, die seit dem letzten Prüfzyklus neu geschrieben wurden – derselbe Fehler erscheint nicht mehr bei jedem Lauf erneut.
+- Die Information überwiegt einen Neustart: Die gelesene Position wird gespeichert und beim nächsten Start wieder verwendet.
+- Wird eine Logdatei ersetzt oder gekürzt (Log-Rotation), wird sie einmal vollständig neu gelesen und in der Serienansicht als „rotiert“ vermerkt.
+
+### Geändert
+- Unter „Einstellungen → Features → Datei-/Protokollüberwachung“ lässt sich „Nur neue Logzeilen melden“ abschalten. Dann wird wie bisher bei jedem Zyklus das Ende der Logdatei gelesen.
+
+### Hinweise
+- Beim ersten Lauf nach der Umstellung wird der bisherige Dateiende einmal gelesen; danach kommen nur noch neue Zeilen.
+
+### Entwickler
+- Neu `ILogFileOffsetStore` / `LogFileOffset` (Checkers): persistenter Speicher der Leseposition je Logdatei. `JsonLogFileOffsetStore` (JSON-Datei, atomar über Temp-Datei + Move) und `InMemoryLogFileOffsetStore`.
+- `IFileSystemAccess` erweitert: `ReadFrom(path, offset, maxLines)` liest bytegenau ab einer Position (unvollständige letzte Zeile bleibt liegen), `ReadTail(path, maxLines)` liest den Dateiende samt Position dahinter.
+- `FileShareChecker` nimmt den Store als optionale Abhängigkeit; ohne Store bzw. mit `features.fileMonitoring.defaults.offsetTrackingEnabled = false` gilt das alte Verhalten (Tail je Zyklus). Der Store wird nach jedem Zyklus gespeichert.
+- Der Worker registriert `JsonLogFileOffsetStore` mit der Datei `log-offsets.json` im Statusverzeichnis.
+- `FileMonitoringState.LogFilesRotated` zählt die rotierten/gekürzten Logdateien des Zyklus.
+
+### Intern
+- 11 neue Tests (Offset-Logik, Store-Roundtrip, Rotation, Fehlerfall, Zeilenlesen mit Position).
+
 ## [2.36.1] – 2026-10-29 – Verlässlichere CPU-Werte, Übersichten ohne seitliches Scrollen
 
 **Die CPU-Auslastung entspricht jetzt der tatsächlichen Last, und lange Problemtexte passen auf den Bildschirm.**
@@ -316,6 +341,8 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.39.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.38.0...v2.39.0
+[2.38.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.0...v2.38.0
 [2.36.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.0...v2.36.1
 [2.36.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.35.0...v2.36.0
 [2.35.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.34.2...v2.35.0
