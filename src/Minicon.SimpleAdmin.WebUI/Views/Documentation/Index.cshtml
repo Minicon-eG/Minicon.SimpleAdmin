@@ -1661,9 +1661,39 @@ $.version != deprecated</code></pre>
                         <tr><td>Hängende Datei (Alter)</td><td>älter als Warning-/Critical-Schwelle</td><td>Warning / Critical</td></tr>
                         <tr><td>Hängende Datei (Cutoff)</td><td>nach Cutoff-Zeit noch vorhanden</td><td>konfigurierbar (Standard Critical)</td></tr>
                         <tr><td>Log-Fehler</td><td>Signatur trifft zu</td><td>je Signatur Warning / Critical</td></tr>
+                        <tr><td>Größenänderung</td><td>Datei wuchs/shrumpft seit dem letzten Prüfzyklus um ≥ Schwellwert</td><td>Warning / Critical</td></tr>
                         <tr><td>Verzeichnis/Log</td><td>nicht erreichbar (Share offline / kein Zugriff)</td><td>Critical</td></tr>
                     </tbody>
                 </table>
+                <h4>Größenänderung überwachten Dateien</h4>
+                <p>
+                    Die Überwachung merkt sich die Größe jeder überwachten Datei aus dem letzten Prüfzyklus. Wächst oder
+                    schrumpft eine Datei stark, erscheint ein Alarm in der Problemliste mit vorheriger Größe, aktueller Größe
+                    und prozentualer Änderung. Die Schwellwerte sind einstellbar — global unter
+                    <em>Einstellungen → Feature-Toggles → Datei-/Protokollüberwachung</em> und pro Verzeichnis unter
+                    <em>Server → Bearbeiten</em>:
+                </p>
+                <ul>
+                    <li><code>features.fileMonitoring.defaults.sizeChangePercentWarning</code> — ab welchem Prozentsatz gewarnt wird (Standard 50).</li>
+                    <li><code>features.fileMonitoring.defaults.sizeChangePercentCritical</code> — ab welchem Prozentsatz kritisch gemeldet wird (Standard 200).</li>
+                    <li>Je überwachtem Verzeichnis überschreibbar über <code>server.checks.fileMonitoring.directories[].sizeChangePercentWarning</code> bzw. <code>…sizeChangePercentCritical</code>.</li>
+                    <li>Der Wert <code>0</code> schaltet die Größenänderungserkennung für den jeweiligen Geltungsbereich ab.</li>
+                </ul>
+                <p>
+                    Beim ersten Prüflauf nach einem Neustart gibt es keinen Vergleichswert; in diesem Lauf wird daher keine
+                    Größenänderung gemeldet. Ab dem zweiten Lauf arbeitet der Vergleich auch über Neustarts hinweg.
+                </p>
+                <h4>Nur neue Logzeilen melden</h4>
+                <p>
+                    Standardmäßig merkt sich die Überwachung je Logdatei, wie weit sie gelesen hat, und meldet nur die Zeilen,
+                    die seit dem letzten Prüfzyklus dazugekommen sind. Ein Fehler im Protokoll erscheint dadurch nicht in jedem
+                    Zyklus erneut. Wird eine Logdatei ersetzt oder gekürzt (Log-Rotation), wird sie einmal vollständig neu gelesen
+                    und in der Serienansicht als „rotiert" vermerkt.
+                </p>
+                <ul>
+                    <li><code>features.fileMonitoring.defaults.offsetTrackingEnabled</code> — Standard <code>true</code>. Abschalten
+                        bewirkt das alte Verhalten: bei jedem Zyklus wird wieder das Ende der Logdatei gelesen.</li>
+                </ul>
                 <h4>Lösungsanleitung (Wiki)</h4>
                 <p>
                     Jedes überwachte Verzeichnis und jede Log-Signatur kann einen <strong>Wiki-Link</strong> und
