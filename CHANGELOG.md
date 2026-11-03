@@ -54,6 +54,33 @@ in der WebUI nicht angezeigt.
 ### Intern
 - Unit-Tests für Größenänderungsszenarien: Wachstum, Schrumpfen, Schwellwert-Warnung/-Kritisch, kleine Änderung ohne Befund, unbekannte Vergleichsgröße, Verzeichnis-Override, abgeschaltete Prüfung, erster Zyklus ohne Vorlauf sowie Ableitung als Problem.
 
+## [2.37.0] – 2026-11-03 – BizTalk-Elemente aus der Problemliste deaktivieren (einzeln und in Gruppe)
+
+**Aus der Probleme-Ansicht lassen sich gemeldete BizTalk-Elemente jetzt direkt deaktivieren — einzeln oder mehrere ausgewählte Elemente gesammelt. Die Aktion läuft über einen Auftragskanal zum Zielserver, die WebUI braucht keine BizTalk-Zugangsdaten.**
+
+### Neu
+- Aktionsschaltfläche **Deaktivieren** in der Zeile eines BizTalk-Problems und **Auswahl deaktivieren** in der Bulk-Leiste (Punkte 3 und 4 aus MIN-37). Beide Wege öffnen einen Dialog mit optionalem Grund.
+- Aktionskanal (Request-Kanal, dateibasiert): Die WebUI schreibt einen Auftrag in ein gemeinsames Austauschverzeichnis (`features.bizTalk.actionsDirectory`), der Worker auf dem BizTalk-Server führt ihn über die Management-API aus und schreibt das Ergebnis zurück. Die WebUI liest den Status über `GET /api/biztalkactions/server/{serverId}`.
+- `IBizTalkApiClient` hat Schreibmethoden: `StopApplicationAsync` (`PUT /Applications/{name}/Stop`), `StopOrchestrationAsync` (`PUT /Orchestrations/{applicationName}/{orchestrationName}/Stop`), `StopSendPortAsync` (`PUT /SendPorts/{name}/Stop`), `DisableReceiveLocationAsync` (`PUT /ReceiveLocations/Disable/{receivePortName}/{receiveLocationName}`).
+- `IBizTalkActionStore` / `BizTalkActionStore` (Shared): Aufträge und Ergebnisse als JSON-Dateien unter `requests/{serverId}/` und `results/{serverId}/`, atomar geschrieben. Jeder Worker bearbeitet nur die Aufträge seines Servers.
+- `IBizTalkActionExecutor` / `BizTalkActionExecutor` (Checkers): führt die offenen Aufträge aus; ein fehlgeschlagener Auftrag bricht die übrigen nicht ab.
+- Neue Konfiguration in `config.json`: `features.bizTalk.actionsEnabled` (Hauptschalter) und `features.bizTalk.actionsDirectory` (UNC-Pfad). Oberfläche unter *Einstellungen → Feature-Toggles → BizTalk → Deaktivierung aus der Problemliste*.
+- Neue REST-Endpunkte: `POST /api/biztalkactions` (Einzelaktion), `POST /api/biztalkactions/bulk` (Gruppenaktion), `GET /api/biztalkactions/server/{serverId}`, `GET /api/biztalkactions/{serverId}/{requestId}`, `GET /api/biztalkactions/enabled`.
+- Dokumentation (Hilfe-Seite) zu Ablauf, Konfiguration, Sicherheitsmodell und den verwendeten Management-API-Aufrufen.
+
+### Geändert
+- Die BizTalk-Probleme tragen im Kontext jetzt die zugehörige Anwendung (Orchestrierung) bzw. den Empfangsport (Empfangsort). Die Management-API verlangt diese Angaben im URL-Pfad; die WebUI leitet sie aus dem veröffentlichten Status ab, nicht aus der Anfrage.
+- Der Worker führt die BizTalk-Prüfung und anschließend die offenen Deaktivierungsaufträge aus, so dass der nächste Zyklus bereits den neuen Zustand abbildet.
+
+### Sicherheit
+- Die WebUI speichert und benötigt keine BizTalk-Zugangsdaten. Die Management-API wird ausschließlich vom Worker auf dem BizTalk-Server aufgerufen (integrierte Windows-Authentifizierung).
+- **Exklusive Übernahme der Aufträge:** Vor dem Management-API-Aufruf legt der Worker eine Claim-Datei an (`claims/{serverId}/{requestId}.json`), die ausschließlich erzeugt wird. Zwei Worker, die denselben Auftrag bearbeiten, können so nicht parallel dieselbe Aktion auslösen.
+- **Kein Wiederholen bei unklarem Ausgang:** Lässt sich das Ergebnis nach dem API-Aufruf nicht speichern (z. B. nicht erreichbares Austauschverzeichnis), wird der Auftrag als *unbestimmt* markiert und **nicht** erneut ausgeführt. Ein zwischenzeitlich neu gestartetes Element wird nicht ungewollt erneut gestoppt.
+- **Zielwahl gegen den veröffentlichten Status:** Alle vier Artefakttypen (Anwendung, Orchestrierung, Sendeport, Empfangsort) werden gegen die Problemliste des Servers geprüft. Der Client kann keine beliebige laufende Anwendung oder einen beliebigen Sendeport benennen; kanonische Name und übergeordnetes Element stammen aus dem Status des Servers.
+- **Eindeutige Ziele:** Orchestrierungen und Empfangsorte sind nur zusammen mit Anwendung bzw. Empfangsport eindeutig. Die Problemliste überträgt das übergeordnete Element mit (`targetParent`); es grenzt den Treffer im Status nur ein. Meldet der Status denselben Namen weiterhin unter mehreren übergeordneten Elementen, wird die Einzel- wie die Gruppenanforderung abgelehnt statt den ersten Treffer zu wählen.
+- **Unlesbare Claims sperren konservativ:** Eine leere oder abgeschnittene Claim-Datei (Worker-Abbruch beim Schreiben) gilt weiter als Übernahme. Der Auftrag wird nicht erneut ausgegeben und erscheint nach 15 Minuten (Dateialter) als *unbestimmt*.
+- **Kollisionsfreie Serverordner:** Der Ordner je Server enthält den vollständigen SHA-256 der Server-ID (statt 32 Bit, die für reale IDs kollidieren), sodass unterschiedliche IDs (`bt.prod` und `bt_prod`) nicht auf denselben Ordner fallen. Aufträge, Claims und Ergebnisse werden beim Lesen – auch beim Einzelabruf – gegen die enthaltene Server- und Auftrags-ID geprüft; fremde Dateien werden ignoriert.
+
 ## [2.36.1] – 2026-10-29 – Verlässlichere CPU-Werte, Übersichten ohne seitliches Scrollen
 
 **Die CPU-Auslastung entspricht jetzt der tatsächlichen Last, und lange Problemtexte passen auf den Bildschirm.**
@@ -363,6 +390,7 @@ in der WebUI nicht angezeigt.
 
 [2.39.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.38.0...v2.39.0
 [2.38.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.0...v2.38.0
+[2.37.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.1...v2.37.0
 [2.36.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.0...v2.36.1
 [2.36.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.35.0...v2.36.0
 [2.35.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.34.2...v2.35.0
