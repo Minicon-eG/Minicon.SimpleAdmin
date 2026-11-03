@@ -232,6 +232,13 @@ public static class ProblemDerivationService
                     match.LogScan, match.LogPath, match.Pattern, match.Count, match.SampleLine, match.IsCritical,
                     match.WikiUrl, match.RemediationSteps));
             }
+
+            foreach (var change in fileMonitoring.SizeChanges)
+            {
+                problems.Add(ActiveProblem.FileSizeChanged(
+                    change.Directory, change.FilePath, change.PreviousSize, change.CurrentSize,
+                    change.ChangePercent, change.IsCritical, change.WikiUrl, change.RemediationSteps));
+            }
         }
 
         return problems;

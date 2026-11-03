@@ -2139,7 +2139,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             return sb.ToString();
         }
 
-        sb.AppendLine($"                <p style=\"color:#555;\">Verzeichnisse geprüft: {fm.DirectoriesChecked} · Logdateien gescannt: {fm.LogFilesScanned} · Hängende Dateien: {fm.StuckFiles.Count} · Log-Treffer: {fm.LogMatches.Count}</p>");
+        sb.AppendLine($"                <p style=\"color:#555;\">Verzeichnisse geprüft: {fm.DirectoriesChecked} · Logdateien gescannt: {fm.LogFilesScanned} · Hängende Dateien: {fm.StuckFiles.Count} · Log-Treffer: {fm.LogMatches.Count} · Größenänderungen: {fm.SizeChanges.Count}</p>");
 
         if (fm.AnyError && !string.IsNullOrEmpty(fm.Error))
         {
@@ -2198,6 +2198,37 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
                 sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{m.Count}</td>");
                 sb.AppendLine($"                            <td style=\"padding:6px 10px; font-family:monospace; font-size:12px;\">{System.Net.WebUtility.HtmlEncode(m.SampleLine)}</td>");
                 sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{RenderWikiLink(m.WikiUrl)}</td>");
+                sb.AppendLine("                        </tr>");
+            }
+            sb.AppendLine("                    </tbody>");
+            sb.AppendLine("                </table>");
+        }
+
+        if (fm.SizeChanges.Count > 0)
+        {
+            sb.AppendLine("                <h4 style=\"margin-top:16px;\">Größenänderungen</h4>");
+            sb.AppendLine("                <table style=\"width:100%; border-collapse:collapse;\">");
+            sb.AppendLine("                    <thead><tr style=\"background:#f8f9fa; text-align:left;\">");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Verzeichnis</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Datei</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Vorher</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Jetzt</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Änderung</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Schweregrad</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Lösung</th>");
+            sb.AppendLine("                    </tr></thead>");
+            sb.AppendLine("                    <tbody>");
+            foreach (var c in fm.SizeChanges)
+            {
+                var cls = c.IsCritical ? "badge-critical" : "badge-warning";
+                sb.AppendLine("                        <tr>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{System.Net.WebUtility.HtmlEncode(c.Directory)}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\" title=\"{System.Net.WebUtility.HtmlEncode(c.FilePath)}\">{System.Net.WebUtility.HtmlEncode(System.IO.Path.GetFileName(c.FilePath))}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{c.PreviousSize:N0} B</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{c.CurrentSize:N0} B</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{c.ChangePercent:N0} %</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\"><span class=\"monitoring-badge {cls}\">{(c.IsCritical ? "Critical" : "Warning")}</span></td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{RenderWikiLink(c.WikiUrl)}</td>");
                 sb.AppendLine("                        </tr>");
             }
             sb.AppendLine("                    </tbody>");

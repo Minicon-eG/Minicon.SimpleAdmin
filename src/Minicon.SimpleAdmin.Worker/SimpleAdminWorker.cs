@@ -217,9 +217,11 @@ public class SimpleAdminWorker
             : Task.FromResult<BizTalkState?>(null);
 
         var fileMonCfg = currentServer.Checks?.FileMonitoring;
+        // File sizes of the previous cycle are the predecessor for the size-change detection.
+        var previousFileSizes = previousStatus?.FileMonitoring?.PreviousFileSizes;
         var fileMonitoringTask = features.FileMonitoring.Enabled && fileMonCfg?.Enabled == true
             && (fileMonCfg.Directories.Count > 0 || fileMonCfg.LogScans.Count > 0)
-            ? TrackAsync("FileMonitoring", () => _fileMonitoringChecker.CheckAsync(fileMonCfg, features.FileMonitoring.Defaults))!
+            ? TrackAsync("FileMonitoring", () => _fileMonitoringChecker.CheckAsync(fileMonCfg, features.FileMonitoring.Defaults, previousFileSizes))!
             : Task.FromResult<FileMonitoringState?>(null);
 
         try
@@ -318,9 +320,10 @@ public class SimpleAdminWorker
         {
             fileMonitoringState = await fileMonitoringTask;
             if (fileMonitoringState != null)
-                _logger.LogInformation("    FileMonitoring: {Dirs} dir(s), {Logs} log(s), {Stuck} stuck file(s), {Matches} log match(es)",
+                _logger.LogInformation("    FileMonitoring: {Dirs} dir(s), {Logs} log(s), {Stuck} stuck file(s), {Matches} log match(es), {SizeChanges} size change(s)",
                     fileMonitoringState.DirectoriesChecked, fileMonitoringState.LogFilesScanned,
-                    fileMonitoringState.StuckFiles.Count, fileMonitoringState.LogMatches.Count);
+                    fileMonitoringState.StuckFiles.Count, fileMonitoringState.LogMatches.Count,
+                    fileMonitoringState.SizeChanges.Count);
         }
         catch (Exception ex) { _logger.LogError(ex, "Error checking file monitoring"); }
 

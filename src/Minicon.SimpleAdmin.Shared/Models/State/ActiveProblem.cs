@@ -641,6 +641,61 @@ public class ActiveProblem
         };
     }
 
+    /// <summary>
+    /// Creates a problem for a watched file whose size changed strongly between two check cycles.
+    /// The ID is stable per (directory, file) so the size in the message can change without re-acknowledging.
+    /// </summary>
+    public static ActiveProblem FileSizeChanged(
+        string directory,
+        string filePath,
+        long previousSize,
+        long currentSize,
+        double changePercent,
+        bool isCritical,
+        string? wikiUrl = null,
+        List<string>? remediationSteps = null)
+    {
+        var fileName = Path.GetFileName(filePath);
+        var direction = changePercent >= 0 ? "gewachsen" : "geschrumpft";
+        var message = $"Datei '{fileName}' in '{directory}' ist um {Math.Abs(changePercent):N0} % {direction} "
+            + $"({FormatSize(previousSize)} → {FormatSize(currentSize)})";
+
+        return new ActiveProblem
+        {
+            Id = CreateId("file", $"{Slug(directory)}_{Slug(fileName)}", "sizechange"),
+            Type = "file",
+            Source = "FileMonitoring",
+            Severity = isCritical ? ProblemSeverity.Critical : ProblemSeverity.Warning,
+            Message = message,
+            WikiUrl = wikiUrl,
+            RemediationSteps = remediationSteps ?? new List<string>(),
+            Context = new Dictionary<string, object>
+            {
+                ["directory"] = directory,
+                ["filePath"] = filePath,
+                ["fileName"] = fileName,
+                ["previousSize"] = previousSize,
+                ["currentSize"] = currentSize,
+                ["changePercent"] = changePercent
+            }
+        };
+    }
+
+    /// <summary>Formats a byte count in a readable way (B / KB / MB / GB).</summary>
+    private static string FormatSize(long bytes)
+    {
+        double value = bytes;
+        string[] units = { "B", "KB", "MB", "GB", "TB" };
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return unit == 0 ? $"{bytes:N0} {units[unit]}" : $"{value:N1} {units[unit]}";
+    }
+
     /// <summary>Creates a problem when a watched directory / log path cannot be reached.</summary>
     public static ActiveProblem FileShareUnreachable(string label, string error)
         => new()

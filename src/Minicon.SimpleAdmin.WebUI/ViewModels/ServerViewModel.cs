@@ -322,6 +322,8 @@ public class WatchedDirectoryRowViewModel
     public bool Recursive { get; set; }
     public int? AgeMinutesWarning { get; set; }
     public int? AgeMinutesCritical { get; set; }
+    public int? SizeChangePercentWarning { get; set; }
+    public int? SizeChangePercentCritical { get; set; }
     public string? CutoffTime { get; set; }
     public string CutoffSeverity { get; set; } = "Critical";
     public string? WikiUrl { get; set; }
@@ -336,6 +338,8 @@ public class WatchedDirectoryRowViewModel
         Recursive = Recursive,
         AgeMinutesWarning = AgeMinutesWarning,
         AgeMinutesCritical = AgeMinutesCritical,
+        SizeChangePercentWarning = SizeChangePercentWarning,
+        SizeChangePercentCritical = SizeChangePercentCritical,
         CutoffTime = string.IsNullOrWhiteSpace(CutoffTime) ? null : CutoffTime.Trim(),
         CutoffSeverity = string.IsNullOrWhiteSpace(CutoffSeverity) ? "Critical" : CutoffSeverity,
         WikiUrl = string.IsNullOrWhiteSpace(WikiUrl) ? null : WikiUrl.Trim(),
@@ -351,6 +355,8 @@ public class WatchedDirectoryRowViewModel
         Recursive = d.Recursive,
         AgeMinutesWarning = d.AgeMinutesWarning,
         AgeMinutesCritical = d.AgeMinutesCritical,
+        SizeChangePercentWarning = d.SizeChangePercentWarning,
+        SizeChangePercentCritical = d.SizeChangePercentCritical,
         CutoffTime = d.CutoffTime,
         CutoffSeverity = d.CutoffSeverity,
         WikiUrl = d.WikiUrl,

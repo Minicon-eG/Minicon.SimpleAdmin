@@ -27,6 +27,47 @@ public class FileMonitoringState
 
     /// <summary>Aggregated log-pattern matches (one entry per pattern per log, with a hit count + sample).</summary>
     public List<LogMatch> LogMatches { get; set; } = new();
+
+    /// <summary>
+    /// Files whose size changed strongly since the previous cycle (path → previous size in bytes).
+    /// Empty when no file changed beyond the configured thresholds.
+    /// </summary>
+    public List<FileSizeChange> SizeChanges { get; set; } = new();
+
+    /// <summary>
+    /// File sizes observed in the last completed cycle (path → size in bytes). The next cycle compares
+    /// the current sizes against this map, so the detection works across worker restarts as long as the
+    /// status JSON is kept. Empty in the very first cycle — then no size change can be detected.
+    /// </summary>
+    public Dictionary<string, long> PreviousFileSizes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>A watched file whose size changed strongly between two check cycles.</summary>
+public class FileSizeChange
+{
+    /// <summary>Label of the watched directory (e.g. "Eingang", "Kasse").</summary>
+    public string Directory { get; set; } = string.Empty;
+
+    /// <summary>Full path of the file.</summary>
+    public string FilePath { get; set; } = string.Empty;
+
+    /// <summary>Size in bytes in the previous cycle.</summary>
+    public long PreviousSize { get; set; }
+
+    /// <summary>Size in bytes in the current cycle.</summary>
+    public long CurrentSize { get; set; }
+
+    /// <summary>Relative change in percent (positive = grown, negative = shrunk).</summary>
+    public double ChangePercent { get; set; }
+
+    /// <summary>Whether this finding is Critical (otherwise Warning).</summary>
+    public bool IsCritical { get; set; }
+
+    /// <summary>Optional wiki / remediation link configured on the watched directory.</summary>
+    public string? WikiUrl { get; set; }
+
+    /// <summary>Optional step-by-step remediation hints configured on the watched directory.</summary>
+    public List<string> RemediationSteps { get; set; } = new();
 }
 
 /// <summary>A file that has been sitting in a watched directory beyond its allowed age / cutoff.</summary>
