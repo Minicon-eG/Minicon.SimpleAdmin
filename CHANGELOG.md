@@ -9,6 +9,23 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
+## [2.40.0] – 2026-11-03 – Verlaufsbalken in der Serverdetailseite
+
+**Auf der Detailseite eines Servers zeigen CPU, Arbeitsspeicher und Plattenplatz jetzt den Verlauf als Balken an.**
+
+### Neu
+- In der Serverdetailseite erscheint unter der Statusleiste jeder Metrik (CPU, Arbeitsspeicher, Plattenplatz) eine Reihe von Verlaufsbalken. Die Farbe richtet sich nach den Schwellwerten der Metrik: grün im Normalbereich, gelb ab der Warnschwelle, rot ab der kritischen Schwelle.
+- Die Balken folgen derselben Regel wie der statische HTML-Report: die jüngsten Messungen erscheinen einzeln, ältere werden zu immer größeren Balken zusammengefasst. So bleiben auch lange Verläufe lesbar.
+- Der Tooltip eines Balkens nennt den Messwert, der Tooltip der Balkenreihe die Zahl der Messwerte.
+
+### Entwickler
+- Neue gemeinsame Klasse `MetricHistoryAggregator` in `Minicon.SimpleAdmin.Shared` erzeugt die Balken. Der statische HTML-Report (`StaticHtmlGenerator`) und die WebUI verwenden sie damit, beide Anzeigen identisch sind.
+- Aggregation: die neuesten `History:MinConsecutiveChecks` Messungen 1:1, ältere Messungen in logarithmisch wachsenden Buckets (Durchschnitt je Bucket), maximal 20 Balken.
+- WebUI: CSS-Klassen `.metric-bars` und `.metric-bar` (Farben über die Theme-Variablen `--sa-ok`, `--sa-warn`, `--sa-crit`).
+
+### Intern
+- Die bisher private Verdopplung der Aggregationslogik im `StaticHtmlGenerator` entfällt; die Tests des HTML-Generators bleiben unverändert gültig.
+
 ## [2.36.1] – 2026-10-29 – Verlässlichere CPU-Werte, Übersichten ohne seitliches Scrollen
 
 **Die CPU-Auslastung entspricht jetzt der tatsächlichen Last, und lange Problemtexte passen auf den Bildschirm.**

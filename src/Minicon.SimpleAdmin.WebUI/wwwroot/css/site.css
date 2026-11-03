@@ -560,6 +560,11 @@ a:hover {
 .metric-tile .metric-value small { font-size: 1rem; font-weight: 600; color: var(--bs-secondary-color); margin-left: .15rem; }
 .metric-tile .metric-spark { width: 120px; height: 42px; flex-shrink: 0; pointer-events: none; overflow: visible; }
 .metric-tile .progress { height: 8px; }
+.metric-tile .metric-bars { display: flex; align-items: flex-end; gap: 2px; height: 42px; }
+.metric-tile .metric-bar { flex: 1; min-width: 3px; border-radius: 2px 2px 0 0; background: var(--sa-line); }
+.metric-tile .metric-bar.bar-ok { background: var(--sa-ok); }
+.metric-tile .metric-bar.bar-warn { background: var(--sa-warn); }
+.metric-tile .metric-bar.bar-crit { background: var(--sa-crit); }
 .metric-chart { scroll-margin-top: 5rem; }
 .metric-chart:target { box-shadow: var(--sa-surface-shadow), 0 0 0 3px rgba(var(--sa-accent-rgb), .55); animation: metric-chart-flash 1.6s ease-out; }
 @keyframes metric-chart-flash { from { background-color: rgba(var(--sa-accent-rgb), .14); } to { background-color: transparent; } }
