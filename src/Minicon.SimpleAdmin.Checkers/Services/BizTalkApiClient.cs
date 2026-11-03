@@ -18,6 +18,18 @@ public interface IBizTalkApiClient
     Task<List<BtSendPort>> GetSendPortsAsync(string baseUrl, CancellationToken cancellationToken = default);
     Task<List<BtReceiveLocation>> GetReceiveLocationsAsync(string baseUrl, CancellationToken cancellationToken = default);
     Task<List<BtInstance>> GetInstancesAsync(string baseUrl, CancellationToken cancellationToken = default);
+
+    /// <summary>Stops an application (PUT .../Applications/{name}/Stop).</summary>
+    Task StopApplicationAsync(string baseUrl, string applicationName, CancellationToken cancellationToken = default);
+
+    /// <summary>Stops an orchestration (PUT .../Orchestrations/{applicationName}/{orchestrationName}/Stop).</summary>
+    Task StopOrchestrationAsync(string baseUrl, string applicationName, string orchestrationName, CancellationToken cancellationToken = default);
+
+    /// <summary>Stops a send port (PUT .../SendPorts/{name}/Stop).</summary>
+    Task StopSendPortAsync(string baseUrl, string sendPortName, CancellationToken cancellationToken = default);
+
+    /// <summary>Disables a receive location (PUT .../ReceiveLocations/Disable/{receivePortName}/{receiveLocationName}).</summary>
+    Task DisableReceiveLocationAsync(string baseUrl, string receivePortName, string receiveLocationName, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
@@ -52,6 +64,62 @@ public sealed class BizTalkApiClient(HttpClient httpClient, ILogger<BizTalkApiCl
         response.EnsureSuccessStatusCode();
         var list = await response.Content.ReadFromJsonAsync<List<T>>(JsonOptions, cancellationToken);
         return list ?? new List<T>();
+    }
+
+    // --- write operations (deactivation actions) ---
+
+    public Task StopApplicationAsync(string baseUrl, string applicationName, CancellationToken cancellationToken = default)
+        => PutAsync(baseUrl, $"/Applications/{Uri.EscapeDataString(applicationName)}/Stop", null, cancellationToken);
+
+    public Task StopOrchestrationAsync(string baseUrl, string applicationName, string orchestrationName, CancellationToken cancellationToken = default)
+        => PutAsync(
+            baseUrl,
+            $"/Orchestrations/{Uri.EscapeDataString(applicationName)}/{Uri.EscapeDataString(orchestrationName)}/Stop",
+            null,
+            cancellationToken);
+
+    public Task StopSendPortAsync(string baseUrl, string sendPortName, CancellationToken cancellationToken = default)
+        => PutAsync(baseUrl, $"/SendPorts/{Uri.EscapeDataString(sendPortName)}/Stop", null, cancellationToken);
+
+    public Task DisableReceiveLocationAsync(string baseUrl, string receivePortName, string receiveLocationName, CancellationToken cancellationToken = default)
+        => PutAsync(
+            baseUrl,
+            $"/ReceiveLocations/Disable/{Uri.EscapeDataString(receivePortName)}/{Uri.EscapeDataString(receiveLocationName)}",
+            null,
+            cancellationToken);
+
+    /// <summary>
+    /// Issues a PUT against the Management API. The BizTalk endpoints answer 204 No Content on
+    /// success; anything else is raised as an exception so the caller can report the failure.
+    /// </summary>
+    private async Task PutAsync(string baseUrl, string path, object? body, CancellationToken cancellationToken)
+    {
+        var url = $"{baseUrl.TrimEnd('/')}{path}";
+        logger.LogInformation("BizTalk: PUT {Url}", url);
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, url);
+        if (body != null)
+            request.Content = JsonContent.Create(body);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var detail = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new BizTalkApiException(
+                $"BizTalk-API antwortete mit {(int)response.StatusCode} {response.ReasonPhrase} für {path}: {detail}");
+        }
+    }
+}
+
+/// <summary>Raised when a write operation against the BizTalk Management API fails.</summary>
+public sealed class BizTalkApiException : Exception
+{
+    public BizTalkApiException(string message) : base(message)
+    {
+    }
+
+    public BizTalkApiException(string message, Exception inner) : base(message, inner)
+    {
     }
 }
 

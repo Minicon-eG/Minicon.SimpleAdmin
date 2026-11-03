@@ -201,6 +201,15 @@ public static class ProblemDerivationService
                         "receivelocation" => ActiveProblem.BizTalkReceiveLocationDisabled(artifact.Name, artifact.IsCritical),
                         _ => ActiveProblem.BizTalkApplicationStopped(artifact.Name, artifact.Status)
                     });
+
+                    // Carry the address information of the artefact into the problem context so the
+                    // WebUI can address it (orchestration: owning application, receive location:
+                    // owning receive port).
+                    var derived = problems[^1];
+                    if (!string.IsNullOrWhiteSpace(artifact.ApplicationName))
+                        derived.Context["applicationName"] = artifact.ApplicationName;
+                    if (!string.IsNullOrWhiteSpace(artifact.ReceivePortName))
+                        derived.Context["receivePortName"] = artifact.ReceivePortName;
                 }
 
                 if (bizTalk.SuspendedStatus is StateMetricStatus.Critical or StateMetricStatus.Warning)
@@ -231,6 +240,13 @@ public static class ProblemDerivationService
                 problems.Add(ActiveProblem.LogError(
                     match.LogScan, match.LogPath, match.Pattern, match.Count, match.SampleLine, match.IsCritical,
                     match.WikiUrl, match.RemediationSteps));
+            }
+
+            foreach (var change in fileMonitoring.SizeChanges)
+            {
+                problems.Add(ActiveProblem.FileSizeChanged(
+                    change.Directory, change.FilePath, change.PreviousSize, change.CurrentSize,
+                    change.ChangePercent, change.IsCritical, change.WikiUrl, change.RemediationSteps));
             }
         }
 

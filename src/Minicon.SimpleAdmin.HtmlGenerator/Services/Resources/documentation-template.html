@@ -2987,6 +2987,44 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     Der Laufzeitstatus der Host-Instanz-Dienste (<code>BTSSvc$…</code>) ist nicht Teil der API — diese
                     über die Windows-Dienste-Überwachung auf den BizTalk-Servern abdecken.
                 </div>
+                <h3 id="biztalk-actions">15.2 Deaktivieren aus der Problemliste</h3>
+                <p>
+                    In der <em>Probleme</em>-Ansicht lässt sich ein gemeldetes BizTalk-Element direkt deaktivieren —
+                    einzeln über die Schaltfläche <strong>Deaktivieren</strong> in der Zeile, mehrere ausgewählte
+                    Elemente gesammelt über <strong>Auswahl deaktivieren</strong> in der Bulk-Leiste. Beide Wege
+                    öffnen einen Dialog, in dem der Grund optional angegeben werden kann.
+                </p>
+                <ol>
+                    <li>Die WebUI schreibt einen Auftrag in das <strong>Austauschverzeichnis</strong> (Request-Kanal).</li>
+                    <li>Der Worker auf dem Zielserver nimmt den Auftrag in seinem nächsten Zyklus auf und führt ihn über die Management-API aus.</li>
+                    <li>Das Ergebnis schreibt der Worker zurück; die WebUI zeigt es über <code>GET /api/biztalkactions/server/{serverId}</code>.</li>
+                    <li>Der nächste Prüfzyklus bildet den neuen Zustand ab — das Problem verschwindet.</li>
+                </ol>
+                <div class="info-box">
+                    Die Deaktivierung erfolgt <strong>asynchron</strong>: erst wenn der Worker den Auftrag ausgeführt hat,
+                    ist das Element tatsächlich deaktiviert. Angewendete Orchestrierungen und Sendeports nehmen
+                    bis dahin (und anschließend) keine Nachrichten mehr an.
+                </div>
+                <ul>
+                    <li><code>features.biztalk.actionsEnabled</code> — Hauptschalter (im WebUI unter <em>Einstellungen → Feature-Toggles → BizTalk → Deaktivierung aus der Problemliste</em>). Ohne ihn erscheinen keine Aktionsschaltflächen und die WebUI lehnt Aufträge ab.</li>
+                    <li><code>features.biztalk.actionsDirectory</code> — der von WebUI und Workern gemeinsam benutzte Ordner (UNC-Pfad). Leer = lokales Statusverzeichnis (nur wenn WebUI und Worker auf demselben Server laufen).</li>
+                    <li>Jeder Worker bearbeitet nur die Aufträge, die an <em>seinen</em> Server gerichtet sind — ein gemeinsames Verzeichnis kann daher mehrere BizTalk-Server bedienen.</li>
+                </ul>
+                <p>
+                    Die WebUI speichert und benötigt <strong>keine</strong> BizTalk-Zugangsdaten. Die Management-API wird
+                    ausschließlich vom Worker auf dem BizTalk-Server aufgerufen, mit dessen integrierter
+                    Windows-Authentifizierung. Die WebUI bestimmt auch die Adressaten (Anwendung einer Orchestrierung,
+                    Empfangsport eines Empfangsorts) aus dem veröffentlichten Status, nicht aus der Anfrage.
+                </p>
+                <table>
+                    <thead><tr><th>Element</th><th>Management-API-Aufruf</th></tr></thead>
+                    <tbody>
+                        <tr><td>Anwendung</td><td><code>PUT /Applications/{name}/Stop</code></td></tr>
+                        <tr><td>Orchestrierung</td><td><code>PUT /Orchestrations/{applicationName}/{orchestrationName}/Stop</code></td></tr>
+                        <tr><td>Sendeport</td><td><code>PUT /SendPorts/{name}/Stop</code></td></tr>
+                        <tr><td>Empfangsort</td><td><code>PUT /ReceiveLocations/Disable/{receivePortName}/{receiveLocationName}</code></td></tr>
+                    </tbody>
+                </table>
             </section>
 
             <!-- 16. Datei-/Protokollüberwachung -->
@@ -3019,7 +3057,7 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     WebUI-Server aus – der überwachende Worker braucht dieselben Leserechte; ohne WebUI-Anmeldung lassen sich
                     nur eingefügte Beispielzeilen testen. Alternativ direkt in <code>config.json</code>:
                 </p>
-                <pre><code>"features": { "fileMonitoring": { "enabled": true, "defaults": { "stuckFileAgeMinutesWarning": 60, "stuckFileAgeMinutesCritical": 240, "maxReportedItems": 50 } } }
+                <pre><code>"features": { "fileMonitoring": { "enabled": true, "defaults": { "stuckFileAgeMinutesWarning": 60, "stuckFileAgeMinutesCritical": 240, "sizeChangePercentWarning": 50, "sizeChangePercentCritical": 200, "offsetTrackingEnabled": true, "maxReportedItems": 50 } } }
 
 // pro Server unter checks:
 "fileMonitoring": {
@@ -3057,6 +3095,7 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                         <tr><td>Hängende Datei (Alter)</td><td>älter als Warning-/Critical-Schwelle</td><td>Warning / Critical</td></tr>
                         <tr><td>Hängende Datei (Cutoff)</td><td>nach Cutoff-Zeit noch vorhanden</td><td>konfigurierbar (Standard Critical)</td></tr>
                         <tr><td>Log-Fehler</td><td>Signatur trifft zu</td><td>je Signatur Warning / Critical</td></tr>
+                        <tr><td>Größenänderung</td><td>Datei wuchs/shrumpft seit dem letzten Prüfzyklus um ≥ Schwellwert</td><td>Warning / Critical</td></tr>
                         <tr><td>Verzeichnis/Log</td><td>nicht erreichbar</td><td>Critical</td></tr>
                     </tbody>
                 </table>
@@ -3064,6 +3103,33 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     Mit <em>Betriebszeiten</em> (<code>schedule</code>) wird außerhalb des Fensters nicht geprüft. Das Tool
                     meldet nur — es verschiebt oder löscht keine Dateien.
                 </div>
+                <h3 id="filemonitoring-sizechange">16.4 Größenänderung überwachten Dateien</h3>
+                <p>
+                    Die Überwachung merkt sich die Größe jeder überwachten Datei aus dem letzten Prüfzyklus. Wächst oder
+                    schrumpft eine Datei stark, erscheint ein Alarm in der Problemliste mit vorheriger Größe, aktueller Größe
+                    und prozentualer Änderung.
+                </p>
+                <ul>
+                    <li><code>features.fileMonitoring.defaults.sizeChangePercentWarning</code> — ab welchem Prozentsatz gewarnt wird (Standard 50).</li>
+                    <li><code>features.fileMonitoring.defaults.sizeChangePercentCritical</code> — ab welchem Prozentsatz kritisch gemeldet wird (Standard 200).</li>
+                    <li>Je überwachtem Verzeichnis überschreibbar über <code>server.checks.fileMonitoring.directories[].sizeChangePercentWarning</code> bzw. <code>…sizeChangePercentCritical</code>.</li>
+                    <li>Der Wert <code>0</code> schaltet die Größenänderungserkennung für den jeweiligen Geltungsbereich ab.</li>
+                </ul>
+                <p>
+                    Beim ersten Prüflauf nach einem Neustart gibt es keinen Vergleichswert; in diesem Lauf wird daher keine
+                    Größenänderung gemeldet. Ab dem zweiten Lauf arbeitet der Vergleich auch über Neustarts hinweg.
+                </p>
+                <h3 id="filemonitoring-offset">16.5 Nur neue Logzeilen melden</h3>
+                <p>
+                    Standardmäßig merkt sich die Überwachung je Logdatei, wie weit sie gelesen hat, und meldet nur die Zeilen,
+                    die seit dem letzten Prüfzyklus dazugekommen sind. Ein Fehler im Protokoll erscheint dadurch nicht in jedem
+                    Zyklus erneut. Wird eine Logdatei ersetzt oder gekürzt (Log-Rotation), wird sie einmal vollständig neu gelesen
+                    und in der Serienansicht als „rotiert“ vermerkt.
+                </p>
+                <ul>
+                    <li><code>features.fileMonitoring.defaults.offsetTrackingEnabled</code> — Standard <code>true</code>. Abschalten
+                        bewirkt das alte Verhalten: bei jedem Zyklus wird wieder das Ende der Logdatei gelesen.</li>
+                </ul>
             </section>
 
             <section id="scripts">

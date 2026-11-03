@@ -342,6 +342,33 @@
                                        class="form-control form-control-sm" min="1" />
                             </div>
                         </div>
+                        <hr />
+                        <h6>Deaktivierung aus der Problemliste</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input type="checkbox" name="Features.BizTalk.ActionsEnabled" value="true"
+                                   class="form-check-input feature-toggle" id="bizTalkActionsEnabled"
+                                   @(Model.Features.BizTalk.ActionsEnabled ? "checked" : "") />
+                            <input type="hidden" name="Features.BizTalk.ActionsEnabled" value="false" />
+                            <label class="form-check-label" for="bizTalkActionsEnabled">
+                                Deaktivierung erlauben
+                            </label>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Austauschverzeichnis (Aufträge und Ergebnisse)</label>
+                            <input type="text" name="Features.BizTalk.ActionsDirectory"
+                                   value="@Model.Features.BizTalk.ActionsDirectory"
+                                   class="form-control form-control-sm font-monospace"
+                                   placeholder="\\fileserver\biztalk-actions" />
+                            <div class="form-text">
+                                Von der WebUI und den Workern gemeinsam benutzter Ordner (UNC-Pfad). Leer = lokales
+                                Statusverzeichnis (nur bei WebUI und Worker auf demselben Server).
+                            </div>
+                        </div>
+                        <p class="text-muted small mb-0">
+                            Die WebUI legt nur einen Auftrag ab; die Ausführung übernimmt der Worker auf dem
+                            Zielserver über die BizTalk-Management-API. Die WebUI benötigt daher keine
+                            BizTalk-Zugangsdaten.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -389,6 +416,42 @@
                                        class="form-control form-control-sm" min="1" />
                             </div>
                         </div>
+                        <hr />
+                        <h6>Protokolle</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input type="checkbox" name="Features.FileMonitoring.Defaults.OffsetTrackingEnabled"
+                                   value="true"
+                                   class="form-check-input" id="fileMonitoringOffsetTracking"
+                                   @(Model.Features.FileMonitoring.Defaults.OffsetTrackingEnabled ? "checked" : "") />
+                            <input type="hidden" name="Features.FileMonitoring.Defaults.OffsetTrackingEnabled" value="false" />
+                            <label class="form-check-label" for="fileMonitoringOffsetTracking">
+                                <strong>Nur neue Logzeilen melden</strong>
+                            </label>
+                        </div>
+                        <p class="text-muted small">
+                            Pro überwachter Logdatei wird mitgezählt, wie weit gelesen wurde. Gemeldet
+                            werden dann nur die Zeilen, die seit dem letzten Prüfzyklus dazugekommen sind.
+                            Ausgeschaltet wird bei jedem Zyklus wieder der Dateiende gelesen.
+
+                        <h6>Standard-Schwellwerte (Größenänderung)</h6>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small">Warning ab (%)</label>
+                                <input type="number" name="Features.FileMonitoring.Defaults.SizeChangePercentWarning"
+                                       value="@Model.Features.FileMonitoring.Defaults.SizeChangePercentWarning"
+                                       class="form-control form-control-sm" min="0" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small">Critical ab (%)</label>
+                                <input type="number" name="Features.FileMonitoring.Defaults.SizeChangePercentCritical"
+                                       value="@Model.Features.FileMonitoring.Defaults.SizeChangePercentCritical"
+                                       class="form-control form-control-sm" min="0" />
+                            </div>
+                        </div>
+                        <p class="text-muted small mb-0">
+                            Alarm, wenn eine überwachte Datei seit dem letzten Prüfzyklus stark wächst oder schrumpft.
+                            0 % schaltet die Größenänderungserkennung ab.
+                        </p>
                     </div>
                 </div>
             </div>

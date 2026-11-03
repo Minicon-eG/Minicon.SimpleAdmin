@@ -25,6 +25,25 @@ public class FileMonitoringDefaults
     /// <summary>File age in minutes at/above which a Critical is raised (default 240).</summary>
     public int StuckFileAgeMinutesCritical { get; set; } = 240;
 
+    /// <summary>
+    /// Relative size change in percent at/above which a Warning is raised for a watched file
+    /// (default 50). 0 disables the size-change detection.
+    /// </summary>
+    public int SizeChangePercentWarning { get; set; } = 50;
+
+    /// <summary>
+    /// Relative size change in percent at/above which a Critical is raised for a watched file
+    /// (default 200). 0 disables the critical rating.
+    /// </summary>
+    public int SizeChangePercentCritical { get; set; } = 200;
+
     /// <summary>Cap on the number of reported stuck files / log matches per cycle (keeps the payload small).</summary>
     public int MaxReportedItems { get; set; } = 50;
+
+    /// <summary>
+    /// Whether the offset tracking (stateful log de-duplication) is active: only the log lines written
+    /// since the last cycle are reported. When switched off, the tail of the log is read in every
+    /// cycle (old behaviour). Default: true.
+    /// </summary>
+    public bool OffsetTrackingEnabled { get; set; } = true;
 }

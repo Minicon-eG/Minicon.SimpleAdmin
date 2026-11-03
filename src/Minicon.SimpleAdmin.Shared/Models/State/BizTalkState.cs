@@ -43,6 +43,18 @@ public class BizTalkArtifact
     public string Status { get; set; } = string.Empty;
 
     public bool IsCritical { get; set; } = true;
+
+    /// <summary>
+    /// Owning BizTalk application. Needed to address an orchestration (the Stop endpoint expects
+    /// "Orchestrations/{applicationName}/{orchestrationName}/Stop"). Null for applications themselves.
+    /// </summary>
+    public string? ApplicationName { get; set; }
+
+    /// <summary>
+    /// Owning receive port. Needed to address a receive location (the Disable endpoint expects
+    /// "ReceiveLocations/Disable/{receivePortName}/{receiveLocationName}"). Null for other artefacts.
+    /// </summary>
+    public string? ReceivePortName { get; set; }
 }
 
 /// <summary>Suspended-instance count for one scope (application name).</summary>

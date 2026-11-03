@@ -9,6 +9,95 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
+## [2.40.0] – 2026-11-03 – Verlaufsbalken in der Serverdetailseite
+
+**Auf der Detailseite eines Servers zeigen CPU, Arbeitsspeicher und Plattenplatz jetzt den Verlauf als Balken an.**
+
+### Neu
+- In der Serverdetailseite erscheint unter der Statusleiste jeder Metrik (CPU, Arbeitsspeicher, Plattenplatz) eine Reihe von Verlaufsbalken. Die Farbe richtet sich nach den Schwellwerten der Metrik: grün im Normalbereich, gelb ab der Warnschwelle, rot ab der kritischen Schwelle.
+- Die Balken folgen derselben Regel wie der statische HTML-Report: die jüngsten Messungen erscheinen einzeln, ältere werden zu immer größeren Balken zusammengefasst. So bleiben auch lange Verläufe lesbar.
+- Der Tooltip eines Balkens nennt den Messwert, der Tooltip der Balkenreihe die Zahl der Messwerte.
+
+### Entwickler
+- Neue gemeinsame Klasse `MetricHistoryAggregator` in `Minicon.SimpleAdmin.Shared` erzeugt die Balken. Der statische HTML-Report (`StaticHtmlGenerator`) und die WebUI verwenden sie damit, beide Anzeigen identisch sind.
+- Aggregation: die neuesten `History:MinConsecutiveChecks` Messungen 1:1, ältere Messungen in logarithmisch wachsenden Buckets (Durchschnitt je Bucket), maximal 20 Balken.
+- WebUI: CSS-Klassen `.metric-bars` und `.metric-bar` (Farben über die Theme-Variablen `--sa-ok`, `--sa-warn`, `--sa-crit`).
+
+### Intern
+- Die bisher private Verdopplung der Aggregationslogik im `StaticHtmlGenerator` entfällt; die Tests des HTML-Generators bleiben unverändert gültig.
+
+## [2.39.0] – 2026-11-03 – Protokolle melden nur noch neue Zeilen
+
+**Die Dateiüberwachung meldet bei Logdateien jetzt nur noch das, was seit dem letzten Prüfzyklus dazugekommen ist. Ein Fehler im Protokoll wird nicht mehr in jedem Zyklus erneut gemeldet.**
+
+### Neu
+- Die Protokollüberwachung merkt sich pro überwachter Logdatei, wie weit sie gelesen hat. Gemeldet werden dadurch nur die Zeilen, die seit dem letzten Prüfzyklus neu geschrieben wurden – derselbe Fehler erscheint nicht mehr bei jedem Lauf erneut.
+- Die Information überwiegt einen Neustart: Die gelesene Position wird gespeichert und beim nächsten Start wieder verwendet.
+- Wird eine Logdatei ersetzt oder gekürzt (Log-Rotation), wird sie einmal vollständig neu gelesen und in der Serienansicht als „rotiert“ vermerkt.
+
+### Geändert
+- Unter „Einstellungen → Features → Datei-/Protokollüberwachung“ lässt sich „Nur neue Logzeilen melden“ abschalten. Dann wird wie bisher bei jedem Zyklus das Ende der Logdatei gelesen.
+
+### Hinweise
+- Beim ersten Lauf nach der Umstellung wird der bisherige Dateiende einmal gelesen; danach kommen nur noch neue Zeilen.
+
+### Entwickler
+- Neu `ILogFileOffsetStore` / `LogFileOffset` (Checkers): persistenter Speicher der Leseposition je Logdatei. `JsonLogFileOffsetStore` (JSON-Datei, atomar über Temp-Datei + Move) und `InMemoryLogFileOffsetStore`.
+- `IFileSystemAccess` erweitert: `ReadFrom(path, offset, maxLines)` liest bytegenau ab einer Position (unvollständige letzte Zeile bleibt liegen), `ReadTail(path, maxLines)` liest den Dateiende samt Position dahinter.
+- `FileShareChecker` nimmt den Store als optionale Abhängigkeit; ohne Store bzw. mit `features.fileMonitoring.defaults.offsetTrackingEnabled = false` gilt das alte Verhalten (Tail je Zyklus). Der Store wird nach jedem Zyklus gespeichert.
+- Der Worker registriert `JsonLogFileOffsetStore` mit der Datei `log-offsets.json` im Statusverzeichnis.
+- `FileMonitoringState.LogFilesRotated` zählt die rotierten/gekürzten Logdateien des Zyklus.
+
+### Intern
+- 11 neue Tests (Offset-Logik, Store-Roundtrip, Rotation, Fehlerfall, Zeilenlesen mit Position).
+
+## [2.38.0] – 2026-11-03 – Alarm bei stark wachsenden oder schrumpfenden Dateien
+
+**Die Dateiüberwachung meldet jetzt, wenn eine überwachte Datei seit dem letzten Prüfzyklus deutlich gewachsen oder geschrumpft ist.**
+
+### Neu
+- Die Dateiüberwachung vergleicht die Größe jeder überwachten Datei mit der Größe aus dem vorherigen Prüfzyklus. Wächst oder schrumpft eine Datei stark, erscheint ein Alarm in der Problemliste und in der Übersicht der Dateiüberwachung – mit vorheriger Größe, aktueller Größe und prozentualer Änderung.
+- Die Schwellwerte sind einstellbar: global unter „Einstellungen → Features → Datei-/Protokollüberwachung“ und pro überwachtem Verzeichnis unter „Server → Bearbeiten“. Ab welchem Prozentsatz gewarnt und ab welchem kritisch gemeldet wird, legen Sie selbst fest.
+- Die betroffene Datei wird in der Serienansicht und auf der HTML-Statusseite in einer eigenen Tabelle „Größenänderungen“ mit Vorher-Nachher-Werten und Schweregrad angezeigt.
+
+### Hinweise
+- Beim ersten Prüflauf nach einem Neustart gibt es keinen Vergleichswert aus dem vorherigen Lauf; in diesem Lauf wird daher keine Größenänderung gemeldet. Ab dem zweiten Lauf arbeitet der Vergleich auch über Neustarts hinweg.
+
+### Entwickler
+- Neue Konfigurationsschlüssel: `features.fileMonitoring.defaults.sizeChangePercentWarning` (Standard 50) und `features.fileMonitoring.defaults.sizeChangePercentCritical` (Standard 200), je Verzeichnis überschreibbar über `server.checks.fileMonitoring.directories[].sizeChangePercentWarning/Critical`. Der Wert 0 schaltet die Prüfung ab.
+- `FileMonitoringState` führt `previousFileSizes` (Größen des Vorlaufs) und `sizeChanges` (die Funde); `FileEntry` trägt zusätzlich die Größe in Bytes. Die Vorlauf-Größen stammen aus der Status-JSON des Vorlaufs (`RuntimeStatus.FileMonitoring`), der Worker reicht sie an `IFileMonitoringChecker.CheckAsync` durch.
+- Neues Problem `ActiveProblem.FileSizeChanged` (ID `file_<dir>_<datei>_sizechange`), abgeleitet in `ProblemDerivationService`.
+
+### Intern
+- Unit-Tests für Größenänderungsszenarien: Wachstum, Schrumpfen, Schwellwert-Warnung/-Kritisch, kleine Änderung ohne Befund, unbekannte Vergleichsgröße, Verzeichnis-Override, abgeschaltete Prüfung, erster Zyklus ohne Vorlauf sowie Ableitung als Problem.
+
+## [2.37.0] – 2026-11-03 – BizTalk-Elemente aus der Problemliste deaktivieren (einzeln und in Gruppe)
+
+**Aus der Probleme-Ansicht lassen sich gemeldete BizTalk-Elemente jetzt direkt deaktivieren — einzeln oder mehrere ausgewählte Elemente gesammelt. Die Aktion läuft über einen Auftragskanal zum Zielserver, die WebUI braucht keine BizTalk-Zugangsdaten.**
+
+### Neu
+- Aktionsschaltfläche **Deaktivieren** in der Zeile eines BizTalk-Problems und **Auswahl deaktivieren** in der Bulk-Leiste (Punkte 3 und 4 aus MIN-37). Beide Wege öffnen einen Dialog mit optionalem Grund.
+- Aktionskanal (Request-Kanal, dateibasiert): Die WebUI schreibt einen Auftrag in ein gemeinsames Austauschverzeichnis (`features.bizTalk.actionsDirectory`), der Worker auf dem BizTalk-Server führt ihn über die Management-API aus und schreibt das Ergebnis zurück. Die WebUI liest den Status über `GET /api/biztalkactions/server/{serverId}`.
+- `IBizTalkApiClient` hat Schreibmethoden: `StopApplicationAsync` (`PUT /Applications/{name}/Stop`), `StopOrchestrationAsync` (`PUT /Orchestrations/{applicationName}/{orchestrationName}/Stop`), `StopSendPortAsync` (`PUT /SendPorts/{name}/Stop`), `DisableReceiveLocationAsync` (`PUT /ReceiveLocations/Disable/{receivePortName}/{receiveLocationName}`).
+- `IBizTalkActionStore` / `BizTalkActionStore` (Shared): Aufträge und Ergebnisse als JSON-Dateien unter `requests/{serverId}/` und `results/{serverId}/`, atomar geschrieben. Jeder Worker bearbeitet nur die Aufträge seines Servers.
+- `IBizTalkActionExecutor` / `BizTalkActionExecutor` (Checkers): führt die offenen Aufträge aus; ein fehlgeschlagener Auftrag bricht die übrigen nicht ab.
+- Neue Konfiguration in `config.json`: `features.bizTalk.actionsEnabled` (Hauptschalter) und `features.bizTalk.actionsDirectory` (UNC-Pfad). Oberfläche unter *Einstellungen → Feature-Toggles → BizTalk → Deaktivierung aus der Problemliste*.
+- Neue REST-Endpunkte: `POST /api/biztalkactions` (Einzelaktion), `POST /api/biztalkactions/bulk` (Gruppenaktion), `GET /api/biztalkactions/server/{serverId}`, `GET /api/biztalkactions/{serverId}/{requestId}`, `GET /api/biztalkactions/enabled`.
+- Dokumentation (Hilfe-Seite) zu Ablauf, Konfiguration, Sicherheitsmodell und den verwendeten Management-API-Aufrufen.
+
+### Geändert
+- Die BizTalk-Probleme tragen im Kontext jetzt die zugehörige Anwendung (Orchestrierung) bzw. den Empfangsport (Empfangsort). Die Management-API verlangt diese Angaben im URL-Pfad; die WebUI leitet sie aus dem veröffentlichten Status ab, nicht aus der Anfrage.
+- Der Worker führt die BizTalk-Prüfung und anschließend die offenen Deaktivierungsaufträge aus, so dass der nächste Zyklus bereits den neuen Zustand abbildet.
+
+### Sicherheit
+- Die WebUI speichert und benötigt keine BizTalk-Zugangsdaten. Die Management-API wird ausschließlich vom Worker auf dem BizTalk-Server aufgerufen (integrierte Windows-Authentifizierung).
+- **Exklusive Übernahme der Aufträge:** Vor dem Management-API-Aufruf legt der Worker eine Claim-Datei an (`claims/{serverId}/{requestId}.json`), die ausschließlich erzeugt wird. Zwei Worker, die denselben Auftrag bearbeiten, können so nicht parallel dieselbe Aktion auslösen.
+- **Kein Wiederholen bei unklarem Ausgang:** Lässt sich das Ergebnis nach dem API-Aufruf nicht speichern (z. B. nicht erreichbares Austauschverzeichnis), wird der Auftrag als *unbestimmt* markiert und **nicht** erneut ausgeführt. Ein zwischenzeitlich neu gestartetes Element wird nicht ungewollt erneut gestoppt.
+- **Zielwahl gegen den veröffentlichten Status:** Alle vier Artefakttypen (Anwendung, Orchestrierung, Sendeport, Empfangsort) werden gegen die Problemliste des Servers geprüft. Der Client kann keine beliebige laufende Anwendung oder einen beliebigen Sendeport benennen; kanonische Name und übergeordnetes Element stammen aus dem Status des Servers.
+- **Eindeutige Ziele:** Orchestrierungen und Empfangsorte sind nur zusammen mit Anwendung bzw. Empfangsport eindeutig. Die Problemliste überträgt das übergeordnete Element mit (`targetParent`); es grenzt den Treffer im Status nur ein. Meldet der Status denselben Namen weiterhin unter mehreren übergeordneten Elementen, wird die Einzel- wie die Gruppenanforderung abgelehnt statt den ersten Treffer zu wählen.
+- **Unlesbare Claims sperren konservativ:** Eine leere oder abgeschnittene Claim-Datei (Worker-Abbruch beim Schreiben) gilt weiter als Übernahme. Der Auftrag wird nicht erneut ausgegeben und erscheint nach 15 Minuten (Dateialter) als *unbestimmt*.
+- **Kollisionsfreie Serverordner:** Der Ordner je Server enthält den vollständigen SHA-256 der Server-ID (statt 32 Bit, die für reale IDs kollidieren), sodass unterschiedliche IDs (`bt.prod` und `bt_prod`) nicht auf denselben Ordner fallen. Aufträge, Claims und Ergebnisse werden beim Lesen – auch beim Einzelabruf – gegen die enthaltene Server- und Auftrags-ID geprüft; fremde Dateien werden ignoriert.
+
 ## [2.36.1] – 2026-10-29 – Verlässlichere CPU-Werte, Übersichten ohne seitliches Scrollen
 
 **Die CPU-Auslastung entspricht jetzt der tatsächlichen Last, und lange Problemtexte passen auf den Bildschirm.**
@@ -316,6 +405,10 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.39.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.38.0...v2.39.0
+[2.40.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.39.0...v2.40.0
+[2.38.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.0...v2.38.0
+[2.37.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.1...v2.37.0
 [2.36.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.0...v2.36.1
 [2.36.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.35.0...v2.36.0
 [2.35.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.34.2...v2.35.0

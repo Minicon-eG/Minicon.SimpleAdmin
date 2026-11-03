@@ -13,18 +13,54 @@ namespace Minicon.SimpleAdmin.Checkers;
 public interface IFileMonitoringChecker
 {
     Task<FileMonitoringState> CheckAsync(ServerFileMonitoringConfig config, FileMonitoringDefaults defaults, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Checks the watched directories / log scans and compares the file sizes with the ones observed in
+    /// the previous cycle (<paramref name="previousFileSizes"/>) to detect strong size changes.
+    /// </summary>
+    Task<FileMonitoringState> CheckAsync(
+        ServerFileMonitoringConfig config,
+        FileMonitoringDefaults defaults,
+        IReadOnlyDictionary<string, long>? previousFileSizes,
+        CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
-public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileShareChecker> logger) : IFileMonitoringChecker
+public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileShareChecker> logger, ILogFileOffsetStore? offsetStore = null) : IFileMonitoringChecker
 {
+    /// <summary>The store with the remembered read positions; <c>null</c> disables the offset tracking.</summary>
+    private readonly ILogFileOffsetStore? _offsetStore = offsetStore;
+
     public Task<FileMonitoringState> CheckAsync(ServerFileMonitoringConfig config, FileMonitoringDefaults defaults, CancellationToken cancellationToken = default)
-        => Task.Run(() => Check(config, defaults, DateTime.Now, cancellationToken), cancellationToken);
+        => CheckAsync(config, defaults, null, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<FileMonitoringState> CheckAsync(
+        ServerFileMonitoringConfig config,
+        FileMonitoringDefaults defaults,
+        IReadOnlyDictionary<string, long>? previousFileSizes,
+        CancellationToken cancellationToken = default)
+        => Task.Run(() => Check(config, defaults, previousFileSizes, DateTime.Now, cancellationToken), cancellationToken);
+
+    /// <summary>Synchronous core without a size predecessor — no size change can be detected.</summary>
+    internal FileMonitoringState Check(
+        ServerFileMonitoringConfig config,
+        FileMonitoringDefaults defaults,
+        DateTime now,
+        CancellationToken cancellationToken = default)
+        => Check(config, defaults, null, now, cancellationToken);
 
     /// <summary>Synchronous core with an injected <paramref name="now"/> for deterministic testing.</summary>
-    internal FileMonitoringState Check(ServerFileMonitoringConfig config, FileMonitoringDefaults defaults, DateTime now, CancellationToken cancellationToken = default)
+    internal FileMonitoringState Check(
+        ServerFileMonitoringConfig config,
+        FileMonitoringDefaults defaults,
+        IReadOnlyDictionary<string, long>? previousFileSizes,
+        DateTime now,
+        CancellationToken cancellationToken = default)
     {
         var state = new FileMonitoringState();
+        // Sizes observed in this cycle - they become the predecessor of the next cycle.
+        var observedSizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
         // Business-hours gate (reuses the TimeProfile schedule syntax, e.g. "Mon-Fri 06:00-22:00").
         if (!string.IsNullOrWhiteSpace(config.Schedule)
@@ -47,6 +83,11 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
             {
                 var files = fileSystem.EnumerateFiles(dir.Path, dir.Recursive);
                 state.StuckFiles.AddRange(EvaluateDirectory(files, dir, defaults, now));
+                state.SizeChanges.AddRange(EvaluateSizeChanges(files, dir, defaults, previousFileSizes));
+                foreach (var f in files)
+                {
+                    observedSizes[f.FullPath] = f.Size;
+                }
             }
             catch (Exception ex)
             {
@@ -76,10 +117,11 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
                 }
 
                 var lines = new List<string>();
+                var useOffsets = defaults.OffsetTrackingEnabled && _offsetStore is not null;
                 foreach (var file in resolved)
                 {
                     state.LogFilesScanned++;
-                    lines.AddRange(fileSystem.ReadLines(file.FullPath, scan.MaxLines));
+                    lines.AddRange(ReadNewLines(scan, file, state, useOffsets));
                 }
 
                 var sampleLogPath = resolved.Count > 0 ? resolved[0].FullPath : scan.Path;
@@ -112,7 +154,74 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
                 .Take(defaults.MaxReportedItems).ToList();
         }
 
+        // The positions must survive a restart, otherwise every cycle would report the same lines again.
+        _offsetStore?.Save();
+
+        if (state.SizeChanges.Count > defaults.MaxReportedItems)
+        {
+            state.SizeChanges = state.SizeChanges
+                .OrderByDescending(c => c.IsCritical).ThenByDescending(c => Math.Abs(c.ChangePercent))
+                .Take(defaults.MaxReportedItems).ToList();
+        }
+
+        // The sizes of this cycle are the predecessor for the next cycle (persisted with the status JSON).
+        state.PreviousFileSizes = observedSizes;
+
         return state;
+    }
+
+    // --- offset tracking (stateful log de-duplication) ---
+
+    /// <summary>
+    /// Reads the lines of a log file that were written since the last cycle. Without a store the whole
+    /// tail is read (old behaviour). With a store only the new lines are read and the position is
+    /// advanced afterwards, so the same hit is not reported twice.
+    /// </summary>
+    private IReadOnlyList<string> ReadNewLines(LogScanConfig scan, FileEntry file, FileMonitoringState state, bool useOffsets)
+    {
+        if (!useOffsets || _offsetStore is null)
+        {
+            return fileSystem.ReadLines(file.FullPath, scan.MaxLines);
+        }
+
+        var previous = _offsetStore.Get(file.FullPath);
+
+        LogFileReadResult result;
+        try
+        {
+            // First cycle without a known position: read the tail (as before), and remember where it ends.
+            // Later cycles: read only what was appended since the remembered position.
+            result = previous is null
+                ? fileSystem.ReadTail(file.FullPath, scan.MaxLines)
+                : fileSystem.ReadFrom(file.FullPath, previous.Offset, scan.MaxLines);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "FileMonitoring: Log '{Path}' nicht lesbar, Versatz bleibt unverändert", file.FullPath);
+            return Array.Empty<string>();
+        }
+
+        // Rotation / truncation: the file is shorter than the remembered position, the file was read
+        // from the beginning again. That is intended, the whole new file is reported once.
+        if (previous is not null && result.Length < previous.Offset)
+        {
+            state.LogFilesRotated++;
+        }
+
+        _offsetStore.Set(file.FullPath, new LogFileOffset
+        {
+            Offset = result.Offset,
+            Length = result.Length,
+            LastWriteTime = result.LastWriteTime
+        });
+
+        if (result.Lines.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        // More new lines than the configured maximum: the rest is read in the next cycle.
+        return result.Lines;
     }
 
     // --- pure evaluation (testable) ---
@@ -164,6 +273,56 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
                 LastModified = f.LastWriteTime,
                 AgeMinutes = Math.Round(ageMin, 1),
                 Reason = reason,
+                IsCritical = isCritical,
+                WikiUrl = dir.WikiUrl,
+                RemediationSteps = new List<string>(dir.RemediationSteps)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Compares the current file sizes with the ones observed in the previous cycle and yields a
+    /// finding for every file whose relative size change reaches the configured threshold.
+    /// Files without a usable predecessor (unknown size, or not seen in the previous cycle) are skipped.
+    /// </summary>
+    internal static IEnumerable<FileSizeChange> EvaluateSizeChanges(
+        IReadOnlyList<FileEntry> files,
+        WatchedDirectory dir,
+        FileMonitoringDefaults defaults,
+        IReadOnlyDictionary<string, long>? previousFileSizes)
+    {
+        var warnT = dir.SizeChangePercentWarning ?? defaults.SizeChangePercentWarning;
+        var critT = dir.SizeChangePercentCritical ?? defaults.SizeChangePercentCritical;
+        if (warnT <= 0 || previousFileSizes is null || previousFileSizes.Count == 0)
+        {
+            yield break;
+        }
+
+        foreach (var f in files)
+        {
+            if (!previousFileSizes.TryGetValue(f.FullPath, out var previous) || previous <= 0 || f.Size <= 0)
+            {
+                continue;
+            }
+
+            var delta = f.Size - previous;
+            var percent = Math.Round(delta * 100.0 / previous, 1);
+            var absPercent = Math.Abs(percent);
+
+            if (absPercent < warnT)
+            {
+                continue;
+            }
+
+            var isCritical = critT > 0 && absPercent >= critT;
+
+            yield return new FileSizeChange
+            {
+                Directory = dir.Name,
+                FilePath = f.FullPath,
+                PreviousSize = previous,
+                CurrentSize = f.Size,
+                ChangePercent = percent,
                 IsCritical = isCritical,
                 WikiUrl = dir.WikiUrl,
                 RemediationSteps = new List<string>(dir.RemediationSteps)

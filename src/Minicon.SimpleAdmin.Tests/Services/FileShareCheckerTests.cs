@@ -274,4 +274,221 @@ public class FileShareCheckerTests
         p.Id.Should().Be("file_kasse_unreachable");
         p.Severity.Should().Be(ProblemSeverity.Critical);
     }
+
+    // --- Größenänderungserkennung ---
+
+    [Fact]
+    public void EvaluateSizeChanges_NoPredecessor_YieldsNoFinding()
+    {
+        var files = new[] { new FileEntry("/eingang/a.xml", "a.xml", Now, 5000) };
+        var dir = new WatchedDirectory { Name = "Eingang", Path = "/eingang" };
+
+        FileShareChecker.EvaluateSizeChanges(files, dir, new FileMonitoringDefaults(), null)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EvaluateSizeChanges_FileGrownBeyondWarning_YieldsWarningFinding()
+    {
+        var files = new[] { new FileEntry("/eingang/a.xml", "a.xml", Now, 1500) };
+        var dir = new WatchedDirectory { Name = "Eingang", Path = "/eingang" };
+        var previous = new Dictionary<string, long> { ["/eingang/a.xml"] = 1000 };
+
+        var result = FileShareChecker.EvaluateSizeChanges(files, dir, new FileMonitoringDefaults(), previous).ToList();
+
+        result.Should().ContainSingle();
+        result[0].PreviousSize.Should().Be(1000);
+        result[0].CurrentSize.Should().Be(1500);
+        result[0].ChangePercent.Should().Be(50);
+        result[0].IsCritical.Should().BeFalse();
+        result[0].Directory.Should().Be("Eingang");
+    }
+
+    [Fact]
+    public void EvaluateSizeChanges_FileShrunkBeyondWarning_YieldsWarningFinding()
+    {
+        var files = new[] { new FileEntry("/eingang/a.xml", "a.xml", Now, 400) };
+        var dir = new WatchedDirectory { Name = "Eingang", Path = "/eingang" };
+        var previous = new Dictionary<string, long> { ["/eingang/a.xml"] = 1000 };
+
+        var result = FileShareChecker.EvaluateSizeChanges(files, dir, new FileMonitoringDefaults(), previous).ToList();
+
+        result.Should().ContainSingle();
+        result[0].ChangePercent.Should().Be(-60);
+        result[0].IsCritical.Should().BeFalse();
+    }
+
+    [Fact]
+    public void EvaluateSizeChanges_BeyondCriticalThreshold_IsCritical()
+    {
+        var files = new[] { new FileEntry("/eingang/a.xml", "a.xml", Now, 3000) };
+        var dir = new WatchedDirectory { Name = "Eingang", Path = "/eingang" };
+        var previous = new Dictionary<string, long> { ["/eingang/a.xml"] = 1000 };
+
+        var result = FileShareChecker.EvaluateSizeChanges(files, dir, new FileMonitoringDefaults(), previous).ToList();
+
+        result.Should().ContainSingle();
+        result[0].ChangePercent.Should().Be(200);
+        result[0].IsCritical.Should().BeTrue();
+    }
+
+    [Fact]
+    public void EvaluateSizeChanges_SmallChange_StaysBelowThreshold()
+    {
+        var files = new[] { new FileEntry("/eingang/a.xml", "a.xml", Now, 1100) };
+        var dir = new WatchedDirectory { Name = "Eingang", Path = "/eingang" };
+        var previous = new Dictionary<string, long> { ["/eingang/a.xml"] = 1000 };
+
+        FileShareChecker.EvaluateSizeChanges(files, dir, new FileMonitoringDefaults(), previous)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EvaluateSizeChanges_UnknownPredecessor_IsSkipped()
+    {
+        var files = new[] { new FileEntry("/eingang/new.xml", "new.xml", Now, 5000) };
+        var dir = new WatchedDirectory { Name = "Eingang", Path = "/eingang" };
+        var previous = new Dictionary<string, long> { ["/eingang/other.xml"] = 1000 };
+
+        FileShareChecker.EvaluateSizeChanges(files, dir, new FileMonitoringDefaults(), previous)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EvaluateSizeChanges_DirectoryOverride_UsesOwnThreshold()
+    {
+        var files = new[] { new FileEntry("/eingang/a.xml", "a.xml", Now, 1200) };
+        var dir = new WatchedDirectory
+        {
+            Name = "Eingang",
+            Path = "/eingang",
+            SizeChangePercentWarning = 10,
+            SizeChangePercentCritical = 100
+        };
+        var previous = new Dictionary<string, long> { ["/eingang/a.xml"] = 1000 };
+
+        var result = FileShareChecker.EvaluateSizeChanges(files, dir, new FileMonitoringDefaults(), previous).ToList();
+
+        // 20 % über der Verzeichnis-Warnschwelle, aber unter der Critical-Schwelle des Verzeichnisses.
+        result.Should().ContainSingle();
+        result[0].ChangePercent.Should().Be(20);
+        result[0].IsCritical.Should().BeFalse();
+    }
+
+    [Fact]
+    public void EvaluateSizeChanges_DirectoryOverride_LowerCriticalThresholdMakesFindingCritical()
+    {
+        var files = new[] { new FileEntry("/eingang/a.xml", "a.xml", Now, 1200) };
+        var dir = new WatchedDirectory
+        {
+            Name = "Eingang",
+            Path = "/eingang",
+            SizeChangePercentWarning = 10,
+            SizeChangePercentCritical = 15
+        };
+        var previous = new Dictionary<string, long> { ["/eingang/a.xml"] = 1000 };
+
+        var result = FileShareChecker.EvaluateSizeChanges(files, dir, new FileMonitoringDefaults(), previous).ToList();
+
+        result.Should().ContainSingle();
+        result[0].IsCritical.Should().BeTrue();
+    }
+
+    [Fact]
+    public void EvaluateSizeChanges_DisabledViaZeroThreshold_YieldsNoFinding()
+    {
+        var files = new[] { new FileEntry("/eingang/a.xml", "a.xml", Now, 5000) };
+        var dir = new WatchedDirectory
+        {
+            Name = "Eingang",
+            Path = "/eingang",
+            SizeChangePercentWarning = 0
+        };
+        var previous = new Dictionary<string, long> { ["/eingang/a.xml"] = 1000 };
+
+        FileShareChecker.EvaluateSizeChanges(files, dir, new FileMonitoringDefaults(), previous)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Check_WithPreviousSizes_DetectsGrowthAndStoresSizesForNextCycle()
+    {
+        var fs = new Mock<IFileSystemAccess>();
+        fs.Setup(f => f.EnumerateFiles("/eingang", false))
+            .Returns(new[] { new FileEntry("/eingang/a.xml", "a.xml", Now, 3000) });
+        var config = new ServerFileMonitoringConfig
+        {
+            Enabled = true,
+            Directories = { new WatchedDirectory { Name = "Eingang", Path = "/eingang", WikiUrl = "https://wiki/size" } }
+        };
+        var previous = new Dictionary<string, long> { ["/eingang/a.xml"] = 1000 };
+
+        var state = Build(fs.Object).Check(config, new FileMonitoringDefaults(), previous, Now);
+
+        state.SizeChanges.Should().ContainSingle().Which.ChangePercent.Should().Be(200);
+        state.SizeChanges[0].IsCritical.Should().BeTrue();
+        state.SizeChanges[0].WikiUrl.Should().Be("https://wiki/size");
+        // The sizes of this cycle are the predecessor of the next cycle.
+        state.PreviousFileSizes.Should().ContainKey("/eingang/a.xml");
+        state.PreviousFileSizes["/eingang/a.xml"].Should().Be(3000);
+    }
+
+    [Fact]
+    public void Check_FirstCycle_ReportsNoSizeChange()
+    {
+        var fs = new Mock<IFileSystemAccess>();
+        fs.Setup(f => f.EnumerateFiles("/eingang", false))
+            .Returns(new[] { new FileEntry("/eingang/a.xml", "a.xml", Now, 3000) });
+        var config = new ServerFileMonitoringConfig
+        {
+            Enabled = true,
+            Directories = { new WatchedDirectory { Name = "Eingang", Path = "/eingang" } }
+        };
+
+        var state = Build(fs.Object).Check(config, new FileMonitoringDefaults(), Now);
+
+        state.SizeChanges.Should().BeEmpty();
+        state.PreviousFileSizes.Should().ContainKey("/eingang/a.xml");
+        state.PreviousFileSizes["/eingang/a.xml"].Should().Be(3000);
+    }
+
+    [Fact]
+    public void FileSizeChanged_BuildsStableIdAndSeverity()
+    {
+        var p = ActiveProblem.FileSizeChanged("Eingang", "/eingang/order.xml", 1000, 3000, 200, isCritical: true,
+            wikiUrl: "https://wiki/s", remediationSteps: new List<string> { "Schritt 1" });
+
+        p.Id.Should().Be("file_eingang_order_xml_sizechange");
+        p.Type.Should().Be("file");
+        p.Source.Should().Be("FileMonitoring");
+        p.Severity.Should().Be(ProblemSeverity.Critical);
+        p.Message.Should().Contain("200");
+        p.WikiUrl.Should().Be("https://wiki/s");
+        p.RemediationSteps.Should().ContainSingle().Which.Should().Be("Schritt 1");
+    }
+
+    [Fact]
+    public void DeriveProblems_FileMonitoring_MapsSizeChangeToProblem()
+    {
+        var fm = new FileMonitoringState
+        {
+            SizeChanges =
+            {
+                new FileSizeChange
+                {
+                    Directory = "Eingang",
+                    FilePath = "/eingang/order.xml",
+                    PreviousSize = 1000,
+                    CurrentSize = 3000,
+                    ChangePercent = 200,
+                    IsCritical = true
+                }
+            }
+        };
+
+        var problems = ProblemDerivationService.DeriveProblems(
+            new List<Metric>(), null, null, null, null, null, null, null, null, fm);
+
+        problems.Should().ContainSingle().Which.Id.Should().Be("file_eingang_order_xml_sizechange");
+    }
 }
