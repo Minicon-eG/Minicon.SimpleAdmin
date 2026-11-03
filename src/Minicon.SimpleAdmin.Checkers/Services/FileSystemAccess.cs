@@ -5,7 +5,7 @@ namespace Minicon.SimpleAdmin.Checkers;
 /// <summary>
 /// A single file discovered on a watched share / log path.
 /// </summary>
-public sealed record FileEntry(string FullPath, string Name, DateTime LastWriteTime);
+public sealed record FileEntry(string FullPath, string Name, DateTime LastWriteTime, long Size = 0);
 
 /// <summary>
 /// Thin IO seam for the <see cref="FileShareChecker"/>. Keeps the file-system access (which is the

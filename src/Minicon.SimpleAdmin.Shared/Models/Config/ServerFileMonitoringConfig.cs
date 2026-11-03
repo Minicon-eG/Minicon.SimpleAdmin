@@ -47,6 +47,18 @@ public class WatchedDirectory
     public int? AgeMinutesCritical { get; set; }
 
     /// <summary>
+    /// Override of the Warning threshold for relative size changes in percent (null = feature default,
+    /// 0 = size-change detection off for this directory).
+    /// </summary>
+    public int? SizeChangePercentWarning { get; set; }
+
+    /// <summary>
+    /// Override of the Critical threshold for relative size changes in percent (null = feature default,
+    /// 0 = size-change detection off for this directory).
+    /// </summary>
+    public int? SizeChangePercentCritical { get; set; }
+
+    /// <summary>
     /// Optional daily cutoff time ("HH:mm", e.g. "21:45"). After this time any remaining file in the
     /// directory is reported (the directory is expected to be empty by then).
     /// </summary>

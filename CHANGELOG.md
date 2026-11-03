@@ -34,6 +34,26 @@ in der WebUI nicht angezeigt.
 ### Intern
 - 11 neue Tests (Offset-Logik, Store-Roundtrip, Rotation, Fehlerfall, Zeilenlesen mit Position).
 
+## [2.38.0] – 2026-11-03 – Alarm bei stark wachsenden oder schrumpfenden Dateien
+
+**Die Dateiüberwachung meldet jetzt, wenn eine überwachte Datei seit dem letzten Prüfzyklus deutlich gewachsen oder geschrumpft ist.**
+
+### Neu
+- Die Dateiüberwachung vergleicht die Größe jeder überwachten Datei mit der Größe aus dem vorherigen Prüfzyklus. Wächst oder schrumpft eine Datei stark, erscheint ein Alarm in der Problemliste und in der Übersicht der Dateiüberwachung – mit vorheriger Größe, aktueller Größe und prozentualer Änderung.
+- Die Schwellwerte sind einstellbar: global unter „Einstellungen → Features → Datei-/Protokollüberwachung“ und pro überwachtem Verzeichnis unter „Server → Bearbeiten“. Ab welchem Prozentsatz gewarnt und ab welchem kritisch gemeldet wird, legen Sie selbst fest.
+- Die betroffene Datei wird in der Serienansicht und auf der HTML-Statusseite in einer eigenen Tabelle „Größenänderungen“ mit Vorher-Nachher-Werten und Schweregrad angezeigt.
+
+### Hinweise
+- Beim ersten Prüflauf nach einem Neustart gibt es keinen Vergleichswert aus dem vorherigen Lauf; in diesem Lauf wird daher keine Größenänderung gemeldet. Ab dem zweiten Lauf arbeitet der Vergleich auch über Neustarts hinweg.
+
+### Entwickler
+- Neue Konfigurationsschlüssel: `features.fileMonitoring.defaults.sizeChangePercentWarning` (Standard 50) und `features.fileMonitoring.defaults.sizeChangePercentCritical` (Standard 200), je Verzeichnis überschreibbar über `server.checks.fileMonitoring.directories[].sizeChangePercentWarning/Critical`. Der Wert 0 schaltet die Prüfung ab.
+- `FileMonitoringState` führt `previousFileSizes` (Größen des Vorlaufs) und `sizeChanges` (die Funde); `FileEntry` trägt zusätzlich die Größe in Bytes. Die Vorlauf-Größen stammen aus der Status-JSON des Vorlaufs (`RuntimeStatus.FileMonitoring`), der Worker reicht sie an `IFileMonitoringChecker.CheckAsync` durch.
+- Neues Problem `ActiveProblem.FileSizeChanged` (ID `file_<dir>_<datei>_sizechange`), abgeleitet in `ProblemDerivationService`.
+
+### Intern
+- Unit-Tests für Größenänderungsszenarien: Wachstum, Schrumpfen, Schwellwert-Warnung/-Kritisch, kleine Änderung ohne Befund, unbekannte Vergleichsgröße, Verzeichnis-Override, abgeschaltete Prüfung, erster Zyklus ohne Vorlauf sowie Ableitung als Problem.
+
 ## [2.36.1] – 2026-10-29 – Verlässlichere CPU-Werte, Übersichten ohne seitliches Scrollen
 
 **Die CPU-Auslastung entspricht jetzt der tatsächlichen Last, und lange Problemtexte passen auf den Bildschirm.**
