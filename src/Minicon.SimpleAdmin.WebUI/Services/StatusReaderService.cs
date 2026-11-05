@@ -26,18 +26,27 @@ public class StatusReaderService
     private DateTime _lastLoad = DateTime.MinValue;
     private readonly TimeSpan _cacheExpiry = TimeSpan.FromSeconds(10);
     private readonly HttpClient? _httpClient;
+    private readonly ScheduledTaskGroupSinceStore _taskGroupSince;
+    private List<RuntimeStatus>? _taskGroupSinceMaintainedFor;
 
     /// <summary>Service type used for the placeholder entry of a server whose status could not be retrieved.</summary>
     internal const string UnreachableServiceType = "erreichbarkeit";
+
+    /// <summary>Status message of the placeholder for a scheduled task group anchor without any status.</summary>
+    internal const string TaskGroupAnchorPlaceholderMessage = "Server ohne Status – trägt nur Gruppenprobleme geplanter Tasks";
 
     public StatusReaderService(
         string defaultStatusDirectory,
         IAcknowledgeService acknowledgeService,
         ConfigurationService configService,
         ILogger<StatusReaderService> logger,
-        HttpClient? httpClient = null)
+        HttpClient? httpClient = null,
+        string? stateDirectory = null)
     {
         _defaultStatusDirectory = defaultStatusDirectory;
+        // First-seen times of the scheduled task group problems live next to acknowledges.json (ConfigPath
+        // directory, see SimpleAdminWebUIExtensions); without it (tests, custom hosts) in the status directory.
+        _taskGroupSince = new ScheduledTaskGroupSinceStore(stateDirectory ?? defaultStatusDirectory, logger);
         _httpClient = httpClient;
         _acknowledgeService = acknowledgeService;
         _configService = configService;
@@ -62,6 +71,17 @@ public class StatusReaderService
         var statuses = await LoadAllStatusesAsync(forceRefresh);
         var activeAcknowledges = await LoadActiveAcknowledgesAsync();
         return AggregateByServer(statuses, activeAcknowledges);
+    }
+
+    /// <summary>
+    /// Scheduled task groups (same task path per environment) across all servers, from the same cached status
+    /// data as <see cref="GetAllServersAsync"/>. Includes AllServers groups (no single-active check) and lists
+    /// the servers whose state is unknown (unreachable, stale, query failed). Empty when the feature is off.
+    /// </summary>
+    public async Task<IReadOnlyList<ScheduledTaskGroupEvaluator.TaskGroup>> GetScheduledTaskGroupsAsync(bool forceRefresh = false)
+    {
+        var statuses = await LoadAllStatusesAsync(forceRefresh);
+        return BuildScheduledTaskGroups(statuses);
     }
 
     /// <summary>
@@ -296,8 +316,12 @@ public class StatusReaderService
         {
             var eventLogConfig = _configService.GetFeatures().EventLog;
             var now = DateTime.UtcNow;
+            var taskConfig = _configService.GetFeatures().ScheduledTasks;
             foreach (var status in merged.Values)
+            {
                 EventLogIgnoreMatcher.ApplyCentral(status.EventLogs, status.Server, eventLogConfig.IgnoreRules, eventLogConfig.Defaults, now);
+                ScheduledTaskIgnoreMatcher.ApplyCentral(status.ScheduledTasks, status.Server, taskConfig.IgnoreRules, taskConfig.Defaults, now);
+            }
         }
 
         return merged.Values.ToList();
@@ -421,6 +445,28 @@ public class StatusReaderService
     {
         _logger.LogInformation("AggregateByServer: Processing {ServerCount} status files", statuses.Count);
 
+        // Cross-server single-active problems of scheduled tasks, keyed by the group's anchor server.
+        var (taskGroups, unknownTaskParticipants) = EvaluateScheduledTaskGroups(statuses);
+        var taskGroupProblems = ScheduledTaskGroupEvaluator.DeriveGroupProblems(taskGroups);
+        TrackGroupProblemsSince(
+            taskGroupProblems, ScheduledTaskGroupEvaluator.DerivePendingGroupProblemIds(taskGroups), unknownTaskParticipants, statuses);
+
+        // The anchor comes from config.json and may have no status at all (unreachable, no worker yet) —
+        // give it a placeholder so its group problems are still shown and acknowledgeable.
+        var missingAnchors = taskGroupProblems.Keys
+            .Where(anchor => !statuses.Any(s => string.Equals(s.Server, anchor, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (missingAnchors.Count > 0)
+        {
+            statuses = statuses.Concat(missingAnchors.Select(anchor => new RuntimeStatus
+            {
+                Server = anchor,
+                Service = UnreachableServiceType,
+                Status = ServiceStatus.Unknown,
+                StatusMessage = TaskGroupAnchorPlaceholderMessage
+            })).ToList();
+        }
+
         return statuses
             .GroupBy(s => s.Server, StringComparer.OrdinalIgnoreCase)
             .Select(g =>
@@ -510,6 +556,9 @@ public class StatusReaderService
                 // File monitoring state (server-wide; single object per status — take the first present)
                 var fileMonitoring = services.Select(s => s.FileMonitoring).FirstOrDefault(f => f != null);
 
+                // Scheduled task state (server-wide; the newest query wins)
+                var scheduledTasks = NewestScheduledTasks(services);
+
                 // BaseUrl from config for static HTML links
                 var serverConfig = _configService.IsLoaded
                     ? _configService.Config.Servers.FirstOrDefault(s =>
@@ -532,7 +581,8 @@ public class StatusReaderService
                     emailDelivery.Count > 0 ? emailDelivery : null,
                     certificates.Count > 0 ? certificates : null,
                     bizTalk,
-                    fileMonitoring);
+                    fileMonitoring,
+                    scheduledTasks);
 
                 // First-seen times from all service files of the server; the earliest start wins.
                 var problemsSince = services
@@ -541,6 +591,14 @@ public class StatusReaderService
                     .GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(gr => gr.Key, gr => gr.Min(kvp => kvp.Value), StringComparer.OrdinalIgnoreCase);
                 ProblemDerivationService.ApplyOccurrences(problems, problemsSince, newest.LastUpdate);
+
+                // Group problems anchored at this server (occurrences already set by TrackGroupProblemsSince).
+                if (taskGroupProblems.TryGetValue(g.Key, out var groupProblems))
+                {
+                    var anchored = groupProblems.Where(p => problems.All(x => !x.Id.Equals(p.Id, StringComparison.OrdinalIgnoreCase))).ToList();
+                    ProblemDerivationService.ApplyAcknowledges(anchored, activeAcknowledges, g.Key);
+                    problems.AddRange(anchored);
+                }
 
                 // Calculate overall status
                 var overallStatus = CalculateOverallStatus(services, problems);
@@ -563,6 +621,9 @@ public class StatusReaderService
                     Certificates = certificates.Count > 0 ? certificates : null,
                     BizTalk = bizTalk,
                     FileMonitoring = fileMonitoring,
+                    ScheduledTasks = scheduledTasks,
+                    IsTaskGroupAnchorPlaceholder = services.All(s =>
+                        s.Service == UnreachableServiceType && s.StatusMessage == TaskGroupAnchorPlaceholderMessage),
                     ActiveProblems = problems,
                     Services = services,
                     BaseUrl = baseUrl
@@ -623,7 +684,8 @@ public class StatusReaderService
             service.EmailDelivery,
             service.Certificates,
             service.BizTalk,
-            service.FileMonitoring);
+            service.FileMonitoring,
+            service.ScheduledTasks);
 
         if (problems.Count > 0)
         {
@@ -654,7 +716,8 @@ public class StatusReaderService
                 || service.EmailDelivery?.Count > 0
                 || service.Certificates?.Count > 0
                 || service.BizTalk != null
-                || service.FileMonitoring != null;
+                || service.FileMonitoring != null
+                || service.ScheduledTasks != null;
             return hasCheckData ? ServiceStatus.Healthy : ServiceStatus.Unknown;
         }
 
@@ -669,6 +732,83 @@ public class StatusReaderService
         }
 
         return ServiceStatus.Healthy;
+    }
+
+    private static ScheduledTaskState? NewestScheduledTasks(IEnumerable<RuntimeStatus> services)
+        => services
+            .Select(s => s.ScheduledTasks)
+            .Where(t => t != null)
+            .OrderByDescending(t => t!.LastChecked)
+            .FirstOrDefault();
+
+    /// <summary>
+    /// First-seen times of the group problems (the worker cannot track them). Store maintenance (file check,
+    /// pruning, writing) runs once per loaded status set, i.e. coupled to the 10 s cache; every other read only
+    /// applies the in-memory times. Observation time = the anchor's newest status (now if it has none).
+    /// </summary>
+    private void TrackGroupProblemsSince(
+        Dictionary<string, List<ActiveProblem>> taskGroupProblems,
+        Dictionary<string, HashSet<string>> pendingIds,
+        Dictionary<string, IReadOnlyList<string>> unknownTaskParticipants,
+        List<RuntimeStatus> statuses)
+    {
+        if (!_configService.IsLoaded || !_configService.GetFeatures().ScheduledTasks.Enabled)
+            return;
+
+        var now = DateTime.UtcNow;
+        var observed = taskGroupProblems
+            .SelectMany(kv =>
+            {
+                var lastUpdate = statuses
+                    .Where(s => string.Equals(s.Server, kv.Key, StringComparison.OrdinalIgnoreCase))
+                    .Select(s => s.LastUpdate)
+                    .DefaultIfEmpty(now)
+                    .Max();
+                return kv.Value.Select(p => (p, lastUpdate));
+            })
+            .ToList();
+
+        // Exactly one caller per loaded status set does the maintenance; concurrent readers only apply.
+        var previous = Interlocked.Exchange(ref _taskGroupSinceMaintainedFor, statuses);
+        if (ReferenceEquals(previous, statuses))
+        {
+            _taskGroupSince.Apply(observed);
+            return;
+        }
+
+        // Pending problems (undecidable while a server is unknown) keep their start for the whole outage — also
+        // when every member is unknown and no group exists (tracked IDs of environments with unknown participants).
+        var held = pendingIds.Values.SelectMany(ids => ids)
+            .Concat(_taskGroupSince.TrackedIds().Where(id => ScheduledTaskGroupEvaluator.IsHeldByUnknownParticipants(id, unknownTaskParticipants)))
+            .ToList();
+        _taskGroupSince.Track(observed, now, ScheduledTaskGroupEvaluator.GetStaleAfter(_configService.Config), held);
+    }
+
+    /// <summary>
+    /// Builds the scheduled task groups from the merged statuses. A server counts as unknown when it reported
+    /// no task state (e.g. the unreachable placeholder) or its newest status is older than
+    /// <see cref="ScheduledTaskGroupEvaluator.GetStaleAfter"/> — the same rule the notifier and the HTML
+    /// generator use, so they agree on "none active".
+    /// </summary>
+    internal IReadOnlyList<ScheduledTaskGroupEvaluator.TaskGroup> BuildScheduledTaskGroups(List<RuntimeStatus> statuses)
+        => EvaluateScheduledTaskGroups(statuses).Groups;
+
+    private (IReadOnlyList<ScheduledTaskGroupEvaluator.TaskGroup> Groups, Dictionary<string, IReadOnlyList<string>> Unknown) EvaluateScheduledTaskGroups(
+        List<RuntimeStatus> statuses)
+    {
+        var none = (Array.Empty<ScheduledTaskGroupEvaluator.TaskGroup>(), new Dictionary<string, IReadOnlyList<string>>());
+        if (!_configService.IsLoaded)
+            return none;
+
+        var config = _configService.Config;
+        var features = config.GetEffectiveFeatures();
+        if (!features.ScheduledTasks.Enabled)
+            return none;
+
+        var snapshots = ScheduledTaskGroupEvaluator.SnapshotsFromStatuses(
+            statuses, DateTime.UtcNow, ScheduledTaskGroupEvaluator.GetStaleAfter(config));
+        return (ScheduledTaskGroupEvaluator.BuildGroups(config, snapshots),
+            ScheduledTaskGroupEvaluator.UnknownParticipantsByEnvironment(config, snapshots));
     }
 
     private string GetEffectiveStatusDirectory()

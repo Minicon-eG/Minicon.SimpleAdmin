@@ -1,0 +1,1015 @@
+@using Minicon.SimpleAdmin.Models.Config
+@using Minicon.SimpleAdmin.Models.State
+@using Minicon.SimpleAdmin.WebUI.Services.ScheduledTasks
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ScheduledTasksPageViewModel
+
+@{
+    ViewData["Title"] = "Geplante Tasks";
+
+    // More server columns than this do not fit side by side: the rows become cards at every width.
+    const int MaxMatrixColumns = 5;
+
+    string AuditActionLabel(string action) => action switch
+    {
+        "Enable" => "Aktivieren",
+        "Disable" => "Deaktivieren",
+        "Run" => "Starten",
+        "End" => "Beenden",
+        "ActivateExclusively" => "Exklusiv aktivieren",
+        _ => action
+    };
+
+    DateTime? WorkerUpdate(string serverId) => Model.WorkerUpdates.TryGetValue(serverId, out var t) ? t : null;
+
+    var allServers = Model.Environments.SelectMany(e => e.Servers)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+}
+
+<div class="page-head">
+    <div>
+        <h1><i class="bi bi-calendar2-check"></i>Geplante Tasks</h1>
+        <div class="page-sub">
+            Windows-Aufgabenplanung aller überwachten Server – Zustand, letzter und nächster Lauf, Ergebnis und Steuerung.
+        </div>
+    </div>
+    <div class="page-actions">
+        <partial name="_AutoRefresh" />
+        <button type="button" class="btn btn-glass" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
+        </button>
+    </div>
+</div>
+
+@if (!Model.FeatureEnabled)
+{
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-calendar2-x fs-1 text-body-secondary"></i>
+            <h5 class="mt-3">Die Überwachung geplanter Tasks ist nicht aktiviert</h5>
+            <p class="text-body-secondary mb-3">
+                Schalten Sie sie unter <em>Einstellungen → Feature-Toggles → Geplante Tasks</em> ein und legen Sie pro Server
+                unter <em>Server → Bearbeiten</em> fest, welche Tasks überwacht werden.
+            </p>
+            <a asp-controller="Settings" asp-action="Features" class="btn btn-primary">
+                <i class="bi bi-toggles me-1"></i>Zu den Feature-Toggles
+            </a>
+        </div>
+    </div>
+    return;
+}
+
+@if (!Model.ControlEnabled)
+{
+    <div class="alert alert-warning d-flex gap-2 align-items-start">
+        <i class="bi bi-lock mt-1"></i>
+        <div>
+            <strong>Steuerung abgeschaltet.</strong>
+            @(Model.DisabledReason ?? "Aktivieren, Deaktivieren, Starten und Beenden sind auf diesem Server nicht möglich.")
+            Die Anzeige bleibt verfügbar.
+        </div>
+    </div>
+}
+
+@* KPI tiles — clicking one applies the matching filter *@
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <button type="button" class="st-kpi kpi-tile kpi-accent" data-filter-show="all">
+            <i class="bi bi-calendar2-week"></i>
+            <span class="kpi-value">@Model.TaskCount</span>
+            <span class="kpi-label">Tasks</span>
+        </button>
+    </div>
+    <div class="col-6 col-lg-3">
+        <button type="button" class="st-kpi kpi-tile kpi-ok" data-filter-show="active">
+            <i class="bi bi-play-circle"></i>
+            <span class="kpi-value" data-kpi="active">@Model.ActiveCount</span>
+            <span class="kpi-label">Aktiv</span>
+        </button>
+    </div>
+    <div class="col-6 col-lg-3">
+        <button type="button" class="st-kpi kpi-tile kpi-warn" data-filter-show="errors">
+            <i class="bi bi-exclamation-triangle"></i>
+            <span class="kpi-value">@Model.ErrorCount</span>
+            <span class="kpi-label">Mit Fehlern</span>
+        </button>
+    </div>
+    <div class="col-6 col-lg-3">
+        <button type="button" class="st-kpi kpi-tile kpi-crit" data-filter-show="violations">
+            <i class="bi bi-intersect"></i>
+            <span class="kpi-value" data-kpi="violations">@Model.ViolationCount</span>
+            <span class="kpi-label">Verstöße</span>
+        </button>
+    </div>
+</div>
+
+@if (Model.TaskCount == 0)
+{
+    <div class="card problem-panel">
+        <div class="st-empty">
+            <i class="bi bi-calendar2 text-body-secondary"></i>
+            <h5>Keine geplanten Tasks gemeldet</h5>
+            <p class="text-body-secondary mb-0">
+                Es hat noch kein Server überwachte Tasks gemeldet. Prüfen Sie die Watch-Muster unter
+                <em>Server → Bearbeiten → Geplante Tasks</em> und ob der Worker bereits gelaufen ist.
+            </p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card problem-panel mb-4">
+        <div class="card-header problem-toolbar">
+            <div class="row g-2 align-items-center">
+                <div class="col-12 col-lg-auto">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-funnel"></i></span>
+                        <select class="form-select" id="stFilterShow" aria-label="Anzeige-Filter">
+                            <option value="all" selected>Alle Tasks</option>
+                            <option value="problems">Nur Probleme</option>
+                            <option value="violations">Nur Verstöße</option>
+                            <option value="errors">Nur Tasks mit Fehlern</option>
+                            <option value="active">Nur aktive</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-auto">
+                    <select class="form-select form-select-sm" id="stFilterEnv" aria-label="Umgebungs-Filter">
+                        <option value="all" selected>Alle Umgebungen</option>
+                        @foreach (var env in Model.Environments)
+                        {
+                            <option value="@env.Name">@env.Label</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-lg-auto">
+                    <select class="form-select form-select-sm" id="stFilterServer" aria-label="Server-Filter">
+                        <option value="all" selected>Alle Server</option>
+                        @foreach (var server in allServers)
+                        {
+                            <option value="@server">@server</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-lg">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="search" class="form-control" id="stFilterText" placeholder="Suchen (Task, Pfad, Server) …" />
+                    </div>
+                </div>
+                <div class="col-12 col-lg-auto text-lg-end">
+                    <small class="text-body-secondary" id="stFilterSummary"></small>
+                    <button type="button" class="btn btn-link btn-sm p-0 ms-2 d-none" id="stFilterReset" onclick="stResetFilters()">Filter zurücksetzen</button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body py-2 small text-body-secondary">
+            <i class="bi bi-info-circle me-1"></i>
+            Die Tabelle zeigt den <strong>Stand der Worker</strong> (je Server bis zu einem Prüfzyklus alt).
+            Nach einer Aktion wird der <strong>Live-Stand</strong> der betroffenen Zellen direkt vom Server abgefragt und farbig hervorgehoben.
+        </div>
+    </div>
+
+    @foreach (var env in Model.Environments)
+    {
+        var envViolations = env.Rows.Count(r => r.IsViolation);
+        var stacked = env.Servers.Count > MaxMatrixColumns;
+        <div class="card mb-4 st-env @(envViolations > 0 ? "card-alert" : "")" data-env="@env.Name">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>@env.Label</h5>
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="pill pill-muted pill-soft">@env.Rows.Count @(env.Rows.Count == 1 ? "Task" : "Tasks")</span>
+                    <span class="pill pill-muted pill-soft">@env.Servers.Count Server</span>
+                    @if (envViolations > 0)
+                    {
+                        <span class="pill pill-crit"><i class="bi bi-intersect"></i>@envViolations @(envViolations == 1 ? "Verstoß" : "Verstöße")</span>
+                    }
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <table class="table mb-0 st-matrix @(stacked ? "st-stacked" : "")">
+                    <colgroup>
+                        <col class="col-task" />
+                        @foreach (var _ in env.Servers)
+                        {
+                            <col />
+                        }
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Task</th>
+                            @foreach (var server in env.Servers)
+                            {
+                                <th class="text-truncate" title="@server">
+                                    <a href="@Url.Action("Details", "Status", new { id = server })" class="text-reset text-decoration-none">
+                                        <i class="bi bi-hdd-network me-1"></i>@server
+                                    </a>
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in env.Rows)
+                        {
+                            var search = $"{row.Path} {row.Name} {row.Description} {string.Join(" ", env.Servers)}".ToLowerInvariant();
+                            <tr class="st-row @(row.IsViolation ? "is-violation" : row.HasFinding ? "has-finding" : "")"
+                                data-env="@env.Name" data-path="@row.Path" data-search="@search"
+                                data-violation="@(row.IsViolation ? "1" : "0")" data-error="@(row.HasFinding ? "1" : "0")"
+                                data-active="@(row.Group.ActiveServers.Count > 0 ? "1" : "0")"
+                                data-mode="@row.Group.Mode"
+                                data-servers="@("|" + string.Join("|", row.CandidateServers).ToLowerInvariant() + "|")"
+                                data-worker-active="@string.Join("|", row.Group.ActiveServers)"
+                                data-unknown="@string.Join("|", row.Group.UnknownServers)">
+                                <td class="ps-3 st-task">
+                                    <div class="fw-semibold text-wrap-anywhere">@row.Name</div>
+                                    <div class="small text-body-secondary text-wrap-anywhere"><code class="problem-origin">@row.Path</code></div>
+                                    @if (!string.IsNullOrWhiteSpace(row.Description))
+                                    {
+                                        <div class="small text-body-secondary mt-1 text-wrap-anywhere">@row.Description</div>
+                                    }
+                                    <div class="d-flex flex-wrap gap-1 mt-2">
+                                        <span class="pill pill-soft @(row.Group.Mode == ScheduledTaskMode.SingleActive ? "pill-info" : "pill-muted")"
+                                              title="@(row.Group.Mode == ScheduledTaskMode.SingleActive ? "Die Task darf in dieser Umgebung auf genau einem Server aktiv sein." : "Die Task darf auf allen Servern aktiv sein.")">
+                                            <i class="bi @(row.Group.Mode == ScheduledTaskMode.SingleActive ? "bi-1-circle" : "bi-collection")"></i>@ScheduledTaskDisplay.ModeLabel(row.Group.Mode)
+                                        </span>
+                                    </div>
+                                    @if (row.Violation != ScheduledTaskViolation.None)
+                                    {
+                                        <div class="st-violation mt-2 @(row.IsViolation ? "is-crit" : "is-unsure")" data-worker-banner>
+                                            <i class="bi @(row.IsViolation ? "bi-exclamation-octagon-fill" : "bi-question-circle")"></i>
+                                            <span><span class="st-banner-label d-none" data-banner-label>Stand Worker – Live-Stand abweichend: </span>@row.ViolationText</span>
+                                        </div>
+                                    }
+                                    <div class="st-violation st-live-banner mt-2 d-none" data-live-banner role="status"></div>
+                                    @if (Model.ControlEnabled && row.Group.Mode == ScheduledTaskMode.SingleActive)
+                                    {
+                                        <button type="button" class="btn btn-sm @(row.IsViolation ? "btn-primary" : "btn-glass") mt-2" data-exclusive
+                                                data-path="@row.Path" data-candidates="@string.Join("|", row.CandidateServers)"
+                                                onclick="stOpenExclusive(this)">
+                                            <i class="bi bi-bullseye me-1"></i>Hier exklusiv aktiv …
+                                        </button>
+                                    }
+                                </td>
+                                @foreach (var server in env.Servers)
+                                {
+                                    var member = row.Member(server);
+                                    var unknown = member == null && row.IsUnknown(server);
+                                    var worker = WorkerUpdate(server);
+                                    <td class="st-cell @(member == null ? (unknown ? "is-unknown" : "is-absent") : "")"
+                                        data-server="@server" data-path="@row.Path"
+                                        data-enabled="@(member == null ? "" : member.Enabled ? "1" : "0")">
+                                        <div class="st-cell-server"><i class="bi bi-hdd-network me-1"></i>@server</div>
+                                        @if (member != null)
+                                        {
+                                            var task = member.Task;
+                                            var resultText = ScheduledTaskDisplay.ResultText(task.LastTaskResult);
+                                            <div class="st-worker">
+                                                <div class="d-flex flex-wrap gap-1 mb-1">
+                                                    <span class="pill pill-@ScheduledTaskDisplay.StateTone(task)"><i class="bi @ScheduledTaskDisplay.StateIcon(task)"></i>@ScheduledTaskDisplay.StateLabel(task)</span>
+                                                    @if (task.LastRunFailed)
+                                                    {
+                                                        <span class="pill pill-soft pill-@(task.FailureIsCritical ? "crit" : "warn")"><i class="bi bi-x-circle"></i>Fehlgeschlagen</span>
+                                                    }
+                                                    @if (task.RuntimeExceeded)
+                                                    {
+                                                        <span class="pill pill-soft pill-warn" title="Limit @task.MaxRuntimeMinutes min"><i class="bi bi-hourglass-split"></i>Laufzeit überschritten</span>
+                                                    }
+                                                    @if (task.MissedRun)
+                                                    {
+                                                        <span class="pill pill-soft pill-warn"><i class="bi bi-calendar-x"></i>Lauf verpasst</span>
+                                                    }
+                                                </div>
+                                                <dl class="st-facts">
+                                                    <dt>Ergebnis</dt>
+                                                    <dd>
+                                                        <code class="st-result st-result-@ScheduledTaskDisplay.ResultTone(task)">@ScheduledTaskDisplay.ResultHex(task.LastTaskResult)</code>
+                                                        @if (resultText != null)
+                                                        {
+                                                            <span>@resultText</span>
+                                                        }
+                                                    </dd>
+                                                    <dt>Letzter Lauf</dt>
+                                                    <dd>
+                                                        @if (task.LastRunTime.HasValue)
+                                                        {
+                                                            <time class="relative-time" data-utc="@Display.Iso(task.LastRunTime.Value)" title="@Display.LocalTimeSeconds(task.LastRunTime.Value)">@Display.LocalTime(task.LastRunTime.Value)</time>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-body-secondary">noch nie</span>
+                                                        }
+                                                    </dd>
+                                                    <dt>Nächster Lauf</dt>
+                                                    <dd>
+                                                        @if (task.NextRunTime.HasValue)
+                                                        {
+                                                            <time class="relative-time" data-utc="@Display.Iso(task.NextRunTime.Value)" title="@Display.LocalTimeSeconds(task.NextRunTime.Value)">@Display.LocalTime(task.NextRunTime.Value)</time>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-body-secondary">kein Zeitplan</span>
+                                                        }
+                                                    </dd>
+                                                    @if (ScheduledTaskDisplay.IsRunning(task) && task.RunningSince.HasValue)
+                                                    {
+                                                        <dt>Läuft seit</dt>
+                                                        <dd title="@Display.LocalTimeSeconds(task.RunningSince.Value)">@Display.Duration(DateTime.UtcNow - Display.AsUtc(task.RunningSince.Value))</dd>
+                                                    }
+                                                    @if (!string.IsNullOrWhiteSpace(task.RunAs))
+                                                    {
+                                                        <dt>Konto</dt>
+                                                        <dd class="text-wrap-anywhere">@task.RunAs</dd>
+                                                    }
+                                                </dl>
+                                                @if (Display.SafeHref(task.WikiUrl) != null && ScheduledTaskDisplay.HasFinding(task))
+                                                {
+                                                    <a href="@Display.SafeHref(task.WikiUrl)" target="_blank" rel="noopener" class="small"><i class="bi bi-book me-1"></i>Lösungsanleitung</a>
+                                                }
+                                                else if (!string.IsNullOrWhiteSpace(task.WikiUrl) && ScheduledTaskDisplay.HasFinding(task))
+                                                {
+                                                    <div class="small"><span class="text-body-secondary text-wrap-anywhere" title="Kein Web-Link – bitte manuell öffnen">Anleitung: <code>@task.WikiUrl</code></span></div>
+                                                }
+                                                <div class="st-stamp">
+                                                    Stand Worker:
+                                                    @if (worker.HasValue)
+                                                    {
+                                                        <time class="relative-time" data-utc="@Display.Iso(worker.Value)" title="@Display.LocalTimeSeconds(worker.Value)">@Display.LocalTime(worker.Value)</time>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>unbekannt</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                        else if (unknown)
+                                        {
+                                            <div class="st-worker">
+                                                <span class="pill pill-muted" title="Keine aktuellen Daten von diesem Server (nicht erreichbar, veraltet oder Abfrage fehlgeschlagen). Er könnte die Task aktiv haben.">
+                                                    <i class="bi bi-question-circle"></i>unbekannt
+                                                </span>
+                                                <div class="small text-body-secondary mt-1">Keine aktuellen Worker-Daten.</div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="st-worker small text-body-secondary">nicht vorhanden</div>
+                                        }
+                                        <div class="st-live d-none" data-live></div>
+                                        @if (Model.ControlEnabled && (member != null || unknown))
+                                        {
+                                            var enabled = member?.Enabled;
+                                            var running = member != null && ScheduledTaskDisplay.IsRunning(member.Task);
+                                            <div class="st-actions" data-actions>
+                                                @if (enabled != true)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-glass" data-action="Enable" onclick="stOpenAction(this)" title="Task auf diesem Server aktivieren">
+                                                        <i class="bi bi-toggle-on me-1"></i>Aktivieren
+                                                    </button>
+                                                }
+                                                @if (enabled != false)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-glass" data-action="Disable" onclick="stOpenAction(this)" title="Task auf diesem Server deaktivieren">
+                                                        <i class="bi bi-toggle-off me-1"></i>Deaktivieren
+                                                    </button>
+                                                }
+                                                @if (member != null && !running)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-glass" data-action="Run" onclick="stOpenAction(this)" title="Task jetzt einmal ausführen">
+                                                        <i class="bi bi-play-fill me-1"></i>Starten
+                                                    </button>
+                                                }
+                                                @if (running)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-glass" data-action="End" onclick="stOpenAction(this)" title="Laufende Ausführung beenden">
+                                                        <i class="bi bi-stop-fill me-1"></i>Beenden
+                                                    </button>
+                                                }
+                                                <button type="button" class="btn btn-sm btn-glass" onclick="stRefreshCell(this.closest('.st-cell'))" title="Aktuellen Zustand direkt vom Server abfragen">
+                                                    <i class="bi bi-broadcast"></i><span class="visually-hidden">Live abfragen</span>
+                                                </button>
+                                            </div>
+                                        }
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @* Shown when the filter hides every row *@
+    <div class="card problem-panel mb-4 d-none" id="stFilterEmpty">
+        <div class="st-empty">
+            <i class="bi bi-funnel text-body-secondary"></i>
+            <h5 id="stFilterEmptyTitle">Keine Tasks für diesen Filter</h5>
+            <p class="text-body-secondary mb-0" id="stFilterEmptyText">Passen Sie den Filter an oder setzen Sie ihn zurück.</p>
+        </div>
+    </div>
+}
+
+@* --- Audit log --- *@
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <button class="btn btn-link text-reset text-decoration-none p-0 fw-semibold" type="button"
+                data-bs-toggle="collapse" data-bs-target="#stAudit" aria-expanded="false" aria-controls="stAudit">
+            <i class="bi bi-clock-history me-2"></i>Verlauf der Aktionen
+            <span class="pill pill-muted pill-soft ms-2">@Model.Audit.Count</span>
+        </button>
+        <small class="text-body-secondary">Wer hat wann was ausgelöst</small>
+    </div>
+    <div class="collapse" id="stAudit">
+        @if (Model.Audit.Count == 0)
+        {
+            <div class="card-body text-body-secondary small">Noch keine Aktionen ausgeführt.</div>
+        }
+        else
+        {
+            <table class="table table-sm align-middle mb-0 st-table">
+                <colgroup>
+                    <col class="col-time" />
+                    <col class="col-user" />
+                    <col class="col-server" />
+                    <col />
+                    <col class="col-action" />
+                    <col />
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th class="ps-3">Zeit</th>
+                        <th>Benutzer</th>
+                        <th>Server</th>
+                        <th>Task</th>
+                        <th>Aktion</th>
+                        <th>Ergebnis</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in Model.Audit)
+                    {
+                        <tr>
+                            <td class="ps-3" data-label="Zeit"><time class="relative-time" data-utc="@Display.Iso(entry.Timestamp)" title="@Display.LocalTimeSeconds(entry.Timestamp)">@Display.LocalTimeSeconds(entry.Timestamp)</time></td>
+                            <td class="text-wrap-anywhere" data-label="Benutzer">@entry.User</td>
+                            <td class="text-wrap-anywhere" data-label="Server">@entry.Server</td>
+                            <td class="text-wrap-anywhere" data-label="Task"><code class="problem-origin">@entry.TaskPath</code></td>
+                            <td data-label="Aktion">@AuditActionLabel(entry.Action)</td>
+                            <td class="text-wrap-anywhere" data-label="Ergebnis">
+                                <span class="pill pill-soft pill-@(entry.Success ? "ok" : "crit")"><i class="bi @(entry.Success ? "bi-check-lg" : "bi-x-lg")"></i>@(entry.Success ? "OK" : "Fehler")</span>
+                                <span class="small">@entry.Message</span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@if (Model.ControlEnabled)
+{
+    @* --- Confirmation + result dialog for all control actions --- *@
+    <div class="modal fade" id="stActionModal" tabindex="-1" aria-labelledby="stActionTitle" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="stActionTitle">Aktion bestätigen</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen" id="stCloseButton"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="stConfirmView">
+                        <p class="mb-2 text-wrap-anywhere" id="stConfirmText"></p>
+                        <div class="mb-3 d-none" id="stTargetGroup">
+                            <label for="stTargetServer" class="form-label">Ziel-Server (hier wird die Task aktiviert)</label>
+                            <select class="form-select" id="stTargetServer" onchange="stUpdateConfirmState()"></select>
+                        </div>
+                        <div class="alert alert-warning small d-none" id="stConfirmWarning"></div>
+                        <div class="form-text" id="stConfirmHint"></div>
+                    </div>
+                    <div id="stResultView" class="d-none" aria-live="polite">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2" id="stResultHead"></div>
+                        <div class="alert alert-danger d-none text-wrap-anywhere" id="stResultError" role="alert"></div>
+                        <ul class="list-unstyled mb-2 st-steps" id="stResultSteps"></ul>
+                        <div class="alert alert-danger fw-bold d-none" id="stResultNoneActive" role="alert">
+                            <i class="bi bi-exclamation-octagon-fill me-1"></i><span data-text>Die Task ist derzeit auf keinem Server aktiv.</span>
+                        </div>
+                        <div class="small text-body-secondary d-none" id="stResultLivePending">
+                            <span class="spinner-border spinner-border-sm me-1"></span>Live-Stand der betroffenen Server wird abgefragt …
+                        </div>
+                        <div class="form-text">
+                            Die Tabelle zeigt für die betroffenen Server jetzt den Live-Stand. Die Worker-Daten folgen mit dem nächsten Prüfzyklus.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="stCancelButton">Abbrechen</button>
+                    <button type="button" class="btn btn-primary" id="stConfirmButton" onclick="stSubmit()">Ausführen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        const stApi = {
+            action: '@Url.Content("~/api/scheduledtasks/action")',
+            exclusive: '@Url.Content("~/api/scheduledtasks/activate-exclusive")',
+            live: '@Url.Content("~/api/scheduledtasks/live")'
+        };
+        const stResultTexts = @Json.Serialize(ScheduledTaskDisplay.ResultTexts());
+        const stFilterDefaults = { show: 'all', env: 'all', server: 'all', q: '' };
+
+        const stActionLabels = { Enable: 'aktivieren', Disable: 'deaktivieren', Run: 'starten', End: 'beenden' };
+        const stActionTitles = { Enable: 'Task aktivieren', Disable: 'Task deaktivieren', Run: 'Task starten', End: 'Ausführung beenden' };
+        const stConfirmLabels = { Enable: 'Aktivieren', Disable: 'Deaktivieren', Run: 'Starten', End: 'Beenden' };
+
+        document.addEventListener('DOMContentLoaded', () => stInitFilters(new URLSearchParams(window.location.search)));
+
+        // ---------- Filter ----------
+
+        function stControls() {
+            return {
+                show: document.getElementById('stFilterShow'),
+                env: document.getElementById('stFilterEnv'),
+                server: document.getElementById('stFilterServer'),
+                q: document.getElementById('stFilterText')
+            };
+        }
+
+        function stInitFilters(params) {
+            const controls = stControls();
+            if (!controls.show) return; // no tasks at all
+
+            // A server without reported tasks (link from its detail page) has no option yet: add one, so the
+            // filter applies and the empty state explains it instead of silently falling back to "Alle Server".
+            const serverParam = params.get('server');
+            if (serverParam && ![...controls.server.options].some(o => o.value.toLowerCase() === serverParam.toLowerCase())) {
+                const option = stEl('option', null, serverParam + ' (keine überwachten Tasks)');
+                option.value = serverParam;
+                option.dataset.noTasks = '1';
+                controls.server.append(option);
+            }
+
+            for (const [key, control] of Object.entries(controls)) {
+                const value = params.get(key);
+                if (value !== null && (control.tagName !== 'SELECT' || [...control.options].some(o => o.value.toLowerCase() === value.toLowerCase()))) {
+                    control.value = control.tagName === 'SELECT'
+                        ? [...control.options].find(o => o.value.toLowerCase() === value.toLowerCase()).value
+                        : value;
+                }
+                control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', stApplyFilters);
+            }
+            document.querySelectorAll('.st-kpi').forEach(tile => tile.addEventListener('click', () => {
+                controls.show.value = tile.dataset.filterShow;
+                stApplyFilters();
+            }));
+            stApplyFilters();
+        }
+
+        function stApplyFilters() {
+            const controls = stControls();
+            const f = { show: controls.show.value, env: controls.env.value, server: controls.server.value, q: controls.q.value.trim() };
+            const needle = f.q.toLowerCase();
+            const rows = document.querySelectorAll('.st-row');
+            let visible = 0;
+
+            rows.forEach(row => {
+                const d = row.dataset;
+                const showMatch = f.show === 'all'
+                    || (f.show === 'problems' && (d.violation === '1' || d.error === '1'))
+                    || (f.show === 'violations' && d.violation === '1')
+                    || (f.show === 'errors' && d.error === '1')
+                    || (f.show === 'active' && d.active === '1');
+                const show = showMatch
+                    && (f.env === 'all' || d.env.toLowerCase() === f.env.toLowerCase())
+                    && (f.server === 'all' || d.servers.includes('|' + f.server.toLowerCase() + '|'))
+                    && (!needle || d.search.includes(needle));
+                row.classList.toggle('d-none', !show);
+                if (show) visible++;
+            });
+
+            document.querySelectorAll('.st-env').forEach(card =>
+                card.classList.toggle('d-none', !card.querySelector('.st-row:not(.d-none)')));
+
+            document.getElementById('stFilterSummary').textContent = visible + ' von ' + rows.length + ' Tasks angezeigt';
+            const isDefault = Object.keys(stFilterDefaults).every(k => f[k] === stFilterDefaults[k]);
+            document.getElementById('stFilterReset').classList.toggle('d-none', isDefault);
+            document.getElementById('stFilterEmpty').classList.toggle('d-none', visible > 0);
+            const noTasks = controls.server.selectedOptions[0]?.dataset.noTasks === '1';
+            document.getElementById('stFilterEmptyTitle').textContent = noTasks
+                ? 'Server ' + f.server + ' meldet keine überwachten Tasks'
+                : 'Keine Tasks für diesen Filter';
+            document.getElementById('stFilterEmptyText').textContent = noTasks
+                ? 'Prüfen Sie unter Server → Bearbeiten → Geplante Tasks, ob die Überwachung aktiviert ist und die Muster passen, und ob der Worker bereits gelaufen ist.'
+                : 'Passen Sie den Filter an oder setzen Sie ihn zurück.';
+            document.querySelectorAll('.st-kpi').forEach(tile => tile.classList.toggle('active', tile.dataset.filterShow === f.show));
+
+            const params = new URLSearchParams();
+            for (const [key, value] of Object.entries(f)) {
+                if (value !== stFilterDefaults[key]) params.set(key, value);
+            }
+            const query = params.toString();
+            history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+        }
+
+        function stResetFilters() {
+            for (const [key, control] of Object.entries(stControls())) control.value = stFilterDefaults[key];
+            stApplyFilters();
+        }
+
+        // ---------- Helpers ----------
+
+        function stEl(tag, className, text) {
+            const el = document.createElement(tag);
+            if (className) el.className = className;
+            if (text !== undefined && text !== null) el.textContent = text;
+            return el;
+        }
+
+        function stPill(tone, icon, text) {
+            const pill = stEl('span', 'pill pill-' + tone);
+            pill.append(stEl('i', 'bi ' + icon), document.createTextNode(text));
+            return pill;
+        }
+
+        function stTime(iso) {
+            if (!iso) return null;
+            const t = stEl('time', 'relative-time');
+            t.dataset.utc = iso;
+            t.title = new Date(iso).toLocaleString('de-DE');
+            t.textContent = new Date(iso).toLocaleString('de-DE');
+            return t;
+        }
+
+        function stHex(code) {
+            return code === null || code === undefined ? '—' : '0x' + (code >>> 0).toString(16).toUpperCase();
+        }
+
+        function stDuration(fromIso) {
+            const minutes = Math.max(0, Math.floor((Date.now() - new Date(fromIso)) / 60000));
+            if (minutes >= 1440) return Math.floor(minutes / 1440) + ' T ' + Math.floor((minutes % 1440) / 60) + ' h';
+            if (minutes >= 60) return Math.floor(minutes / 60) + ' h ' + (minutes % 60) + ' min';
+            return minutes >= 1 ? minutes + ' min' : '< 1 min';
+        }
+
+        function stSplit(value) {
+            return (value || '').split('|').filter(Boolean);
+        }
+
+        function stSameSet(a, b) {
+            const lower = list => list.map(s => s.toLowerCase()).sort().join('|');
+            return lower(a) === lower(b);
+        }
+
+        // ---------- Live state ----------
+
+        function stRenderLive(cell, live, error) {
+            const box = cell.querySelector('[data-live]');
+            box.replaceChildren();
+            box.classList.remove('d-none', 'is-error');
+            cell.classList.add('has-live');
+
+            const head = stEl('div', 'st-live-head');
+            head.append(stEl('i', 'bi bi-broadcast'), document.createTextNode(' Live-Stand ' + new Date().toLocaleTimeString('de-DE')));
+            box.append(head);
+
+            if (error || !live || !live.reachable || !live.task) {
+                box.classList.add('is-error');
+                box.append(stEl('div', 'small', error || live?.error || (live && live.reachable ? 'Task auf diesem Server nicht gefunden.' : 'Server nicht erreichbar.')));
+                // Not found, no access or unreachable: the live state is unknown (never treated as "disabled").
+                cell.dataset.liveEnabled = '';
+                return;
+            }
+
+            const task = live.task;
+            const state = (task.state || '').toLowerCase();
+            const running = state === 'running';
+            cell.dataset.liveEnabled = task.enabled ? '1' : '0';
+            const pills = stEl('div', 'd-flex flex-wrap gap-1 mb-1');
+            pills.append(running ? stPill('info', 'bi-play-circle-fill', 'Läuft')
+                : state === 'queued' ? stPill('info', 'bi-hourglass', 'In Warteschlange')
+                : task.enabled ? stPill('ok', 'bi-check-circle-fill', 'Aktiv')
+                : stPill('muted', 'bi-pause-circle', 'Deaktiviert'));
+            box.append(pills);
+
+            const facts = stEl('dl', 'st-facts');
+            const add = (label, value) => {
+                facts.append(stEl('dt', null, label));
+                const dd = stEl('dd');
+                if (value instanceof Node) dd.append(value); else dd.textContent = value;
+                facts.append(dd);
+            };
+            const hex = stHex(task.lastTaskResult);
+            add('Ergebnis', hex + (stResultTexts[hex] ? ' ' + stResultTexts[hex] : ''));
+            add('Letzter Lauf', stTime(task.lastRunTime) || 'noch nie');
+            add('Nächster Lauf', stTime(task.nextRunTime) || 'kein Zeitplan');
+            if (running && task.runningSince) add('Läuft seit', stDuration(task.runningSince));
+            box.append(facts);
+            window.simpleAdmin?.renderRelativeTimes(box);
+
+            stUpdateActions(cell, task.enabled, running);
+        }
+
+        // Keeps the buttons in line with the live state (enable vs. disable, run vs. end).
+        function stUpdateActions(cell, enabled, running) {
+            const actions = cell.querySelector('[data-actions]');
+            if (!actions) return;
+            const button = (action, icon, text, title) => {
+                const b = stEl('button', 'btn btn-sm btn-glass');
+                b.type = 'button';
+                b.dataset.action = action;
+                b.title = title;
+                b.append(stEl('i', 'bi ' + icon + ' me-1'), document.createTextNode(text));
+                b.addEventListener('click', () => stOpenAction(b));
+                return b;
+            };
+            const refresh = actions.querySelector('button:not([data-action])');
+            actions.querySelectorAll('[data-action]').forEach(b => b.remove());
+            actions.prepend(
+                enabled ? button('Disable', 'bi-toggle-off', 'Deaktivieren', 'Task auf diesem Server deaktivieren')
+                        : button('Enable', 'bi-toggle-on', 'Aktivieren', 'Task auf diesem Server aktivieren'),
+                running ? button('End', 'bi-stop-fill', 'Beenden', 'Laufende Ausführung beenden')
+                        : button('Run', 'bi-play-fill', 'Starten', 'Task jetzt einmal ausführen'));
+            if (refresh) actions.append(refresh);
+        }
+
+        // Queries one cell; returns the live state (or null on error) and updates the row summary.
+        async function stRefreshCell(cell, skipRowUpdate) {
+            const box = cell.querySelector('[data-live]');
+            box.classList.remove('d-none', 'is-error');
+            box.replaceChildren(stEl('div', 'small text-body-secondary', 'Live-Stand wird abgefragt …'));
+            let live = null;
+            try {
+                const url = stApi.live + '?server=' + encodeURIComponent(cell.dataset.server) + '&path=' + encodeURIComponent(cell.dataset.path);
+                const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) stRenderLive(cell, null, data.message || ('HTTP ' + response.status));
+                else { live = data; stRenderLive(cell, data, null); }
+            } catch (e) {
+                stRenderLive(cell, null, 'Abfrage fehlgeschlagen: ' + e);
+            }
+            if (!skipRowUpdate) stUpdateRowLive(cell.closest('.st-row'));
+            return live;
+        }
+
+        // Active servers of a row: live state where queried, worker state otherwise (null = unknown).
+        function stRowState(row) {
+            const active = [];
+            const unknownServers = [];
+            row.querySelectorAll('.st-cell').forEach(cell => {
+                const value = cell.dataset.liveEnabled !== undefined && cell.dataset.liveEnabled !== ''
+                    ? cell.dataset.liveEnabled
+                    : (cell.classList.contains('has-live') ? '' : cell.dataset.enabled);
+                if (value === '1') active.push(cell.dataset.server);
+                else if (value === '' && !cell.classList.contains('is-absent')) unknownServers.push(cell.dataset.server);
+            });
+            return { active, unknown: unknownServers.length, unknownServers };
+        }
+
+        // After live queries: data-active from the live state, and a banner when it differs from the worker.
+        function stUpdateRowLive(row) {
+            if (!row) return null;
+            const state = stRowState(row);
+            row.dataset.active = state.active.length > 0 ? '1' : '0';
+
+            const workerActive = stSplit(row.dataset.workerActive);
+            const differs = !stSameSet(workerActive, state.active);
+            row.querySelector('[data-banner-label]')?.classList.toggle('d-none', !differs);
+
+            const banner = row.querySelector('[data-live-banner]');
+            const single = row.dataset.mode === 'SingleActive';
+            let tone = '', text = '';
+            if (single && state.active.length > 1) {
+                tone = 'is-crit'; text = 'Live-Stand: auf ' + state.active.length + ' Servern aktiv (' + state.active.join(', ') + ') – erlaubt ist genau einer.';
+            } else if (single && state.active.length === 0 && state.unknown === 0) {
+                tone = 'is-crit'; text = 'Live-Stand: Die Task ist derzeit auf keinem Server aktiv.';
+            } else if (single && state.active.length === 0) {
+                tone = 'is-warn'; text = stPossiblyNoneText(state);
+            } else if (differs) {
+                tone = 'is-live'; text = 'Live-Stand: aktiv auf ' + (state.active.length ? state.active.join(', ') : 'keinem bekannten Server')
+                    + (state.unknown ? ' (' + state.unknown + ' Server ohne Live-Stand)' : '') + '.';
+            }
+            banner.className = 'st-violation st-live-banner mt-2 ' + tone + (text ? '' : ' d-none');
+            banner.replaceChildren(stEl('i', 'bi ' + (tone === 'is-crit' ? 'bi-exclamation-octagon-fill' : tone === 'is-warn' ? 'bi-exclamation-triangle-fill' : 'bi-broadcast')), stEl('span', null, text));
+
+            if (single) row.dataset.violation = state.active.length > 1 || (state.active.length === 0 && state.unknown === 0) ? '1' : '0';
+            stUpdateKpis();
+            return state;
+        }
+
+        function stPossiblyNoneText(state) {
+            return 'Möglicherweise auf keinem Server aktiv – Zustand auf ' + state.unknownServers.join(', ') + ' unbekannt.';
+        }
+
+        // KPI tiles follow the live state of the rows (data-active / data-violation).
+        function stUpdateKpis() {
+            const rows = [...document.querySelectorAll('.st-row')];
+            const set = (key, count) => { const el = document.querySelector('[data-kpi="' + key + '"]'); if (el) el.textContent = count; };
+            set('active', rows.filter(r => r.dataset.active === '1').length);
+            set('violations', rows.filter(r => r.dataset.violation === '1').length);
+            stApplyFilters();
+        }
+
+        // ---------- Actions ----------
+
+        let stModal;
+        let stPending = null; // { kind: 'action'|'exclusive', row, server, path, action }
+        let stBusy = false;
+
+        function stModalInstance() {
+            stModal = stModal || new bootstrap.Modal(document.getElementById('stActionModal'), { backdrop: 'static', keyboard: false });
+            return stModal;
+        }
+
+        function stSetBusy(busy) {
+            stBusy = busy;
+            document.getElementById('stCancelButton').disabled = busy;
+            document.getElementById('stCloseButton').disabled = busy;
+        }
+
+        function stUpdateConfirmState() {
+            const confirm = document.getElementById('stConfirmButton');
+            const needsTarget = stPending?.kind === 'exclusive';
+            confirm.disabled = stBusy || (needsTarget && !document.getElementById('stTargetServer').value);
+        }
+
+        function stShowConfirm(title, text, warning, hint, confirmLabel) {
+            document.getElementById('stActionTitle').textContent = title;
+            document.getElementById('stConfirmText').textContent = text;
+            const warn = document.getElementById('stConfirmWarning');
+            warn.textContent = warning || '';
+            warn.classList.toggle('d-none', !warning);
+            document.getElementById('stConfirmHint').textContent = hint || '';
+            document.getElementById('stConfirmView').classList.remove('d-none');
+            document.getElementById('stResultView').classList.add('d-none');
+            const confirm = document.getElementById('stConfirmButton');
+            confirm.classList.remove('d-none');
+            confirm.textContent = confirmLabel;
+            document.getElementById('stCancelButton').textContent = 'Abbrechen';
+            stUpdateConfirmState();
+            stModalInstance().show();
+        }
+
+        function stOpenAction(button) {
+            if (stBusy) return; // a request is still running
+            const cell = button.closest('.st-cell');
+            const row = button.closest('.st-row');
+            const action = button.dataset.action;
+            const server = cell.dataset.server;
+            const path = cell.dataset.path;
+            stPending = { kind: 'action', row, server, path, action };
+            document.getElementById('stTargetGroup').classList.add('d-none');
+
+            let warning = '';
+            if (action === 'Enable' && row.dataset.mode === 'SingleActive') {
+                const active = stRowState(row).active.filter(s => s.toLowerCase() !== server.toLowerCase());
+                if (active.length) warning = 'Diese Task darf nur auf einem Server aktiv sein und ist bereits aktiv auf: ' + active.join(', ')
+                    + '. Nach dem Aktivieren wäre sie mehrfach aktiv – verwenden Sie besser „Hier exklusiv aktiv“.';
+            }
+            if (action === 'Disable' && row.dataset.mode === 'SingleActive') {
+                const others = stRowState(row).active.filter(s => s.toLowerCase() !== server.toLowerCase());
+                if (!others.length) warning = 'Danach ist die Task auf keinem bekannten Server mehr aktiv und läuft nirgends.';
+            }
+            if (action === 'End') warning = 'Die laufende Ausführung wird abgebrochen. Halb verarbeitete Daten bleiben ggf. liegen.';
+            const hints = {
+                Enable: 'Die Task läuft danach wieder nach ihrem Zeitplan.',
+                Disable: 'Die Task läuft danach nicht mehr nach Zeitplan, bis sie wieder aktiviert wird. Eine laufende Ausführung wird nicht beendet.',
+                Run: 'Die Task wird sofort einmal gestartet – unabhängig vom Zeitplan.',
+                End: ''
+            };
+            stShowConfirm(stActionTitles[action], 'Task ' + path + ' auf Server ' + server + ' ' + stActionLabels[action] + '?',
+                warning, hints[action], stConfirmLabels[action]);
+        }
+
+        function stOpenExclusive(button) {
+            if (stBusy) return;
+            const row = button.closest('.st-row');
+            const path = button.dataset.path;
+            const candidates = stSplit(button.dataset.candidates);
+            const unknown = stSplit(row.dataset.unknown).map(s => s.toLowerCase());
+            const active = stRowState(row).active;
+            const activeLower = active.map(s => s.toLowerCase());
+            stPending = { kind: 'exclusive', row, path };
+
+            // Preselect only when exactly one server is active – with a violation the operator has to choose.
+            const select = document.getElementById('stTargetServer');
+            const placeholder = stEl('option', null, '– Ziel-Server wählen –');
+            placeholder.value = '';
+            select.replaceChildren(placeholder, ...candidates.map(server => {
+                const lower = server.toLowerCase();
+                const note = activeLower.includes(lower) ? ' (derzeit aktiv)' : unknown.includes(lower) ? ' (Zustand unbekannt)' : '';
+                const option = stEl('option', null, server + note);
+                option.value = server;
+                return option;
+            }));
+            select.value = active.length === 1 ? active[0] : '';
+            document.getElementById('stTargetGroup').classList.remove('d-none');
+
+            const unknownNames = candidates.filter(s => unknown.includes(s.toLowerCase()));
+            const warning = unknownNames.length
+                ? 'Der Zustand auf ' + unknownNames.join(', ') + ' ist unbekannt. Dort wird ebenfalls deaktiviert – ist ein Server nicht erreichbar, wird das Ziel nicht aktiviert.'
+                : '';
+            stShowConfirm('Hier exklusiv aktiv', 'Task ' + path + ' auf genau einem Server aktivieren und auf allen anderen Servern der Umgebung deaktivieren?',
+                warning,
+                'Reihenfolge: zuerst auf allen anderen Servern deaktivieren, dann auf dem Ziel aktivieren. Schlägt ein Schritt fehl, wird das Ziel nicht aktiviert. '
+                + 'Bereits deaktivierte Server bleiben aus – die Task kann dann vorübergehend nirgends laufen.',
+                'Exklusiv aktivieren');
+        }
+
+        async function stSubmit() {
+            if (!stPending || stBusy) return;
+            const pending = stPending; // the dialog may be reopened later – keep this request's target
+            let url, body, cells;
+            if (pending.kind === 'exclusive') {
+                const target = document.getElementById('stTargetServer').value;
+                if (!target) return;
+                url = stApi.exclusive;
+                body = { path: pending.path, targetServer: target };
+                cells = [...pending.row.querySelectorAll('.st-cell:not(.is-absent)')];
+            } else {
+                url = stApi.action;
+                body = { server: pending.server, path: pending.path, action: pending.action };
+                cells = [...pending.row.querySelectorAll('.st-cell')]
+                    .filter(c => c.dataset.server.toLowerCase() === pending.server.toLowerCase());
+            }
+
+            stSetBusy(true);
+            const confirm = document.getElementById('stConfirmButton');
+            confirm.disabled = true;
+            confirm.textContent = 'Wird ausgeführt …';
+
+            let data = {};
+            let ok = false;
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                data = await response.json().catch(() => ({}));
+                ok = response.ok;
+                if (!ok) data = { success: false, message: data.message || data.title || ('HTTP ' + response.status) };
+            } catch (e) {
+                data = { success: false, message: 'Anfrage fehlgeschlagen: ' + e };
+            }
+
+            stShowResult(data, ok);
+            try {
+                if (ok) {
+                    const pendingLive = document.getElementById('stResultLivePending');
+                    pendingLive.classList.remove('d-none');
+                    await Promise.all(cells.map(cell => stRefreshCell(cell, true)));
+                    pendingLive.classList.add('d-none');
+                    const state = stUpdateRowLive(pending.row);
+                    const alarm = document.getElementById('stResultNoneActive');
+                    const single = pending.kind === 'exclusive' || pending.row.dataset.mode === 'SingleActive';
+                    const none = single && state && state.active.length === 0;
+                    alarm.classList.toggle('d-none', !none);
+                    if (none) {
+                        // All servers known → certainly nowhere active (error); some unknown → possibly (warning).
+                        const certain = state.unknown === 0;
+                        alarm.classList.toggle('alert-danger', certain);
+                        alarm.classList.toggle('alert-warning', !certain);
+                        alarm.querySelector('[data-text]').textContent = certain
+                            ? 'Die Task ist derzeit auf keinem Server aktiv.'
+                            : stPossiblyNoneText(state);
+                    }
+                }
+            } finally {
+                stSetBusy(false);
+            }
+        }
+
+        function stShowResult(data, requestOk) {
+            const success = requestOk && data.success;
+            const head = document.getElementById('stResultHead');
+            head.replaceChildren(stPill(success ? 'ok' : 'crit', success ? 'bi-check-lg' : 'bi-x-lg', success ? 'Erfolgreich' : 'Fehlgeschlagen'));
+            if (success && data.message) head.append(stEl('span', 'text-wrap-anywhere', data.message));
+
+            const error = document.getElementById('stResultError');
+            error.textContent = success ? '' : (data.message || 'Die Aktion ist fehlgeschlagen.');
+            error.classList.toggle('d-none', success);
+
+            const steps = Array.isArray(data.steps) ? data.steps : (requestOk && data.server ? [data] : []);
+            const labels = { Enable: 'Aktivieren', Disable: 'Deaktivieren', Run: 'Starten', End: 'Beenden' };
+            document.getElementById('stResultSteps').replaceChildren(...steps.map(step => {
+                const li = stEl('li', 'st-step ' + (step.success ? 'is-ok' : 'is-fail'));
+                li.append(stEl('i', 'bi ' + (step.success ? 'bi-check-circle-fill' : 'bi-x-circle-fill')),
+                    stEl('strong', null, step.server),
+                    stEl('span', 'text-body-secondary', labels[step.action] || step.action),
+                    stEl('span', 'st-step-msg', step.message || ''));
+                return li;
+            }));
+            document.getElementById('stResultNoneActive').classList.add('d-none');
+
+            document.getElementById('stActionTitle').textContent = 'Ergebnis';
+            document.getElementById('stConfirmView').classList.add('d-none');
+            document.getElementById('stResultView').classList.remove('d-none');
+            document.getElementById('stConfirmButton').classList.add('d-none');
+            document.getElementById('stCancelButton').textContent = 'Schließen';
+        }
+    </script>
+}

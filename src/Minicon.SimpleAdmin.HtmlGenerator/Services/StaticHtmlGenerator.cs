@@ -24,6 +24,8 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
     private readonly string _wwwrootDirectory;
     private readonly ILogger<StaticHtmlGenerator> _logger;
     private Config _config = null!;
+    private IReadOnlyCollection<Acknowledge> _activeAcknowledges = Array.Empty<Acknowledge>();
+    private Dictionary<string, List<ActiveProblem>> _taskGroupProblems = new(StringComparer.OrdinalIgnoreCase);
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _jsonOptions;
 
@@ -77,6 +79,19 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
         _logger.LogDebug("Generating index page");
         await GenerateIndexPageAsync(statuses);
 
+        _activeAcknowledges = activeAcknowledges;
+
+        // Fetch the status of all servers first: all.html shows it, and the cross-server single-active check of
+        // scheduled tasks needs it so the anchor server's detail page can show the group problem.
+        _logger.LogDebug("Fetching status of all servers");
+        var fetched = await FetchAllServerStatusesAsync(config);
+        var taskGroupStatuses = fetched
+            .Where(f => !string.Equals(f.Server.Name, currentHostname, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(f => f.Statuses)
+            .Concat(statuses)
+            .ToList();
+        _taskGroupProblems = EvaluateTaskGroups(config, taskGroupStatuses, activeAcknowledges, DateTime.UtcNow).ProblemsByAnchor;
+
         // Generate individual service pages
         _logger.LogDebug("Generating service detail pages");
         foreach (var status in statuses)
@@ -102,7 +117,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
 
         // Generate all.html page that aggregates status from servers in the same environment
         _logger.LogDebug("Generating all-servers overview page");
-        await GenerateAllServersPageAsync(config, currentHostname);
+        await GenerateAllServersPageAsync(config, currentHostname, fetched, taskGroupStatuses, activeAcknowledges);
 
         // Copy status JSON to central path if configured
         if (!string.IsNullOrEmpty(_config.Output?.CentralOutputPath))
@@ -370,6 +385,12 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
                 html.AppendLine(fileMonHtml);
         }
 
+        // Scheduled task section
+        if (status.ScheduledTasks != null)
+        {
+            html.AppendLine(GenerateScheduledTasksSectionHtml(status.ScheduledTasks));
+        }
+
         // Problems section derived from metrics + AppPools + Services + EventLogs + SqlQueryChecks + EmailProbes + EmailDelivery + Certificates
         var problems = ProblemDerivationService.DeriveProblems(
             status.Metrics,
@@ -383,8 +404,11 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             status.EmailDelivery,
             status.Certificates,
             status.BizTalk,
-            status.FileMonitoring);
+            status.FileMonitoring,
+            status.ScheduledTasks);
         ProblemDerivationService.ApplyOccurrences(problems, status.ProblemsSince, status.LastUpdate);
+        if (_taskGroupProblems.TryGetValue(status.Server, out var groupProblems))
+            problems.AddRange(groupProblems.Where(gp => problems.All(p => !p.Id.Equals(gp.Id, StringComparison.OrdinalIgnoreCase))));
         if (problems.Count > 0)
         {
             var problemsHtml = GenerateProblemsSectionHtml(problems);
@@ -1017,7 +1041,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
     /// <summary>
     /// Copy of a status without the metric history, for HTTP transfer and the central output path.
     /// </summary>
-    private static RuntimeStatus WithoutHistory(RuntimeStatus s) => new()
+    internal static RuntimeStatus WithoutHistory(RuntimeStatus s) => new()
     {
         Server = s.Server,
         Service = s.Service,
@@ -1036,6 +1060,7 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
         Certificates = s.Certificates,
         BizTalk = s.BizTalk,
         FileMonitoring = s.FileMonitoring,
+        ScheduledTasks = s.ScheduledTasks?.WithoutCarriedTasks(),
         ProblemsSince = s.ProblemsSince
     };
 
@@ -1299,6 +1324,9 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             html.AppendLine($"            </div>");
             html.AppendLine($"        </section>");
         }
+
+        // Single-active check of scheduled tasks across all servers that pushed their status here.
+        html.Append(RenderScheduledTaskGroupSection(_config, allStatuses, _activeAcknowledges, DateTime.UtcNow, "        "));
 
         // Server list with last update times
         html.AppendLine($"        <section class=\"server-info-section\">");
@@ -1592,10 +1620,8 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
     /// <summary>
     /// Generates the all.html page that aggregates status from all environments and reachable servers
     /// </summary>
-    private async Task GenerateAllServersPageAsync(Config config, string currentHostname)
+    private async Task<List<(string Environment, Server Server, List<RuntimeStatus> Statuses)>> FetchAllServerStatusesAsync(Config config)
     {
-        _logger.LogInformation("Generating all-servers overview page for all environments...");
-
         // Collect all servers with their environment info for parallel processing
         var serverTasks = new List<(string Environment, Server Server, Task<List<RuntimeStatus>> Task)>();
 
@@ -1617,18 +1643,45 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             }
         }
 
+        // Scheduled task participants without environment form the environment "" of the single-active check;
+        // they are fetched for it only (all.html renders the configured environments).
+        var features = config.GetEffectiveFeatures();
+        foreach (var server in config.Servers.Where(s => ScheduledTaskGroupEvaluator.IsParticipant(features, s)
+                     && config.GetEnvironmentForServer(s.Name) == null))
+        {
+            serverTasks.Add((string.Empty, server, FetchStatusFromServerWithDnsCheckAsync(server)));
+        }
+
         _logger.LogInformation("Fetching status from {ServerCount} server(s) in parallel...", serverTasks.Count);
 
         // Wait for all tasks to complete
         await Task.WhenAll(serverTasks.Select(t => t.Task));
 
+        var result = new List<(string Environment, Server Server, List<RuntimeStatus> Statuses)>();
+        foreach (var (environment, server, task) in serverTasks)
+            result.Add((environment, server, await task)); // Already completed, just getting result
+        return result;
+    }
+
+    private async Task GenerateAllServersPageAsync(
+        Config config,
+        string currentHostname,
+        List<(string Environment, Server Server, List<RuntimeStatus> Statuses)> fetched,
+        IReadOnlyCollection<RuntimeStatus> taskGroupStatuses,
+        IReadOnlyCollection<Acknowledge> activeAcknowledges)
+    {
+        _logger.LogInformation("Generating all-servers overview page for all environments...");
+
         // Collect results by environment
         var statusesByEnvironment = new Dictionary<string, List<RuntimeStatus>>();
         var totalReachable = 0;
+        var serverTasks = fetched;
 
-        foreach (var (environment, server, task) in serverTasks)
+        foreach (var (environment, server, statuses) in fetched)
         {
-            var statuses = await task; // Already completed, just getting result
+            if (environment.Length == 0)
+                continue; // fetched only for the scheduled task check, not part of the environment overview
+
             if (statuses.Count > 0)
             {
                 totalReachable++;
@@ -1944,6 +1997,9 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             html.AppendLine("        </div>");
         }
 
+        // Single-active check of scheduled tasks: this page sees every active server of every environment.
+        html.Append(RenderScheduledTaskGroupSection(config, taskGroupStatuses, activeAcknowledges, DateTime.UtcNow, "        "));
+
         html.AppendLine("    </main>");
         html.AppendLine("</body>");
         html.AppendLine("</html>");
@@ -1983,8 +2039,9 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
 
         var bt = status.BizTalk;
         var fm = status.FileMonitoring;
+        var st = status.ScheduledTasks;
 
-        if (totalPools == 0 && totalServices == 0 && sqlTotal == 0 && !hasEventLog && emailProbeTotal == 0 && emailDeliveryTotal == 0 && certTotal == 0 && bt == null && fm == null)
+        if (totalPools == 0 && totalServices == 0 && sqlTotal == 0 && !hasEventLog && emailProbeTotal == 0 && emailDeliveryTotal == 0 && certTotal == 0 && bt == null && fm == null && st == null)
             return string.Empty;
 
         var indent = new string(' ', indentLevel * 4);
@@ -2065,6 +2122,26 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             var cls = fmCrit > 0 ? "badge-critical" : fmFindings > 0 ? "badge-warning" : "badge-ok";
             var label = fmFindings == 0 ? "OK" : $"{fmFindings} Fund(e)";
             sb.AppendLine($"{innerIndent}<span class=\"monitoring-badge {cls}\" title=\"Dateiüberwachung: {fm.DirectoriesChecked} Verzeichnis(se), {fm.LogFilesScanned} Log(s), {fm.StuckFiles.Count} hängend, {fm.LogMatches.Count} Log-Treffer\">📁 {label} Dateien</span>");
+        }
+
+        if (st != null)
+        {
+            if (st.QueryFailed)
+            {
+                sb.AppendLine($"{innerIndent}<span class=\"monitoring-badge badge-warning\" title=\"Geplante Tasks konnten nicht abgefragt werden\">🕒 Tasks ✗</span>");
+            }
+            else
+            {
+                var stTotal = st.Tasks.Count;
+                var stCrit = st.Tasks.Count(t => t.LastRunFailed && t.FailureIsCritical)
+                             + (st.EventStatus == Minicon.SimpleAdmin.Models.State.MetricStatus.Critical ? 1 : 0);
+                var stFaulty = st.Tasks.Count(IsFaultyTask);
+                var cls = stCrit > 0 ? "badge-critical"
+                        : stFaulty > 0 || st.EventStatus == Minicon.SimpleAdmin.Models.State.MetricStatus.Warning ? "badge-warning"
+                        : "badge-ok";
+                var ok = stTotal - stFaulty;
+                sb.AppendLine($"{innerIndent}<span class=\"monitoring-badge {cls}\" title=\"Geplante Tasks: {ok}/{stTotal} ok, {st.EventCount} Fehler-Ereignis(se)\">🕒 {ok}/{stTotal} Tasks</span>");
+            }
         }
 
         sb.AppendLine($"{indent}</div>");
@@ -2204,6 +2281,156 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             sb.AppendLine("                </table>");
         }
 
+        return sb.ToString();
+    }
+
+    private static bool IsFaultyTask(Minicon.SimpleAdmin.Models.State.ScheduledTaskInfo t)
+        => t.LastRunFailed || t.RuntimeExceeded || t.MissedRun;
+
+    /// <summary>
+    /// Generates the HTML section for scheduled tasks from RuntimeStatus.ScheduledTasks
+    /// </summary>
+    internal static string GenerateScheduledTasksSectionHtml(Minicon.SimpleAdmin.Models.State.ScheduledTaskState st)
+    {
+        static string Enc(string? v) => System.Net.WebUtility.HtmlEncode(v ?? string.Empty);
+        static string Time(DateTime? t) => t.HasValue ? $"{t.Value:yyyy-MM-dd HH:mm} UTC" : "—";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("                <h3 style=\"margin-top:24px;\">🕒 Geplante Tasks</h3>");
+
+        if (st.QueryFailed)
+        {
+            sb.AppendLine($"                <p style=\"color:#b00;\">Abfrage fehlgeschlagen: {Enc(st.Error ?? "unbekannt")}</p>");
+            return sb.ToString();
+        }
+
+        var ignored = st.IgnoredEventCount > 0 ? $" ({st.IgnoredEventCount} ignoriert)" : string.Empty;
+        sb.AppendLine($"                <p style=\"color:#555;\">Überwachte Tasks: {st.Tasks.Count} · Fehlerhaft: {st.Tasks.Count(IsFaultyTask)} · Fehler-Ereignisse: {st.EventCount}{ignored} · Stand: {Time(st.LastChecked)}</p>");
+
+        if (st.Tasks.Count > 0)
+        {
+            sb.AppendLine("                <table style=\"width:100%; border-collapse:collapse;\">");
+            sb.AppendLine("                    <thead><tr style=\"background:#f8f9fa; text-align:left;\">");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Pfad</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Aktiv</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Status</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Letzter Lauf</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Ergebnis</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Nächster Lauf</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Modus</th>");
+            sb.AppendLine("                    </tr></thead>");
+            sb.AppendLine("                    <tbody>");
+            foreach (var t in st.Tasks)
+            {
+                var findings = new List<string>();
+                if (t.LastRunFailed) findings.Add("Lauf fehlgeschlagen");
+                if (t.RuntimeExceeded) findings.Add($"Laufzeit > {t.MaxRuntimeMinutes} min");
+                if (t.MissedRun) findings.Add("Lauf verpasst");
+                var rowStyle = findings.Count == 0 ? string.Empty
+                    : t.LastRunFailed && t.FailureIsCritical ? " style=\"background:#fdecea;\"" : " style=\"background:#fff4e5;\"";
+                var result = t.LastTaskResult.HasValue ? $"0x{t.LastTaskResult.Value:X8}" : "—";
+                var mode = t.Mode == Minicon.SimpleAdmin.Models.Config.ScheduledTaskMode.SingleActive ? "Ein Server" : "Alle Server";
+                var statusCell = Enc(t.State) + (findings.Count > 0 ? $"<br><small style=\"color:#b00;\">{Enc(string.Join(", ", findings))}</small>" : string.Empty);
+                sb.AppendLine($"                        <tr{rowStyle}>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px; overflow-wrap:anywhere;\" title=\"{Enc(t.Description)}\">{Enc(t.Path)}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{(t.Enabled ? "ja" : "nein")}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{statusCell}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{Time(t.LastRunTime)}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px; font-family:monospace;\">{result}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{Time(t.NextRunTime)}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{mode}</td>");
+                sb.AppendLine("                        </tr>");
+            }
+            sb.AppendLine("                    </tbody>");
+            sb.AppendLine("                </table>");
+        }
+
+        if (st.RecentEvents.Count > 0)
+        {
+            sb.AppendLine("                <p style=\"margin-top:12px; color:#555;\">Letzte Fehler-Ereignisse der Aufgabenplanung:</p>");
+            sb.AppendLine("                <ul>");
+            foreach (var ev in st.RecentEvents.Take(10))
+                sb.AppendLine($"                    <li>{ev.Timestamp:yyyy-MM-dd HH:mm} · {ev.EventId} · {Enc(ev.TaskPath)} — {Enc(ev.Message)}</li>");
+            sb.AppendLine("                </ul>");
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Evaluates the cross-server single-active check of scheduled tasks on the statuses this generator sees
+    /// (same snapshot/staleness rule as the WebUI and the notifier). The problems are keyed by anchor server,
+    /// carry the known acknowledges of that server and first = last = the anchor's newest status (the generator
+    /// keeps no first-seen file).
+    /// </summary>
+    internal static (IReadOnlyList<ScheduledTaskGroupEvaluator.TaskGroup> Groups, Dictionary<string, List<ActiveProblem>> ProblemsByAnchor) EvaluateTaskGroups(
+        Config config, IReadOnlyCollection<RuntimeStatus> statuses, IReadOnlyCollection<Acknowledge>? acknowledges, DateTime nowUtc)
+    {
+        if (!config.GetEffectiveFeatures().ScheduledTasks.Enabled)
+            return (Array.Empty<ScheduledTaskGroupEvaluator.TaskGroup>(), new Dictionary<string, List<ActiveProblem>>(StringComparer.OrdinalIgnoreCase));
+
+        var snapshots = ScheduledTaskGroupEvaluator.SnapshotsFromStatuses(statuses, nowUtc, ScheduledTaskGroupEvaluator.GetStaleAfter(config));
+        var groups = ScheduledTaskGroupEvaluator.BuildGroups(config, snapshots);
+        var problems = ScheduledTaskGroupEvaluator.DeriveGroupProblems(groups);
+        foreach (var (anchor, list) in problems)
+        {
+            if (acknowledges != null)
+                ProblemDerivationService.ApplyAcknowledges(list, acknowledges, anchor);
+            var observedAt = statuses
+                .Where(s => string.Equals(s.Server, anchor, StringComparison.OrdinalIgnoreCase))
+                .Select(s => s.LastUpdate)
+                .DefaultIfEmpty(nowUtc)
+                .Max();
+            ProblemDerivationService.ApplyOccurrences(list, null, observedAt);
+        }
+        return (groups, problems);
+    }
+
+    /// <summary>
+    /// Renders the cross-server single-active violations of scheduled tasks for a page that sees several servers
+    /// (all.html, central overview). Empty when the feature is off or no group exists.
+    /// </summary>
+    internal static string RenderScheduledTaskGroupSection(
+        Config config, IReadOnlyCollection<RuntimeStatus> statuses, IReadOnlyCollection<Acknowledge>? acknowledges, DateTime nowUtc, string indent)
+    {
+        var (groups, problemsByAnchor) = EvaluateTaskGroups(config, statuses, acknowledges, nowUtc);
+        if (groups.Count == 0)
+            return string.Empty;
+
+        var violations = problemsByAnchor
+            .SelectMany(kv => kv.Value)
+            .OrderBy(p => p.Acknowledged)
+            .ThenBy(p => p.Message, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var unknownServers = groups
+            .Where(g => g.Mode == ScheduledTaskMode.SingleActive)
+            .SelectMany(g => g.UnknownServers)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"{indent}<section class=\"environment-section\">");
+        sb.AppendLine($"{indent}    <h2>🕒 Geplante Tasks (nur auf einem Server aktiv)</h2>");
+        if (violations.Count == 0)
+        {
+            sb.AppendLine($"{indent}    <p>Keine Verstöße ({groups.Count(g => g.Mode == ScheduledTaskMode.SingleActive)} Task-Gruppe(n) geprüft).</p>");
+        }
+        else
+        {
+            sb.AppendLine($"{indent}    <ul>");
+            foreach (var problem in violations)
+            {
+                var env = problem.Context.TryGetValue("environment", out var e) && !string.IsNullOrEmpty(e?.ToString()) ? e.ToString() : "ohne Umgebung";
+                var badge = problem.Acknowledged ? "badge-ok" : "badge-critical";
+                var ack = problem.Acknowledged ? " <em>(quittiert)</em>" : string.Empty;
+                sb.AppendLine($"{indent}        <li><span class=\"monitoring-badge {badge}\">{WebUtility.HtmlEncode(env)}</span> {WebUtility.HtmlEncode(problem.Message)}{ack}</li>");
+            }
+            sb.AppendLine($"{indent}    </ul>");
+        }
+        if (unknownServers.Count > 0)
+            sb.AppendLine($"{indent}    <p style=\"color:#555;\">Server ohne aktuellen Stand (nicht erreichbar, veraltet oder Abfrage fehlgeschlagen): {WebUtility.HtmlEncode(string.Join(", ", unknownServers))}</p>");
+        sb.AppendLine($"{indent}</section>");
         return sb.ToString();
     }
 

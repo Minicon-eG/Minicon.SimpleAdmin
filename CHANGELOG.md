@@ -9,6 +9,44 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
+## [2.37.0] – 2026-11-05 – Geplante Tasks überwachen und steuern
+
+**SimpleAdmin überwacht jetzt geplante Windows-Tasks, warnt, wenn eine Task auf mehreren oder auf keinem Server aktiv ist, und schaltet Tasks auf Knopfdruck.**
+
+### Neu
+- **Seite „Geplante Tasks“** im Menü: Für jede Umgebung eine Übersicht aller überwachten Tasks und Server mit Zustand, letztem und nächstem Lauf und dem Ergebnis des letzten Laufs. Filter nach Umgebung, Text und „Nur Probleme“ bleiben in der Adresse erhalten.
+- **Nur auf einem Server aktiv**: Darf eine Task in einer Umgebung nur auf genau einem Server laufen, meldet SimpleAdmin ein Problem, wenn sie auf mehreren Servern aktiv ist, und ebenso, wenn sie auf keinem aktiv ist. Liefert ein Server gerade keine Daten, erscheint er als „unbekannt“; solange wird „auf keinem aktiv“ nicht gemeldet, weil die Task dort aktiv sein könnte. Tasks, die auf allen Servern laufen dürfen, werden nur einzeln geprüft.
+- **Fehlgeschlagene Läufe**: Endet eine Task mit einem Fehlercode, wird das als Problem gemeldet, mit dem Fehlercode und – soweit bekannt – seiner Bedeutung. Bekannte harmlose Ergebnisse (z. B. „vom Benutzer beendet“) zählen nicht als Fehler.
+- **Zu lange Laufzeit**: Läuft eine Task länger als erlaubt (Standard 2 Stunden), erscheint eine Warnung.
+- **Verpasste Läufe**: Wurde ein geplanter Lauf nicht ausgeführt, erscheint eine Warnung – nicht, solange die Task gerade läuft oder der Zeitpunkt nur knapp überschritten ist. Die Markierung verschwindet, sobald die Task wieder gelaufen ist, spätestens nach 24 Stunden.
+- **Fehlerereignisse der Aufgabenplanung** (z. B. „Start fehlgeschlagen“, „wegen Zeitüberschreitung beendet“) werden gezählt; ein Lauf zählt dabei nur einmal. Ist der Aufgabenverlauf auf einem Server abgeschaltet, weist SimpleAdmin darauf hin („Aufgabenverlauf ist deaktiviert“).
+- **Ignorieren**: Harmlose Ereignisse lassen sich in den Serverdetails mit „Ignorieren“ ausblenden – für 1, 7, 30 oder 90 Tage, bis zu einem Datum oder dauerhaft, immer mit Begründung. Die Regel wirkt sofort und lässt sich unter Einstellungen → Feature-Toggles → Geplante Tasks bearbeiten.
+- **Steuern mit einem Klick**: Angemeldete Benutzer können eine Task direkt aus der Übersicht aktivieren, deaktivieren, starten oder eine laufende Ausführung beenden. Jede Aktion wird vorher bestätigt, danach zeigt die Zelle den aktuellen Stand direkt vom Server.
+- **„Hier exklusiv aktiv“**: Schaltet eine Task auf dem gewählten Server ein und auf allen anderen Servern der Umgebung aus. Schlägt das Ausschalten irgendwo fehl, bleibt der gewählte Server unverändert, damit die Task nie doppelt läuft.
+- **Verlauf der Aktionen** unten auf der Seite: wer wann welche Task auf welchem Server geschaltet hat, mit Ergebnis.
+- **Serverdetails**: neuer Abschnitt „Geplante Tasks“ mit allen Tasks des Servers, ihren Befunden und den letzten Fehlerereignissen. Auch die statischen Statusseiten zeigen die Tasks und das Ergebnis der Prüfung „nur auf einem Server aktiv“.
+- Einrichtung pro Server unter Server → Bearbeiten → „Geplante Tasks“ über Task-Muster (z. B. `\Minicon\*`) mit Ausschlüssen; die Hilfe-Seite hat ein neues Kapitel dazu.
+
+### Sicherheit
+- Links zu Anleitungen aus der Konfiguration werden nur noch als Link angezeigt, wenn sie auf eine Webseite oder E-Mail-Adresse zeigen. Andere Angaben (z. B. Dateipfade) erscheinen als Text „Anleitung: …“ zum manuellen Öffnen.
+
+### Hinweise
+- Ist die Anmeldung an der Oberfläche abgeschaltet, ist das Steuern geplanter Tasks gesperrt; die Seite nennt dann den Grund. Die Anzeige bleibt verfügbar.
+
+### Entwickler
+- Konfiguration (`config.json`): `features.scheduledTasks { enabled, checkIntervalSeconds, defaults { maxRuntimeMinutes (120, 0 = aus), missedRunGraceMinutes (30), allowedResultCodes, eventTimeWindowMinutes (60), eventWarningCount (1), eventCriticalCount (5), maxReportedEvents (50) }, ignoreRules[] { taskPath, eventIds, messageContains, servers, reason, createdBy, expiresAt } }`; pro Server `checks.scheduledTasks { enabled, checkEvents, tasks[] { pattern, excludePatterns, mode: SingleActive|AllServers, maxRuntimeMinutes, missedRunGraceMinutes, checkMissedRun, allowedResultCodes, failureIsCritical, wikiUrl, remediationSteps } }`. Global und pro Server standardmäßig aus.
+- Auswahl: Wildcards `*`/`?` auf dem vollen Pfad; das erste Muster, dessen Include passt, entscheidet, sein Exclude gewinnt (spätere Muster werden nicht mehr geprüft). Tasks unter `\Microsoft\` nur mit einem Muster, das selbst mit `\Microsoft\` beginnt. Ein Muster ohne Treffer wird als Problem gemeldet.
+- Zentrale Gruppenprüfung (WebUI, Notifier, HTML-Generator gleich): Gruppe = gleicher Taskpfad je Umgebung, Server in mehreren Umgebungen nehmen in jeder teil, ohne Umgebung = `""`. Ein Server gilt als unbekannt bei fehlendem Status, fehlgeschlagener Abfrage oder Status älter als max(`notifications.staleThresholdMinutes`, 3 × max(`general.checkIntervalSeconds`, `scheduledTasks.checkIntervalSeconds`) + 240 s) – `general.checkIntervalSeconds` muss dem echten Worker-Takt entsprechen. Gruppenprobleme hängen am alphabetisch ersten Teilnehmer der Umgebung laut config.json (dort quittieren); ihr „seit“ steht in `schtask-groups-since.json` (WebUI: ConfigPath, Notifier: neben `notify-state.json`).
+- WebUI-Host (`appsettings.json`, Abschnitt `ScheduledTasks`): `ControlEnabled` (true), `AllowWithoutAuthentication` (false; bei `Authentication:Enabled=false` ist die Steuerung sonst aus), `PowerShellPath`, `ActionTimeoutSeconds` (60, 5…600), `AuditLogDirectory` (Standard: ConfigPath), `AuditHistorySize` (2000). Audit-Log `scheduled-task-actions.json`. Jeder angemeldete Benutzer darf steuern; der Start-Log nennt Zustand und ausführendes Konto.
+- Rechte: Der Worker braucht lokalen Admin bzw. SYSTEM (sonst fehlen Tasks stillschweigend) und mindestens „Event Log Readers“ für `Microsoft-Windows-TaskScheduler/Operational`; der Aufgabenverlauf muss aktiviert sein. Die WebUI steuert direkt per PowerShell + CIM über DCOM (kein WinRM): Ihr Dienstkonto braucht auf den Zielservern RPC/DCOM (Firewall-Gruppen „Remote Scheduled Tasks Management“ und WMI), DCOM-/WMI-Remotezugriff und lokalen Admin bzw. Vollzugriff auf den Aufgabenordner. Kein automatisches Failover.
+- REST: `GET /api/scheduledtasks`, `GET /api/scheduledtasks/live`, `POST /api/scheduledtasks/action`, `POST /api/scheduledtasks/activate-exclusive`, `GET /api/scheduledtasks/audit`, `POST /api/scheduledtasksignore` (POSTs nur mit JSON-Body; live/action/exclusive liefern 403, solange die Steuerung aus ist).
+- `RuntimeStatus.ScheduledTasks` (`ScheduledTaskState`) ist im HTTP-Status-JSON enthalten; neue Problem-IDs `schtask_*`. Logger-Kategorie `Minicon.SimpleAdmin.Checkers.ScheduledTasks`.
+- WebUI: Wiki-/Anleitungs-Links laufen über `Display.SafeHref` (nur http(s), `mailto:` und relative Pfade); betrifft Probleme-Seite, Serverdetails und Dateiüberwachung.
+
+### Intern
+- Neue Bausteine: `ScheduledTaskChecker` (Checkers), `ScheduledTaskGroupEvaluator`, `ScheduledTaskIgnoreMatcher`, `ScheduledTaskGroupSinceStore`, `ScheduledTaskPaths` (Shared), `ScheduledTaskControlService`, `ScheduledTaskAuditLog`, `ScheduledTaskTargets`, `KeyedAsyncLock`, `ScheduledTaskProcessRunner` (WebUI).
+- Tests für Checker-Auswertung, Gruppenprüfung, Problemableitung, Notifier, HTML, Steuerung, REST-API und Einstellungen.
+
 ## [2.36.1] – 2026-10-29 – Verlässlichere CPU-Werte, Übersichten ohne seitliches Scrollen
 
 **Die CPU-Auslastung entspricht jetzt der tatsächlichen Last, und lange Problemtexte passen auf den Bildschirm.**
@@ -316,6 +354,7 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.37.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.1...v2.37.0
 [2.36.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.0...v2.36.1
 [2.36.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.35.0...v2.36.0
 [2.35.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.34.2...v2.35.0

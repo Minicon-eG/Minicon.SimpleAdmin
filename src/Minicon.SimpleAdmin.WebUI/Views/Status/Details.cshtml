@@ -76,6 +76,13 @@
     </div>
 </div>
 
+@if (Model.IsTaskGroupAnchorPlaceholder)
+{
+    <div class="alert alert-info mb-4">
+        <i class="bi bi-info-circle me-2"></i>Server ohne Status – trägt nur Gruppenprobleme geplanter Tasks.
+    </div>
+}
+
 @* --- Metriken --- *@
 @if (Model.Metrics.Count == 0)
 {
@@ -216,12 +223,16 @@ else
                                     <span class="fw-semibold">@title</span>
                                 }
                                 <div class="small text-body-secondary"><code class="problem-origin">@origin</code></div>
-                                @if (!string.IsNullOrEmpty(problem.WikiUrl) || problem.RemediationSteps.Count > 0)
+                                @if (!string.IsNullOrWhiteSpace(problem.WikiUrl) || problem.RemediationSteps.Count > 0)
                                 {
                                     <div class="small mt-1 d-flex flex-wrap gap-3">
-                                        @if (!string.IsNullOrEmpty(problem.WikiUrl))
+                                        @if (Display.SafeHref(problem.WikiUrl) != null)
                                         {
-                                            <a href="@problem.WikiUrl" target="_blank" rel="noopener"><i class="bi bi-book me-1"></i>Lösungsanleitung</a>
+                                            <a href="@Display.SafeHref(problem.WikiUrl)" target="_blank" rel="noopener"><i class="bi bi-book me-1"></i>Lösungsanleitung</a>
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(problem.WikiUrl))
+                                        {
+                                            <span class="text-body-secondary text-wrap-anywhere" title="Kein Web-Link – bitte manuell öffnen">Anleitung: <code>@problem.WikiUrl</code></span>
                                         }
                                         @if (problem.RemediationSteps.Count > 0)
                                         {
@@ -1031,9 +1042,13 @@ else
                                     <td>@(string.Equals(s.Reason, "cutoff", StringComparison.OrdinalIgnoreCase) ? "Nach Cutoff" : "Zu alt")</td>
                                     <td><span class="badge @(s.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(s.IsCritical ? "Kritisch" : "Warnung")</span></td>
                                     <td>
-                                        @if (!string.IsNullOrEmpty(s.WikiUrl))
+                                        @if (Display.SafeHref(s.WikiUrl) != null)
                                         {
-                                            <a href="@s.WikiUrl" target="_blank" rel="noopener">Anleitung <i class="bi bi-box-arrow-up-right"></i></a>
+                                            <a href="@Display.SafeHref(s.WikiUrl)" target="_blank" rel="noopener">Anleitung <i class="bi bi-box-arrow-up-right"></i></a>
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(s.WikiUrl))
+                                        {
+                                            <span class="text-body-secondary text-wrap-anywhere" title="Kein Web-Link – bitte manuell öffnen">Anleitung: <code>@s.WikiUrl</code></span>
                                         }
                                         else { <span class="text-muted">—</span> }
                                     </td>
@@ -1056,9 +1071,13 @@ else
                                     <td>@m.Count</td>
                                     <td class="text-wrap-anywhere"><code class="small">@m.SampleLine</code></td>
                                     <td>
-                                        @if (!string.IsNullOrEmpty(m.WikiUrl))
+                                        @if (Display.SafeHref(m.WikiUrl) != null)
                                         {
-                                            <a href="@m.WikiUrl" target="_blank" rel="noopener">Anleitung <i class="bi bi-box-arrow-up-right"></i></a>
+                                            <a href="@Display.SafeHref(m.WikiUrl)" target="_blank" rel="noopener">Anleitung <i class="bi bi-box-arrow-up-right"></i></a>
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(m.WikiUrl))
+                                        {
+                                            <span class="text-body-secondary text-wrap-anywhere" title="Kein Web-Link – bitte manuell öffnen">Anleitung: <code>@m.WikiUrl</code></span>
                                         }
                                         else { <span class="text-muted">—</span> }
                                     </td>
@@ -1074,6 +1093,299 @@ else
             }
         </div>
     </div>
+}
+
+@* --- Geplante Tasks (Scheduled Tasks) --- *@
+@if (Model.ScheduledTasks != null)
+{
+    var stState = Model.ScheduledTasks;
+    var stFailed = stState.Tasks.Count(Minicon.SimpleAdmin.WebUI.Helpers.ScheduledTaskDisplay.HasFinding);
+    <div class="card mb-4 @(stState.QueryFailed || stState.Tasks.Any(t => t.LastRunFailed && t.FailureIsCritical) ? "card-alert" : "")" id="scheduled-tasks">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h5 class="mb-0"><i class="bi bi-calendar2-check me-2"></i>Geplante Tasks</h5>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="pill pill-soft pill-@(stFailed > 0 ? "warn" : "ok")">@stState.Tasks.Count Tasks@(stFailed > 0 ? $" · {stFailed} mit Befund" : "")</span>
+                <a class="btn btn-sm btn-glass" href="@Url.Action("Index", "ScheduledTasks", new { server = Model.ServerId })">
+                    <i class="bi bi-grid-3x3 me-1"></i>Übersicht &amp; Steuerung
+                </a>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            @if (stState.QueryFailed)
+            {
+                <div class="alert alert-danger m-3 text-wrap-anywhere">
+                    <i class="bi bi-x-octagon me-1"></i>Abfrage der Aufgabenplanung fehlgeschlagen: @stState.Error
+                </div>
+            }
+            @if (stState.Tasks.Count == 0 && !stState.QueryFailed)
+            {
+                <p class="text-body-secondary small m-3">Keine Tasks gefunden, die zu den Watch-Mustern dieses Servers passen.</p>
+            }
+            else if (stState.Tasks.Count > 0)
+            {
+                <table class="table table-sm align-middle mb-0 st-table">
+                    <colgroup>
+                        <col />
+                        <col class="col-state" />
+                        <col class="col-result" />
+                        <col class="col-time" />
+                        <col class="col-time" />
+                        <col class="col-result" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Task</th>
+                            <th>Status</th>
+                            <th>Letztes Ergebnis</th>
+                            <th>Letzter Lauf</th>
+                            <th>Nächster Lauf</th>
+                            <th>Befund</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var task in stState.Tasks)
+                        {
+                            var resultText = ScheduledTaskDisplay.ResultText(task.LastTaskResult);
+                            var rowClass = task.LastRunFailed && task.FailureIsCritical ? "is-failed"
+                                : ScheduledTaskDisplay.HasFinding(task) ? "is-warning" : "";
+                            <tr class="@rowClass">
+                                <td class="ps-3 text-wrap-anywhere" data-label="Task">
+                                    <div class="fw-semibold">@task.Name</div>
+                                    <code class="problem-origin">@task.Path</code>
+                                </td>
+                                <td data-label="Status">
+                                    <span class="pill pill-@ScheduledTaskDisplay.StateTone(task)"><i class="bi @ScheduledTaskDisplay.StateIcon(task)"></i>@ScheduledTaskDisplay.StateLabel(task)</span>
+                                    @if (ScheduledTaskDisplay.IsRunning(task) && task.RunningSince.HasValue)
+                                    {
+                                        <div class="small text-body-secondary mt-1">seit @Display.Duration(DateTime.UtcNow - Display.AsUtc(task.RunningSince.Value))</div>
+                                    }
+                                </td>
+                                <td class="text-wrap-anywhere" data-label="Letztes Ergebnis">
+                                    <code class="st-result st-result-@ScheduledTaskDisplay.ResultTone(task)">@ScheduledTaskDisplay.ResultHex(task.LastTaskResult)</code>
+                                    @if (resultText != null)
+                                    {
+                                        <div class="small">@resultText</div>
+                                    }
+                                </td>
+                                <td data-label="Letzter Lauf">
+                                    @if (task.LastRunTime.HasValue)
+                                    {
+                                        <time class="relative-time small" data-utc="@Display.Iso(task.LastRunTime.Value)" title="@Display.LocalTimeSeconds(task.LastRunTime.Value)">@Display.LocalTime(task.LastRunTime.Value)</time>
+                                    }
+                                    else { <span class="small text-body-secondary">noch nie</span> }
+                                </td>
+                                <td data-label="Nächster Lauf">
+                                    @if (task.NextRunTime.HasValue)
+                                    {
+                                        <time class="relative-time small" data-utc="@Display.Iso(task.NextRunTime.Value)" title="@Display.LocalTimeSeconds(task.NextRunTime.Value)">@Display.LocalTime(task.NextRunTime.Value)</time>
+                                    }
+                                    else { <span class="small text-body-secondary">kein Zeitplan</span> }
+                                </td>
+                                <td data-label="Befund">
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @if (task.LastRunFailed)
+                                        {
+                                            <span class="pill pill-soft pill-@(task.FailureIsCritical ? "crit" : "warn")">Fehlgeschlagen</span>
+                                        }
+                                        @if (task.RuntimeExceeded)
+                                        {
+                                            <span class="pill pill-soft pill-warn" title="Limit @task.MaxRuntimeMinutes min">Laufzeit überschritten</span>
+                                        }
+                                        @if (task.MissedRun)
+                                        {
+                                            <span class="pill pill-soft pill-warn">Lauf verpasst</span>
+                                        }
+                                        @if (!ScheduledTaskDisplay.HasFinding(task))
+                                        {
+                                            <span class="small text-body-secondary">—</span>
+                                        }
+                                    </div>
+                                    @if (Display.SafeHref(task.WikiUrl) != null && ScheduledTaskDisplay.HasFinding(task))
+                                    {
+                                        <a href="@Display.SafeHref(task.WikiUrl)" target="_blank" rel="noopener" class="small"><i class="bi bi-book me-1"></i>Anleitung</a>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(task.WikiUrl) && ScheduledTaskDisplay.HasFinding(task))
+                                    {
+                                        <div class="small"><span class="text-body-secondary text-wrap-anywhere" title="Kein Web-Link – bitte manuell öffnen">Anleitung: <code>@task.WikiUrl</code></span></div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            @if (stState.RecentEvents.Count > 0 || stState.IgnoredEventCount > 0)
+            {
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 px-3 pt-3 pb-2">
+                    <h6 class="mb-0"><i class="bi bi-journal-x me-1"></i>Fehlerereignisse der Aufgabenplanung</h6>
+                    <span class="pill pill-soft pill-@Display.Tone(stState.EventStatus)">
+                        @stState.EventCount Ereignisse@(stState.IgnoredEventCount > 0 ? $" ({stState.IgnoredEventCount} ignoriert)" : "")
+                    </span>
+                </div>
+                <table class="table table-sm align-middle mb-0 st-table">
+                    <colgroup>
+                        <col class="col-time" />
+                        <col class="col-id" />
+                        <col class="col-result" />
+                        <col />
+                        <col class="col-button" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Zeit</th>
+                            <th>ID</th>
+                            <th>Task</th>
+                            <th>Meldung</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (stState.RecentEvents.Count == 0)
+                        {
+                            <tr><td colspan="5" class="ps-3 small text-body-secondary">Keine aktuellen Ereignisse – alle gemeldeten Ereignisse werden ignoriert
+                                (Regeln unter <em>Einstellungen → Feature-Toggles → Geplante Tasks</em>).</td></tr>
+                        }
+                        @foreach (var ev in stState.RecentEvents)
+                        {
+                            <tr class="@(ev.Level is "Critical" or "Error" ? "is-failed" : "is-warning")">
+                                <td class="ps-3" data-label="Zeit"><small>@Display.LocalTimeSeconds(ev.Timestamp)</small></td>
+                                <td data-label="ID"><small>@ev.EventId</small></td>
+                                <td class="text-wrap-anywhere" data-label="Task"><code class="problem-origin">@(string.IsNullOrEmpty(ev.TaskPath) ? "—" : ev.TaskPath)</code></td>
+                                <td class="text-wrap-anywhere" data-label="Meldung"><small title="@(ev.Message.Length > 200 ? ev.Message : null)">@(ev.Message.Length > 200 ? ev.Message[..200] + "…" : ev.Message)</small></td>
+                                <td class="text-end pe-3">
+                                    <button type="button" class="btn btn-sm btn-glass py-0"
+                                            data-task-path="@ev.TaskPath" data-event-id="@ev.EventId"
+                                            onclick="openTaskEventIgnore(this)" title="Dieses Ereignis auf diesem Server ignorieren">
+                                        <i class="bi bi-eye-slash"></i> Ignorieren
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    @* Ignore dialog for Task Scheduler events → POST /api/scheduledtasksignore (server-scoped rule) *@
+    <div class="modal fade" id="taskEventIgnoreModal" tabindex="-1" aria-labelledby="taskEventIgnoreTitle">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="taskEventIgnoreTitle">Ereignis ignorieren</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-body-secondary mb-3 text-wrap-anywhere">
+                        Server <strong>@Model.ServerId</strong> · Task <strong id="taskEventIgnorePathLabel"></strong> ·
+                        Event-ID <strong id="taskEventIgnoreIdLabel"></strong>
+                    </p>
+                    <div class="mb-3">
+                        <label for="taskEventIgnoreDuration" class="form-label">Ignorieren für</label>
+                        <select class="form-select" id="taskEventIgnoreDuration" onchange="toggleTaskEventIgnoreDate()">
+                            <option value="1">1 Tag</option>
+                            <option value="7" selected>7 Tage</option>
+                            <option value="30">30 Tage</option>
+                            <option value="90">90 Tage</option>
+                            <option value="date">Bis Datum …</option>
+                            <option value="forever">Dauerhaft</option>
+                        </select>
+                    </div>
+                    <div class="mb-3 d-none" id="taskEventIgnoreDateGroup">
+                        <label for="taskEventIgnoreDate" class="form-label">Bis (Ortszeit dieses Browsers)</label>
+                        <input type="datetime-local" class="form-control" id="taskEventIgnoreDate" />
+                    </div>
+                    <div class="mb-1">
+                        <label for="taskEventIgnoreReason" class="form-label">Grund <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="taskEventIgnoreReason" placeholder="z. B. bekannter Fehler, Ticket 4711" />
+                    </div>
+                    <div class="form-text">
+                        Wird als Ignorier-Regel unter <em>Einstellungen → Feature-Toggles → Geplante Tasks</em> gespeichert
+                        und dort auch wieder gelöscht.
+                    </div>
+                    <div class="text-danger small mt-2 d-none" id="taskEventIgnoreError"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-primary" id="taskEventIgnoreSubmit" onclick="submitTaskEventIgnore()">Ignorieren</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let taskEventIgnoreModal;
+        let taskEventIgnorePath = '';
+        let taskEventIgnoreId = 0;
+
+        function openTaskEventIgnore(button) {
+            taskEventIgnorePath = button.dataset.taskPath || '';
+            taskEventIgnoreId = parseInt(button.dataset.eventId) || 0;
+            document.getElementById('taskEventIgnorePathLabel').textContent = taskEventIgnorePath || '(alle)';
+            document.getElementById('taskEventIgnoreIdLabel').textContent = taskEventIgnoreId;
+            document.getElementById('taskEventIgnoreError').classList.add('d-none');
+            taskEventIgnoreModal = taskEventIgnoreModal || new bootstrap.Modal(document.getElementById('taskEventIgnoreModal'));
+            taskEventIgnoreModal.show();
+        }
+
+        function toggleTaskEventIgnoreDate() {
+            const isDate = document.getElementById('taskEventIgnoreDuration').value === 'date';
+            document.getElementById('taskEventIgnoreDateGroup').classList.toggle('d-none', !isDate);
+        }
+
+        let taskEventIgnoreBusy = false;
+
+        async function submitTaskEventIgnore() {
+            if (taskEventIgnoreBusy) return; // no double submit
+            const error = document.getElementById('taskEventIgnoreError');
+            const showError = text => { error.textContent = text; error.classList.remove('d-none'); };
+            error.classList.add('d-none');
+            const reason = document.getElementById('taskEventIgnoreReason').value.trim();
+            if (!reason) { showError('Bitte einen Grund angeben.'); return; }
+
+            const choice = document.getElementById('taskEventIgnoreDuration').value;
+            let expiresAt = null;
+            let durationDays = null;
+            if (choice === 'date') {
+                const value = document.getElementById('taskEventIgnoreDate').value;
+                if (!value) { showError('Bitte ein Datum wählen.'); return; }
+                expiresAt = new Date(value).toISOString(); // browser local time → UTC
+            } else if (choice !== 'forever') {
+                durationDays = parseInt(choice);
+            }
+
+            const submit = document.getElementById('taskEventIgnoreSubmit');
+            taskEventIgnoreBusy = true;
+            submit.disabled = true;
+            try {
+                const response = await fetch('@Url.Content("~/api/scheduledtasksignore")', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        serverId: @Json.Serialize(Model.ServerId),
+                        taskPath: taskEventIgnorePath,
+                        eventId: taskEventIgnoreId,
+                        durationDays: durationDays,
+                        expiresAt: expiresAt,
+                        reason: reason
+                    })
+                });
+                if (response.ok) {
+                    taskEventIgnoreModal.hide();
+                    location.reload();
+                    return;
+                }
+                const err = await response.json().catch(() => ({}));
+                showError('Fehler: ' + (err.message || response.status));
+            } catch (e) {
+                showError('Anfrage fehlgeschlagen: ' + e);
+            } finally {
+                taskEventIgnoreBusy = false;
+                submit.disabled = false;
+            }
+        }
+    </script>
 }
 
 @* --- Event ignorieren (Modal) --- *@

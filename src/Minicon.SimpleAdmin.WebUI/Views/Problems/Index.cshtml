@@ -186,14 +186,18 @@ else
                                 {
                                     <div class="small text-body-secondary"><code class="problem-origin">@origin</code></div>
                                 }
-                                @if (!string.IsNullOrEmpty(problem.WikiUrl) || problem.RemediationSteps.Count > 0)
+                                @if (!string.IsNullOrWhiteSpace(problem.WikiUrl) || problem.RemediationSteps.Count > 0)
                                 {
                                     <div class="small mt-1 d-flex flex-wrap gap-3">
-                                        @if (!string.IsNullOrEmpty(problem.WikiUrl))
+                                        @if (Display.SafeHref(problem.WikiUrl) != null)
                                         {
-                                            <a href="@problem.WikiUrl" target="_blank" rel="noopener">
+                                            <a href="@Display.SafeHref(problem.WikiUrl)" target="_blank" rel="noopener">
                                                 <i class="bi bi-book me-1"></i>Lösungsanleitung
                                             </a>
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(problem.WikiUrl))
+                                        {
+                                            <span class="text-body-secondary text-wrap-anywhere" title="Kein Web-Link – bitte manuell öffnen">Anleitung: <code>@problem.WikiUrl</code></span>
                                         }
                                         @if (problem.RemediationSteps.Count > 0)
                                         {

@@ -106,3 +106,137 @@ a.dashboard-config-item:hover { background: var(--bs-secondary-bg); color: inher
 .changelog-section ul ul { margin-top: .3rem; }
 .changelog code { font-size: .85em; }
 .footer-version { color: inherit; }
+
+/* ---------- Scheduled tasks page ---------- */
+/* Task × server matrix per environment. Fixed layout + wrapping instead of .table-responsive: the page
+   never scrolls horizontally. Below 1200px (or with more than five servers, .st-stacked) every task row
+   becomes a card with the server cells in a wrapping grid. */
+.st-empty { text-align: center; padding: 2.5rem 1rem; }
+.st-empty > i { font-size: 2rem; display: block; margin-bottom: .5rem; }
+
+.st-matrix { table-layout: fixed; width: 100%; }
+.st-matrix .col-task { width: 24rem; }
+.st-matrix thead th {
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--bs-secondary-color);
+    background: transparent;
+}
+.st-matrix td { vertical-align: top; min-width: 0; padding-top: .75rem; padding-bottom: .75rem; }
+.st-row > td:first-child { border-left: 4px solid transparent; }
+.st-row.is-violation > td:first-child { border-left-color: var(--sa-crit); }
+.st-row.has-finding > td:first-child { border-left-color: var(--sa-warn); }
+.st-row.is-violation > td { background-color: color-mix(in srgb, var(--sa-crit) 6%, transparent); }
+
+.st-violation {
+    display: flex;
+    gap: .45rem;
+    align-items: flex-start;
+    font-size: .85rem;
+    font-weight: 600;
+    padding: .4rem .6rem;
+    border-radius: .5rem;
+    overflow-wrap: anywhere;
+}
+.st-violation.is-crit { color: var(--sa-crit); background: color-mix(in srgb, var(--sa-crit) 12%, transparent); }
+.st-violation.is-warn { color: var(--sa-warn); background: color-mix(in srgb, var(--sa-warn) 14%, transparent); }
+.st-violation.is-live { color: var(--sa-info); background: color-mix(in srgb, var(--sa-info) 10%, transparent); }
+.st-banner-label { font-weight: 700; }
+.st-violation.is-unsure { color: var(--bs-secondary-color); background: var(--bs-tertiary-bg); font-weight: 500; }
+
+.st-cell { overflow-wrap: anywhere; }
+.st-cell.is-absent { color: var(--bs-secondary-color); }
+.st-cell-server { display: none; font-weight: 600; font-size: .8rem; margin-bottom: .35rem; }
+
+.st-facts {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: .1rem .6rem;
+    margin: 0 0 .35rem;
+    font-size: .8rem;
+}
+.st-facts dt { font-weight: 500; color: var(--bs-secondary-color); }
+.st-facts dd { margin: 0; min-width: 0; }
+
+.st-result { font-size: .8rem; }
+.st-result-ok { color: var(--sa-ok); }
+.st-result-warn { color: var(--sa-warn); }
+.st-result-crit { color: var(--sa-crit); }
+.st-result-muted { color: var(--bs-secondary-color); }
+
+.st-stamp { font-size: .72rem; color: var(--bs-secondary-color); }
+.st-cell.has-live .st-worker { opacity: .5; }
+
+.st-live {
+    margin-top: .5rem;
+    padding: .45rem .6rem;
+    border-left: 3px solid var(--sa-info);
+    border-radius: .5rem;
+    background: color-mix(in srgb, var(--sa-info) 10%, transparent);
+}
+.st-live.is-error { border-left-color: var(--sa-crit); background: color-mix(in srgb, var(--sa-crit) 10%, transparent); }
+.st-live-head { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--sa-info); margin-bottom: .3rem; }
+.st-live.is-error .st-live-head { color: var(--sa-crit); }
+
+.st-actions { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .5rem; }
+.st-actions .btn { padding: .15rem .5rem; font-size: .78rem; }
+
+.st-steps .st-step { display: flex; flex-wrap: wrap; gap: .5rem; align-items: baseline; padding: .35rem 0; }
+.st-steps .st-step + .st-step { border-top: 1px solid var(--bs-border-color-translucent); }
+.st-steps .st-step.is-ok > i { color: var(--sa-ok); }
+.st-steps .st-step.is-fail > i { color: var(--sa-crit); }
+.st-steps .st-step-msg { flex-basis: 100%; font-size: .85rem; overflow-wrap: anywhere; }
+
+.st-table { table-layout: fixed; width: 100%; }
+.st-table .col-time { width: 9.5rem; }
+.st-table .col-user { width: 11rem; }
+.st-table .col-server { width: 9rem; }
+.st-table .col-action { width: 9rem; }
+.st-table .col-state { width: 8.5rem; }
+.st-table .col-result { width: 13rem; }
+.st-table .col-id { width: 5.5rem; }
+.st-table .col-button { width: 8.5rem; }
+.st-table td { vertical-align: top; }
+.st-table tr.is-failed > td { background-color: color-mix(in srgb, var(--sa-crit) 7%, transparent); }
+.st-table tr.is-warning > td { background-color: color-mix(in srgb, var(--sa-warn) 8%, transparent); }
+
+.st-matrix.st-stacked colgroup,
+.st-matrix.st-stacked thead { display: none; }
+.st-matrix.st-stacked,
+.st-matrix.st-stacked tbody { display: block; }
+.st-matrix.st-stacked tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    border-bottom: 1px solid var(--bs-border-color);
+}
+.st-matrix.st-stacked tbody > tr > td { border-bottom: 0; padding: .5rem .75rem; }
+.st-matrix.st-stacked .st-task { grid-column: 1 / -1; }
+.st-matrix.st-stacked .st-cell { border-top: 1px dashed var(--bs-border-color-translucent); }
+.st-matrix.st-stacked .st-cell-server { display: block; }
+
+@media (max-width: 1199.98px) {
+    .st-matrix colgroup,
+    .st-matrix thead { display: none; }
+    .st-matrix,
+    .st-matrix tbody { display: block; }
+    .st-matrix tbody > tr {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    .st-matrix tbody > tr > td { border-bottom: 0; padding: .5rem .75rem; }
+    .st-matrix .st-task { grid-column: 1 / -1; }
+    .st-matrix .st-cell { border-top: 1px dashed var(--bs-border-color-translucent); }
+    .st-matrix .st-cell-server { display: block; }
+
+    .st-table colgroup,
+    .st-table thead { display: none; }
+    .st-table,
+    .st-table tbody,
+    .st-table tr { display: block; }
+    .st-table tr { padding: .5rem 1rem; border-bottom: 1px solid var(--bs-border-color); }
+    .st-table td { display: block; border: 0; padding: .1rem 0 !important; }
+    .st-table td::before { content: attr(data-label) ": "; font-weight: 600; color: var(--bs-secondary-color); }
+}

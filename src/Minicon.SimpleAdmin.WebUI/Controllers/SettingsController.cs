@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Minicon.SimpleAdmin.WebUI.Helpers;
 using Minicon.SimpleAdmin.WebUI.Services;
 using Minicon.SimpleAdmin.Models.Config;
 
@@ -77,6 +78,10 @@ public class SettingsController : Controller
         var model = new FeaturesViewModel
         {
             Features = _configService.GetFeatures(),
+            ScheduledTaskAllowedResultCodes = new ScheduledTaskWatchConfig
+            {
+                AllowedResultCodes = _configService.GetFeatures().ScheduledTasks.Defaults.AllowedResultCodes
+            }.AllowedResultCodesText,
             AvailableServers = _configService.GetServers().Where(s => s.Active).Select(s => s.Name).ToList()
         };
 
@@ -99,6 +104,23 @@ public class SettingsController : Controller
                         || r.EventIds.Count > 0
                         || !string.IsNullOrWhiteSpace(r.MessageContains))
             .ToList();
+
+        // Scheduled tasks: same for the Task Scheduler ignore rules; the result codes come from one text
+        // field (decimal or 0x hex) and the check interval is not in the form — keep the loaded value.
+        model.Features.ScheduledTasks ??= new ScheduledTaskFeatureConfig();
+        model.Features.ScheduledTasks.IgnoreRules = model.Features.ScheduledTasks.IgnoreRules
+            .Where(r => !string.IsNullOrWhiteSpace(r.TaskPath)
+                        || r.EventIds.Count > 0
+                        || !string.IsNullOrWhiteSpace(r.MessageContains))
+            .ToList();
+        // The form posts the expiry as UTC (ISO 8601, converted from browser time by the page script).
+        foreach (var rule in model.Features.ScheduledTasks.IgnoreRules.Where(r => r.ExpiresAt.HasValue))
+            rule.ExpiresAt = Display.AsUtc(rule.ExpiresAt!.Value);
+        model.Features.ScheduledTasks.Defaults.AllowedResultCodes = new ScheduledTaskWatchConfig
+        {
+            AllowedResultCodesText = model.ScheduledTaskAllowedResultCodes ?? string.Empty
+        }.AllowedResultCodes;
+        model.Features.ScheduledTasks.CheckIntervalSeconds = _configService.GetFeatures().ScheduledTasks.CheckIntervalSeconds;
 
         // The notifier URLs are derived at runtime and no longer in the form. Preserve any existing
         // override values from the loaded config so a UI save doesn't wipe them.
@@ -187,6 +209,9 @@ public class SettingsViewModel
 public class FeaturesViewModel
 {
     public FeaturesConfig Features { get; set; } = new();
+
+    /// <summary>Form field for <c>features.scheduledTasks.defaults.allowedResultCodes</c> (comma-separated, decimal or 0x hex).</summary>
+    public string? ScheduledTaskAllowedResultCodes { get; set; }
 
     /// <summary>Active server names, for the notifier server multi-select + WebUI-server dropdown.</summary>
     public List<string> AvailableServers { get; set; } = new();

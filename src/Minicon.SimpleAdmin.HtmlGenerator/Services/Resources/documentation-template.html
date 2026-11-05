@@ -530,6 +530,15 @@
                         <li><a href="#domains-webui" class="toc-level-2">19.3 WebUI</a></li>
                     </ul>
                 </li>
+                <li><a href="#scheduled-tasks" class="toc-level-1">20. Geplante Tasks (Aufgabenplanung)</a>
+                    <ul>
+                        <li><a href="#scheduled-tasks-checks" class="toc-level-2">20.1 Was geprüft wird</a></li>
+                        <li><a href="#scheduled-tasks-single" class="toc-level-2">20.2 Nur auf einem Server aktiv</a></li>
+                        <li><a href="#scheduled-tasks-config" class="toc-level-2">20.3 Konfiguration</a></li>
+                        <li><a href="#scheduled-tasks-control" class="toc-level-2">20.4 Steuerung aus der WebUI</a></li>
+                        <li><a href="#scheduled-tasks-rights" class="toc-level-2">20.5 Voraussetzungen &amp; Rechte</a></li>
+                    </ul>
+                </li>
             </ul>
         </aside>
 
@@ -3152,6 +3161,72 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     <li><strong>Serverauswahl:</strong> Es werden nur Server der gewählten Umgebung angeboten; die Liste aktualisiert sich beim Wechsel der Umgebung.</li>
                     <li><strong>Server:</strong> Die Serverliste hat eine Spalte und einen Filter &bdquo;Umgebung&ldquo;.</li>
                     <li><strong>Statusseiten:</strong> Die Übersichtsseiten zeigen die Domains jeder Umgebung unter der Umgebungsüberschrift.</li>
+                </ul>
+            </section>
+
+            <section id="scheduled-tasks">
+                <h2>20. Geplante Tasks (Aufgabenplanung)</h2>
+                <p>
+                    Überwacht Windows-Aufgaben (Aufgabenplanung) auf den Servern und erkennt, wenn eine Task, die nur auf
+                    <strong>genau einem Server</strong> laufen darf, auf mehreren oder auf keinem Server aktiv ist. Über die
+                    WebUI-Seite <strong>„Geplante Tasks"</strong> lassen sich die Tasks außerdem aktivieren, deaktivieren,
+                    starten, beenden und „hier exklusiv aktiv" schalten – die Aufgabenplanung muss dafür nicht mehr geöffnet werden.
+                </p>
+                <h3 id="scheduled-tasks-checks">20.1 Was geprüft wird</h3>
+                <ul>
+                    <li><strong>Letzter Lauf fehlgeschlagen:</strong> Ergebniscode ≠ 0 (informative Codes wie „läuft", „noch nie gelaufen", „vom Benutzer beendet" zählen nicht). Nur bei aktivierten Tasks.</li>
+                    <li><strong>Laufzeit zu lang:</strong> Die Task läuft länger als erlaubt (Standard 120 min, 0 = aus).</li>
+                    <li><strong>Verpasster Lauf:</strong> Der geplante Lauf wurde nicht ausgeführt (nächster Termin liegt über die Toleranz hinaus in der Vergangenheit oder die Zahl verpasster Läufe ist gestiegen). Nicht gemeldet, solange die Task läuft oder in der Warteschlange steht; die Meldung verfällt nach 24 Stunden.</li>
+                    <li><strong>Fehlerereignisse</strong> im Protokoll <code>Microsoft-Windows-TaskScheduler/Operational</code> (Start fehlgeschlagen, Aktion fehlgeschlagen, Zeitüberschreitung …); ein Lauf zählt nur einmal. Harmlose Ereignisse lassen sich in den Serverdetails mit „Ignorieren" ausblenden.</li>
+                    <li><strong>Hinweise:</strong> Muster ohne Treffer, nicht lesbare Task-Informationen und ein abgeschalteter Aufgabenverlauf werden als Warnung gemeldet.</li>
+                </ul>
+                <h3 id="scheduled-tasks-single">20.2 Nur auf einem Server aktiv</h3>
+                <p>
+                    Standardmodus <code>SingleActive</code>: Gleicher Taskpfad auf mehreren Servern derselben Umgebung bildet eine
+                    Gruppe. Ist die Task in der Gruppe auf <strong>keinem</strong> oder auf <strong>mehreren</strong> Servern aktiv,
+                    entsteht ein kritisches Problem. Liefert ein Server keinen aktuellen Stand (nicht erreichbar, veraltet,
+                    Abfrage fehlgeschlagen), gilt er als <em>unbekannt</em> – dann wird „auf keinem Server aktiv" nicht gemeldet,
+                    weil die Task dort aktiv sein könnte. Die Meldung erscheint immer beim alphabetisch ersten überwachten Server
+                    der Umgebung und wird dort quittiert. Tasks im Modus <code>AllServers</code> dürfen überall laufen und werden
+                    nur einzeln geprüft. Es gibt kein automatisches Umschalten (Failover).
+                </p>
+                <h3 id="scheduled-tasks-config">20.3 Konfiguration</h3>
+                <p>
+                    In der WebUI unter Einstellungen → Features (globale Werte, Ignorier-Regeln) und Server → Bearbeiten →
+                    „Geplante Tasks" (Muster je Server). Das erste Muster, dessen Pfad passt, entscheidet; seine Ausschlüsse
+                    gewinnen. Tasks unter <code>\Microsoft\</code> werden nur erfasst, wenn das Muster selbst damit beginnt.
+                    Alternativ direkt in <code>config.json</code>:
+                </p>
+                <pre><code>"features": { "scheduledTasks": { "enabled": true,
+  "defaults": { "maxRuntimeMinutes": 120, "missedRunGraceMinutes": 30, "eventWarningCount": 1, "eventCriticalCount": 5 } } }
+
+// pro Server unter checks:
+"scheduledTasks": {
+  "enabled": true,
+  "checkEvents": true,
+  "tasks": [
+    { "pattern": "\\Minicon\\*", "excludePatterns": ["\\Minicon\\Test*"], "mode": "SingleActive",
+      "maxRuntimeMinutes": 60, "allowedResultCodes": [1], "wikiUrl": "https://wiki.intern/tasks" },
+    { "pattern": "\\Wartung\\*", "mode": "AllServers", "checkMissedRun": false }
+  ]
+}</code></pre>
+                <p>
+                    Wichtig: <code>general.checkIntervalSeconds</code> muss dem tatsächlichen Takt des Workers entsprechen, sonst
+                    gelten Server zu früh als veraltet und „auf keinem Server aktiv" wird zurückgehalten.
+                </p>
+                <h3 id="scheduled-tasks-control">20.4 Steuerung aus der WebUI</h3>
+                <p>
+                    Jeder angemeldete Benutzer kann Tasks steuern; jede Aktion wird bestätigt und im Verlauf
+                    (<code>scheduled-task-actions.json</code>) mit Benutzer, Server und Ergebnis festgehalten.
+                    <strong>„Hier exklusiv aktiv"</strong> prüft zuerst den Zielserver, deaktiviert dann die Task auf allen anderen
+                    Servern der Gruppe und aktiviert sie erst danach auf dem Ziel – schlägt eine Deaktivierung fehl, bleibt das Ziel
+                    unverändert. Ist die Anmeldung an der WebUI abgeschaltet, ist die Steuerung gesperrt.
+                </p>
+                <h3 id="scheduled-tasks-rights">20.5 Voraussetzungen &amp; Rechte</h3>
+                <ul>
+                    <li><strong>Worker:</strong> lokaler Administrator bzw. SYSTEM (sonst sind nicht alle Tasks sichtbar), mindestens „Ereignisprotokollleser" für das Aufgabenprotokoll.</li>
+                    <li><strong>Aufgabenverlauf</strong> muss auf den Servern aktiviert sein (Aufgabenplanung → „Verlauf aller Aufgaben aktivieren").</li>
+                    <li><strong>WebUI-Dienstkonto:</strong> steuert direkt per PowerShell/CIM über DCOM (kein WinRM). Auf den Zielservern werden RPC/DCOM (Firewall-Regelgruppen „Remoteverwaltung geplanter Aufgaben" und „Windows-Verwaltungsinstrumentation (WMI)") sowie lokale Administratorrechte benötigt.</li>
                 </ul>
             </section>
 

@@ -393,6 +393,191 @@
                 </div>
             </div>
 
+            <!-- Scheduled Tasks -->
+            @{
+                var stf = Model.Features.ScheduledTasks;
+            }
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-calendar2-check me-2"></i>Geplante Tasks
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-4">
+                            <div class="col-lg-4">
+                                <div class="form-check form-switch mb-3">
+                                    <input type="checkbox" name="Features.ScheduledTasks.Enabled" value="true"
+                                           class="form-check-input feature-toggle" id="scheduledTasksEnabled"
+                                           @(stf.Enabled ? "checked" : "") />
+                                    <input type="hidden" name="Features.ScheduledTasks.Enabled" value="false" />
+                                    <label class="form-check-label" for="scheduledTasksEnabled">
+                                        <strong class="toggle-status">@(stf.Enabled ? "Aktiv" : "Deaktiviert")</strong>
+                                    </label>
+                                </div>
+                                <p class="text-muted small mb-0">
+                                    Überwacht Tasks der Windows-Aufgabenplanung: fehlgeschlagene, zu lange und verpasste Läufe
+                                    sowie Fehlerereignisse. Tasks im Modus „Nur auf einem Server aktiv“ werden über alle Server
+                                    einer Umgebung geprüft. Welche Tasks überwacht werden, legen Sie pro Server unter
+                                    <em>Server → Bearbeiten</em> fest; gesteuert wird auf der Seite <em>Geplante Tasks</em>.
+                                </p>
+                            </div>
+                            <div class="col-lg-8">
+                                <h6>Standardwerte</h6>
+                                <div class="row g-2">
+                                    <div class="col-sm-6 col-xl-4">
+                                        <label class="form-label small mb-1">Max. Laufzeit (min, 0 = aus)</label>
+                                        <input type="number" name="Features.ScheduledTasks.Defaults.MaxRuntimeMinutes"
+                                               value="@stf.Defaults.MaxRuntimeMinutes" class="form-control form-control-sm" min="0" />
+                                    </div>
+                                    <div class="col-sm-6 col-xl-4">
+                                        <label class="form-label small mb-1">Toleranz verpasster Lauf (min)</label>
+                                        <input type="number" name="Features.ScheduledTasks.Defaults.MissedRunGraceMinutes"
+                                               value="@stf.Defaults.MissedRunGraceMinutes" class="form-control form-control-sm" min="0" />
+                                    </div>
+                                    <div class="col-sm-12 col-xl-4">
+                                        <label class="form-label small mb-1">Weitere Erfolgs-Codes</label>
+                                        <input type="text" name="ScheduledTaskAllowedResultCodes"
+                                               value="@Model.ScheduledTaskAllowedResultCodes" class="form-control form-control-sm font-monospace"
+                                               placeholder="z. B. 1, 0x41306" />
+                                    </div>
+                                    <div class="col-sm-6 col-xl-3">
+                                        <label class="form-label small mb-1">Ereignis-Zeitfenster (min)</label>
+                                        <input type="number" name="Features.ScheduledTasks.Defaults.EventTimeWindowMinutes"
+                                               value="@stf.Defaults.EventTimeWindowMinutes" class="form-control form-control-sm" min="1" max="1440" />
+                                    </div>
+                                    <div class="col-sm-6 col-xl-3">
+                                        <label class="form-label small mb-1">Warning ab (Ereignisse)</label>
+                                        <input type="number" name="Features.ScheduledTasks.Defaults.EventWarningCount"
+                                               value="@stf.Defaults.EventWarningCount" class="form-control form-control-sm" min="1" />
+                                    </div>
+                                    <div class="col-sm-6 col-xl-3">
+                                        <label class="form-label small mb-1">Critical ab (Ereignisse)</label>
+                                        <input type="number" name="Features.ScheduledTasks.Defaults.EventCriticalCount"
+                                               value="@stf.Defaults.EventCriticalCount" class="form-control form-control-sm" min="1" />
+                                    </div>
+                                    <div class="col-sm-6 col-xl-3">
+                                        <label class="form-label small mb-1">Max. gemeldete Ereignisse</label>
+                                        <input type="number" name="Features.ScheduledTasks.Defaults.MaxReportedEvents"
+                                               value="@stf.Defaults.MaxReportedEvents" class="form-control form-control-sm" min="1" />
+                                    </div>
+                                </div>
+                                <div class="form-text">0 und die Hinweis-Codes der Aufgabenplanung (z. B. „läuft gerade“) gelten immer als Erfolg.</div>
+                            </div>
+                        </div>
+
+                        <hr />
+                        <h6><i class="bi bi-eye-slash me-1"></i>Ignorier-Regeln für Ereignisse der Aufgabenplanung</h6>
+                        <p class="text-muted small mb-2">
+                            Ereignisse, die einer Regel entsprechen, zählen nicht in die Schwellwerte. Eine Regel greift, wenn
+                            <strong>alle</strong> gesetzten Kriterien zutreffen; ohne Task-Pfad, Event-ID und Meldungstext ist sie
+                            wirkungslos und wird beim Speichern verworfen. <strong>Server</strong> leer = alle Server, sonst Namen
+                            kommagetrennt (Wildcards wie <code>web0*</code> erlaubt). Nach dem Ablaufdatum greift die Regel nicht mehr.
+                        </p>
+                        <div id="stIgnoreRulesBody">
+                            @for (var ri = 0; ri < stf.IgnoreRules.Count; ri++)
+                            {
+                                var r = stf.IgnoreRules[ri];
+                                <div class="st-ignore-rule-row border rounded p-2 mb-2">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-4">
+                                            <label class="form-label small mb-0">Task-Pfad (Wildcard)</label>
+                                            <input type="text" name="Features.ScheduledTasks.IgnoreRules[@ri].TaskPath" value="@r.TaskPath"
+                                                   class="form-control form-control-sm font-monospace" placeholder="\Minicon\Export" />
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small mb-0">Event-IDs</label>
+                                            <input type="text" name="Features.ScheduledTasks.IgnoreRules[@ri].EventIdsText" value="@r.EventIdsText"
+                                                   class="form-control form-control-sm font-monospace" placeholder="101, 203" />
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small mb-0">Meldung enthält</label>
+                                            <input type="text" name="Features.ScheduledTasks.IgnoreRules[@ri].MessageContains" value="@r.MessageContains"
+                                                   class="form-control form-control-sm" placeholder="(optional)" />
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small mb-0">Server</label>
+                                            <input type="text" name="Features.ScheduledTasks.IgnoreRules[@ri].ServersText" value="@r.ServersText"
+                                                   class="form-control form-control-sm font-monospace" placeholder="alle" />
+                                        </div>
+                                        <div class="col-md-5">
+                                            <label class="form-label small mb-0">Grund</label>
+                                            <input type="text" name="Features.ScheduledTasks.IgnoreRules[@ri].Reason" value="@r.Reason"
+                                                   class="form-control form-control-sm" placeholder="Warum wird das ignoriert?" />
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small mb-0">Läuft ab (optional, Ortszeit Browser)</label>
+                                            @* The visible field works in browser time; the hidden field carries UTC (filled by script). *@
+                                            <input type="datetime-local" class="form-control form-control-sm" data-utc-input
+                                                   title="@(r.ExpiresAt.HasValue ? Display.LocalTime(r.ExpiresAt.Value) + " (Server-Zeit)" : null)" />
+                                            <input type="hidden" name="Features.ScheduledTasks.IgnoreRules[@ri].ExpiresAt"
+                                                   value="@(r.ExpiresAt.HasValue ? Display.Iso(r.ExpiresAt.Value) : null)" data-utc-value />
+                                        </div>
+                                        <div class="col-md-3 small text-muted text-wrap-anywhere">
+                                            @if (!string.IsNullOrWhiteSpace(r.CreatedBy))
+                                            {
+                                                <span><i class="bi bi-person me-1"></i>@r.CreatedBy</span>
+                                            }
+                                            <input type="hidden" name="Features.ScheduledTasks.IgnoreRules[@ri].CreatedBy" value="@r.CreatedBy" />
+                                        </div>
+                                        <div class="col-md-1 text-end">
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-remove-st-rule" title="Regel entfernen" aria-label="Regel entfernen">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnAddStIgnoreRule">
+                            <i class="bi bi-plus-lg me-1"></i>Regel hinzufügen
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <template id="stIgnoreRuleTemplate">
+                <div class="st-ignore-rule-row border rounded p-2 mb-2">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-0">Task-Pfad (Wildcard)</label>
+                            <input type="text" name="Features.ScheduledTasks.IgnoreRules[__IDX__].TaskPath"
+                                   class="form-control form-control-sm font-monospace" placeholder="\Minicon\Export" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-0">Event-IDs</label>
+                            <input type="text" name="Features.ScheduledTasks.IgnoreRules[__IDX__].EventIdsText"
+                                   class="form-control form-control-sm font-monospace" placeholder="101, 203" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0">Meldung enthält</label>
+                            <input type="text" name="Features.ScheduledTasks.IgnoreRules[__IDX__].MessageContains"
+                                   class="form-control form-control-sm" placeholder="(optional)" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0">Server</label>
+                            <input type="text" name="Features.ScheduledTasks.IgnoreRules[__IDX__].ServersText"
+                                   class="form-control form-control-sm font-monospace" placeholder="alle" />
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label small mb-0">Grund</label>
+                            <input type="text" name="Features.ScheduledTasks.IgnoreRules[__IDX__].Reason"
+                                   class="form-control form-control-sm" placeholder="Warum wird das ignoriert?" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-0">Läuft ab (optional, Ortszeit Browser)</label>
+                            <input type="datetime-local" class="form-control form-control-sm" data-utc-input />
+                            <input type="hidden" name="Features.ScheduledTasks.IgnoreRules[__IDX__].ExpiresAt" data-utc-value />
+                        </div>
+                        <div class="col-md-3"></div>
+                        <div class="col-md-1 text-end">
+                            <button type="button" class="btn btn-sm btn-outline-danger btn-remove-st-rule" title="Regel entfernen" aria-label="Regel entfernen">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
             <!-- Notifications (central notifier) -->
             <div class="col-lg-12 col-xl-8 mb-4">
                 <div class="card h-100">
@@ -685,6 +870,53 @@
             if (!btn) return;
             btn.closest('tr.ignore-rule-row')?.remove();
             reindexRules();
+        });
+    })();
+
+    // Geplante Tasks: Ignorier-Regeln hinzufügen/entfernen mit Neu-Indexierung
+    (function () {
+        var body = document.getElementById('stIgnoreRulesBody');
+        var template = document.getElementById('stIgnoreRuleTemplate');
+        if (!body || !template) return;
+
+        function reindex() {
+            body.querySelectorAll('.st-ignore-rule-row').forEach(function (row, idx) {
+                row.querySelectorAll('[name]').forEach(function (input) {
+                    input.name = input.name.replace(/IgnoreRules\[\d+\]/, 'IgnoreRules[' + idx + ']');
+                });
+            });
+        }
+
+        document.getElementById('btnAddStIgnoreRule')?.addEventListener('click', function () {
+            var idx = body.querySelectorAll('.st-ignore-rule-row').length;
+            body.insertAdjacentHTML('beforeend', template.innerHTML.replace(/__IDX__/g, idx));
+            initUtcFields(body);
+        });
+
+        // Expiry: the datetime-local field shows browser time, the hidden field posts UTC (ISO 8601).
+        function pad(n) { return String(n).padStart(2, '0'); }
+        function initUtcFields(root) {
+            root.querySelectorAll('[data-utc-input]').forEach(function (input) {
+                var hidden = input.parentElement.querySelector('[data-utc-value]');
+                if (!hidden || input.dataset.bound) return;
+                input.dataset.bound = '1';
+                if (hidden.value) {
+                    var d = new Date(hidden.value);
+                    if (!isNaN(d)) input.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+                }
+                input.addEventListener('change', function () {
+                    var d = input.value ? new Date(input.value) : null;
+                    hidden.value = d && !isNaN(d) ? d.toISOString() : '';
+                });
+            });
+        }
+        initUtcFields(body);
+
+        body.addEventListener('click', function (e) {
+            var btn = e.target.closest('.btn-remove-st-rule');
+            if (!btn) return;
+            btn.closest('.st-ignore-rule-row')?.remove();
+            reindex();
         });
     })();
 

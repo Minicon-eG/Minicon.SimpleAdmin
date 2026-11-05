@@ -11,6 +11,7 @@ using Minicon.SimpleAdmin.Checkers;
 using Minicon.SimpleAdmin.Services;
 using Minicon.SimpleAdmin.WebUI.Hosting;
 using Minicon.SimpleAdmin.WebUI.Services;
+using Minicon.SimpleAdmin.WebUI.Services.ScheduledTasks;
 using Minicon.SimpleAdmin.WebUI.Services.Scripts;
 
 namespace Minicon.SimpleAdmin.WebUI;
@@ -89,7 +90,8 @@ public static class SimpleAdminWebUIExtensions
                 sp.GetRequiredService<IAcknowledgeService>(),
                 sp.GetRequiredService<ConfigurationService>(),
                 sp.GetRequiredService<ILogger<StatusReaderService>>(),
-                sp.GetRequiredService<IHttpClientFactory>().CreateClient(StatusHttpClientName)));
+                sp.GetRequiredService<IHttpClientFactory>().CreateClient(StatusHttpClientName),
+                ResolveConfigDirectory(configuration)));
 
         // Register AcknowledgeService - store acknowledges alongside config.json
         var acknowledgeDirectory = ResolveConfigDirectory(configuration);
@@ -97,6 +99,7 @@ public static class SimpleAdminWebUIExtensions
             new AcknowledgeService(acknowledgeDirectory, sp.GetRequiredService<ILogger<AcknowledgeService>>()));
 
         AddScriptRunner(services, configuration, ResolveConfigDirectory(configuration));
+        AddScheduledTaskControl(services, configuration, ResolveConfigDirectory(configuration));
 
         // Release notes ("Neuigkeiten") from the embedded CHANGELOG.md.
         services.AddSingleton<ChangelogProvider>();
@@ -179,6 +182,23 @@ public static class SimpleAdminWebUIExtensions
             sp.GetRequiredService<ScriptPathPolicy>(),
             logDirectory,
             sp.GetRequiredService<ILogger<ScriptRunService>>()));
+    }
+
+    /// <summary>
+    /// Remote control of Windows Scheduled Tasks (enable/disable/run/end, "activate exclusively"), executed
+    /// directly on the target server by the WebUI process; audit log in &lt;ConfigPath&gt;/scheduled-task-actions.json.
+    /// Switched off automatically while authentication is disabled (see <see cref="ScheduledTaskControlOptions.Resolve"/>).
+    /// </summary>
+    private static void AddScheduledTaskControl(IServiceCollection services, IConfiguration configuration, string configDirectory)
+    {
+        var options = ScheduledTaskControlOptions.Resolve(configuration, IsAuthenticationEnabled(configuration));
+        var auditDirectory = Path.GetFullPath(string.IsNullOrWhiteSpace(options.AuditLogDirectory)
+            ? configDirectory
+            : options.AuditLogDirectory);
+
+        services.AddSingleton(options);
+        services.AddSingleton<IScheduledTaskControl>(sp => new ScheduledTaskControlService(
+            options, auditDirectory, sp.GetRequiredService<ILogger<ScheduledTaskControlService>>()));
     }
 
     /// <summary>
@@ -292,6 +312,17 @@ public static class SimpleAdminWebUIExtensions
         {
             app.Logger.LogInformation("SimpleAdmin WebUI: PowerShell script runner is OFF — {Reason}", scriptRunner.DisabledReason);
         }
+
+        var taskControl = app.Services.GetRequiredService<ScheduledTaskControlOptions>();
+        if (!taskControl.ControlEnabled)
+            app.Logger.LogInformation("SimpleAdmin WebUI: scheduled task control is OFF — {Reason}", taskControl.DisabledReason);
+        else if (!IsAuthenticationEnabled(app.Configuration))
+            app.Logger.LogWarning(
+                "SimpleAdmin WebUI: scheduled task control is enabled while authentication is DISABLED (ScheduledTasks:AllowWithoutAuthentication) — anyone reaching the WebUI can enable, disable, start and stop tasks on the monitored servers.");
+        else
+            app.Logger.LogInformation(
+                "SimpleAdmin WebUI: scheduled task control is ENABLED — every authenticated user may enable, disable, start and stop scheduled tasks on the monitored servers (executed as {Account}, audit log: {File}).",
+                $"{Environment.UserDomainName}\\{Environment.UserName}", ScheduledTaskControlOptions.AuditFileName);
 
         app.MapControllerRoute(
             name: "default",

@@ -27,6 +27,26 @@ internal static class Display
 
     public static string LocalShort(DateTime value) => AsUtc(value).ToLocalTime().ToString("dd.MM. HH:mm", German);
 
+    /// <summary>
+    /// Link target from config data (wiki/runbook URLs): only absolute http(s), <c>mailto:</c> and relative paths
+    /// pass; everything else (<c>javascript:</c>, <c>data:</c>, <c>file:</c>, UNC, protocol-relative <c>//host</c>, …)
+    /// yields null — the views then show the value as plain text instead of a link.
+    /// </summary>
+    public static string? SafeHref(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        var value = url.Trim();
+        var schemeEnd = value.IndexOf(':');
+        var pathStart = value.IndexOfAny(new[] { '/', '?', '#' });
+        var hasScheme = schemeEnd >= 0 && (pathStart < 0 || schemeEnd < pathStart);
+        if (hasScheme)
+            return value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                   || value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                   || value.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ? value : null;
+        // Protocol-relative ("//host", "/\host", "\\host") would leave the site.
+        return value.StartsWith("//") || value.StartsWith("/\\") || value.StartsWith("\\") ? null : value;
+    }
+
     /// <summary>Compact duration incl. days, e.g. "2 T 3 h", "3 h 12 min", "12 min", "&lt; 1 min".</summary>
     public static string Duration(TimeSpan span)
     {

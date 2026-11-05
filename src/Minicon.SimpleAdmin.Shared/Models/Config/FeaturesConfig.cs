@@ -51,6 +51,14 @@ public class FeaturesConfig
     public FileMonitoringFeatureConfig FileMonitoring { get; set; } = new();
 
     /// <summary>
+    /// Windows Scheduled Task monitoring feature (state, last result, runtime, missed runs,
+    /// Task Scheduler events, cross-server single-active check)
+    /// </summary>
+    /// <remarks>An explicit <c>null</c> in config.json yields the default (feature off) instead of a null block.</remarks>
+    public ScheduledTaskFeatureConfig ScheduledTasks { get => _scheduledTasks; set => _scheduledTasks = value ?? new(); }
+    private ScheduledTaskFeatureConfig _scheduledTasks = new();
+
+    /// <summary>
     /// Central notification feature (worker --notify mode): aggregates all servers and sends
     /// summary e-mails for unacknowledged problems with acknowledge deep-links.
     /// </summary>

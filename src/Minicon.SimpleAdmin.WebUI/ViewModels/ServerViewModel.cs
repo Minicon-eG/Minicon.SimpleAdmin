@@ -85,6 +85,9 @@ public class ServerChecksViewModel
     [Display(Name = "Datei-/Protokollüberwachung")]
     public FileMonitoringChecksViewModel FileMonitoring { get; set; } = new();
 
+    [Display(Name = "Geplante Tasks")]
+    public ScheduledTaskChecksViewModel ScheduledTasks { get; set; } = new();
+
     public ServerChecksConfig? ToServerChecksConfig(ServerChecksConfig? original = null)
     {
         var serviceConfigs = Services
@@ -98,6 +101,7 @@ public class ServerChecksViewModel
         var certConfig = Certificates.ToCertificateChecksConfig();
         var biztalkConfig = BizTalk.ToServerBizTalkConfig(original?.BizTalk);
         var fileMonConfig = FileMonitoring.ToServerFileMonitoringConfig();
+        var scheduledTasksConfig = ScheduledTasks.ToServerScheduledTasksConfig();
 
         var servicesConfig = new ServerServicesConfig { Enabled = ServicesEnabled, Checks = serviceConfigs };
 
@@ -105,6 +109,7 @@ public class ServerChecksViewModel
         if (!AppPools.Enabled && !EventLogEnabled && !ServicesEnabled && serviceConfigs.Count == 0
             && sqlConfig == null && emailProbesConfig == null && emailDeliveryConfig == null
             && certConfig == null && biztalkConfig == null && fileMonConfig == null
+            && scheduledTasksConfig == null
             && original?.Cpu == null && original?.Memory == null
             && (original?.Disks == null || original.Disks.Count == 0))
         {
@@ -130,6 +135,7 @@ public class ServerChecksViewModel
             Certificates = certConfig,
             BizTalk = biztalkConfig,
             FileMonitoring = fileMonConfig,
+            ScheduledTasks = scheduledTasksConfig,
             // Pass through fields not managed by the UI
             Cpu = original?.Cpu,
             Memory = original?.Memory,
@@ -157,7 +163,8 @@ public class ServerChecksViewModel
             EmailDelivery = EmailDeliveryViewModel.FromServerEmailDeliveryConfig(config.EmailDelivery),
             Certificates = CertificateChecksViewModel.FromCertificateChecksConfig(config.Certificates),
             BizTalk = BizTalkChecksViewModel.FromServerBizTalkConfig(config.BizTalk),
-            FileMonitoring = FileMonitoringChecksViewModel.FromServerFileMonitoringConfig(config.FileMonitoring)
+            FileMonitoring = FileMonitoringChecksViewModel.FromServerFileMonitoringConfig(config.FileMonitoring),
+            ScheduledTasks = ScheduledTaskChecksViewModel.FromServerScheduledTasksConfig(config.ScheduledTasks)
         };
     }
 }

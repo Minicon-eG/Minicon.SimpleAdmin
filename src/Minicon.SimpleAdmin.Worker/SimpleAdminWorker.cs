@@ -40,6 +40,7 @@ public class SimpleAdminWorker
     private readonly ICertificateChecker _certificateChecker;
     private readonly IBizTalkChecker _bizTalkChecker;
     private readonly IFileMonitoringChecker _fileMonitoringChecker;
+    private readonly IScheduledTaskChecker _scheduledTaskChecker;
     private readonly SqlQueryChecker _sqlQueryChecker;
     private readonly IEmailProbeSender _emailProbeSender;
     private readonly IEmailDeliveryChecker _emailDeliveryChecker;
@@ -62,6 +63,7 @@ public class SimpleAdminWorker
         ICertificateChecker certificateChecker,
         IBizTalkChecker bizTalkChecker,
         IFileMonitoringChecker fileMonitoringChecker,
+        IScheduledTaskChecker scheduledTaskChecker,
         SqlQueryChecker sqlQueryChecker,
         IEmailProbeSender emailProbeSender,
         IEmailDeliveryChecker emailDeliveryChecker,
@@ -83,6 +85,7 @@ public class SimpleAdminWorker
         _certificateChecker = certificateChecker;
         _bizTalkChecker = bizTalkChecker;
         _fileMonitoringChecker = fileMonitoringChecker;
+        _scheduledTaskChecker = scheduledTaskChecker;
         _sqlQueryChecker = sqlQueryChecker;
         _emailProbeSender = emailProbeSender;
         _emailDeliveryChecker = emailDeliveryChecker;
@@ -148,7 +151,7 @@ public class SimpleAdminWorker
         var encryptionKey = _configuration["Encryption:ConnectionStringKey"] ?? "";
 
         // Run all optional checkers in parallel
-        _logger.LogInformation("  - Running checkers in parallel (AppPools, Services, EventLog, SqlQueries, EmailProbes, EmailDelivery), then metrics");
+        _logger.LogInformation("  - Running checkers in parallel (AppPools, Services, EventLog, SqlQueries, EmailProbes, EmailDelivery, ScheduledTasks), then metrics");
 
         // Load previous status from the first service type's JSON for state carry-forward
         RuntimeStatus? previousStatus = null;
@@ -167,6 +170,11 @@ public class SimpleAdminWorker
         // Load previous email states for ConsecutiveFailures carry-forward (status smoothing)
         var previousEmailProbeStates = previousStatus?.EmailProbes;
         var previousEmailDeliveryStates = previousStatus?.EmailDelivery;
+
+        // Load previous scheduled task state so the NumberOfMissedRuns counter can be compared. Like the other
+        // carry-forwards it comes from the status file of ServiceTypes[0]: the checker runs once per server and
+        // the same state is written into every service type's file, so the first one is representative.
+        var previousScheduledTaskState = previousStatus?.ScheduledTasks;
 
         var overallSw = Stopwatch.StartNew();
 
@@ -222,9 +230,16 @@ public class SimpleAdminWorker
             ? TrackAsync("FileMonitoring", () => _fileMonitoringChecker.CheckAsync(fileMonCfg, features.FileMonitoring.Defaults))!
             : Task.FromResult<FileMonitoringState?>(null);
 
+        var scheduledTaskCfg = currentServer.Checks?.ScheduledTasks;
+        // Central ignore rules: pre-filter by server scope (empty servers list = all servers)
+        var scheduledTaskIgnoreRules = ScheduledTaskChecker.RulesForServer(features.ScheduledTasks.IgnoreRules, currentHostname);
+        var scheduledTaskTask = features.ScheduledTasks.Enabled && scheduledTaskCfg?.Enabled == true && scheduledTaskCfg.Tasks.Count > 0
+            ? TrackAsync<ScheduledTaskState?>("ScheduledTasks", async () => await _scheduledTaskChecker.CheckAsync(scheduledTaskCfg, features.ScheduledTasks.Defaults, scheduledTaskIgnoreRules, previousScheduledTaskState))
+            : Task.FromResult<ScheduledTaskState?>(null);
+
         try
         {
-            await Task.WhenAll(appPoolTask, serviceTask, eventLogTask, sqlTask, emailProbeTask, emailDeliveryTask, certificateTask, bizTalkTask, fileMonitoringTask);
+            await Task.WhenAll(appPoolTask, serviceTask, eventLogTask, sqlTask, emailProbeTask, emailDeliveryTask, certificateTask, bizTalkTask, fileMonitoringTask, scheduledTaskTask);
         }
         catch
         {
@@ -324,6 +339,16 @@ public class SimpleAdminWorker
         }
         catch (Exception ex) { _logger.LogError(ex, "Error checking file monitoring"); }
 
+        ScheduledTaskState? scheduledTaskState = null;
+        try
+        {
+            scheduledTaskState = await scheduledTaskTask;
+            if (scheduledTaskState != null)
+                _logger.LogInformation("    ScheduledTasks: {Count} task(s), queryFailed={QueryFailed}, {Events} event(s), Status: {Status}",
+                    scheduledTaskState.Tasks.Count, scheduledTaskState.QueryFailed, scheduledTaskState.EventCount, scheduledTaskState.EventStatus);
+        }
+        catch (Exception ex) { _logger.LogError(ex, "Error checking scheduled tasks"); }
+
         Dictionary<string, List<Metric>> metricsByServiceType;
         try { metricsByServiceType = await metricsTask; _logger.LogInformation("    Metrics: collected for {Count} service type(s)", metricsByServiceType.Count); }
         catch (Exception ex) { _logger.LogError(ex, "Error collecting metrics"); metricsByServiceType = new Dictionary<string, List<Metric>>(StringComparer.OrdinalIgnoreCase); }
@@ -376,6 +401,7 @@ public class SimpleAdminWorker
                     certificateStates,
                     bizTalkState,
                     fileMonitoringState,
+                    scheduledTaskState,
                     activeAcknowledges,
                     collectedMetrics ?? new List<Metric>());
             }
@@ -550,6 +576,7 @@ public class SimpleAdminWorker
         Dictionary<string, CertificateState>? certificateStates,
         BizTalkState? bizTalkState,
         FileMonitoringState? fileMonitoringState,
+        ScheduledTaskState? scheduledTaskState,
         IReadOnlyCollection<Acknowledge> activeAcknowledges,
         List<Metric> metrics)
     {
@@ -602,7 +629,8 @@ public class SimpleAdminWorker
             emailDeliveryStates,
             certificateStates,
             bizTalkState,
-            fileMonitoringState);
+            fileMonitoringState,
+            scheduledTaskState);
         var problemsSince = ProblemDerivationService.TrackFirstSeen(activeProblems, existingStatus?.ProblemsSince, timestamp);
         var overallStatus = _statusEvaluator.DetermineOverallStatusWithAcknowledges(metrics, activeProblems);
 
@@ -648,6 +676,7 @@ public class SimpleAdminWorker
             Certificates = certificateStates,
             BizTalk = bizTalkState,
             FileMonitoring = fileMonitoringState,
+            ScheduledTasks = scheduledTaskState,
             ProblemsSince = problemsSince.Count > 0 ? problemsSince : null
         };
 

@@ -23,7 +23,8 @@ public static class ProblemDerivationService
         Dictionary<string, EmailDeliveryCheckState>? emailDelivery = null,
         Dictionary<string, CertificateState>? certificates = null,
         BizTalkState? bizTalk = null,
-        FileMonitoringState? fileMonitoring = null)
+        FileMonitoringState? fileMonitoring = null,
+        ScheduledTaskState? scheduledTasks = null)
     {
         var problems = new List<ActiveProblem>();
 
@@ -234,6 +235,87 @@ public static class ProblemDerivationService
             }
         }
 
+        // Derive problems from scheduled tasks (per server; the cross-server single-active check is
+        // ScheduledTaskGroupEvaluator's job because it needs the snapshots of all servers)
+        if (scheduledTasks != null)
+        {
+            problems.AddRange(DeriveScheduledTaskProblems(scheduledTasks));
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// Maps the evaluation flags the worker's ScheduledTaskChecker set onto problems. A failed query yields
+    /// only the query error — the task list is then empty or outdated.
+    /// </summary>
+    internal static List<ActiveProblem> DeriveScheduledTaskProblems(ScheduledTaskState state)
+    {
+        var problems = new List<ActiveProblem>();
+        if (state.QueryFailed)
+        {
+            problems.Add(ActiveProblem.ScheduledTaskQueryError(string.IsNullOrWhiteSpace(state.Error) ? "unbekannt" : state.Error));
+            return problems;
+        }
+
+        // A watch pattern without hits usually means a typo or a renamed/deleted task.
+        foreach (var (pattern, count) in state.PatternMatches.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (count == 0)
+                problems.Add(ActiveProblem.ScheduledTaskPatternNoMatch(pattern));
+        }
+
+        foreach (var task in state.Tasks)
+        {
+            if (!string.IsNullOrWhiteSpace(task.InfoError))
+            {
+                var infoProblem = ActiveProblem.ScheduledTaskInfoUnavailable(task.Path, task.InfoError);
+                infoProblem.WikiUrl = task.WikiUrl;
+                infoProblem.RemediationSteps = task.RemediationSteps;
+                problems.Add(infoProblem);
+            }
+
+            if (task.LastRunFailed)
+            {
+                problems.Add(ActiveProblem.ScheduledTaskFailed(
+                    task.Path, task.LastTaskResult, task.LastRunTime, task.FailureIsCritical,
+                    task.WikiUrl, task.RemediationSteps));
+            }
+
+            if (task.RuntimeExceeded)
+            {
+                // Unknown start → "läuft länger als erlaubt" instead of an invented duration.
+                double? runningMinutes = task.RunningSince.HasValue
+                    ? Math.Max(0, (state.LastChecked - task.RunningSince.Value).TotalMinutes)
+                    : null;
+                problems.Add(ActiveProblem.ScheduledTaskRuntimeExceeded(
+                    task.Path, runningMinutes, task.MaxRuntimeMinutes, task.WikiUrl, task.RemediationSteps));
+            }
+
+            if (task.MissedRun)
+            {
+                problems.Add(ActiveProblem.ScheduledTaskMissedRun(
+                    task.Path, task.NextRunTime, task.LastRunTime, task.WikiUrl, task.RemediationSteps));
+            }
+        }
+
+        // Without readable Task Scheduler events failed runs could go unnoticed — say so instead of staying silent.
+        if (state.EventLogDisabled)
+        {
+            problems.Add(ActiveProblem.ScheduledTaskEventsUnavailable(ScheduledTaskState.EventLogDisabledReason));
+        }
+        else if (!string.IsNullOrWhiteSpace(state.EventError))
+        {
+            problems.Add(ActiveProblem.ScheduledTaskEventsUnavailable($"Aufgabenverlauf konnte nicht gelesen werden – {state.EventError}"));
+        }
+
+        if (state.EventStatus >= StateMetricStatus.Warning)
+        {
+            var sample = state.RecentEvents.FirstOrDefault(e => !string.IsNullOrEmpty(e.TaskPath))?.TaskPath;
+            problems.Add(ActiveProblem.ScheduledTaskEvents(
+                state.EventCount, sample, state.EventStatus == StateMetricStatus.Critical));
+        }
+
         return problems;
     }
 
@@ -275,9 +357,10 @@ public static class ProblemDerivationService
         Dictionary<string, EmailDeliveryCheckState>? emailDelivery = null,
         Dictionary<string, CertificateState>? certificates = null,
         BizTalkState? bizTalk = null,
-        FileMonitoringState? fileMonitoring = null)
+        FileMonitoringState? fileMonitoring = null,
+        ScheduledTaskState? scheduledTasks = null)
     {
-        var problems = DeriveProblems(metrics, appPools, services, eventLogs, sqlQueryChecks, emailProbes, emailDelivery, certificates, bizTalk, fileMonitoring);
+        var problems = DeriveProblems(metrics, appPools, services, eventLogs, sqlQueryChecks, emailProbes, emailDelivery, certificates, bizTalk, fileMonitoring, scheduledTasks);
 
         if (acknowledges != null)
         {

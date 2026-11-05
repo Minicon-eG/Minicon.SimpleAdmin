@@ -653,6 +653,185 @@ public class ActiveProblem
             Context = new Dictionary<string, object> { ["label"] = label, ["error"] = error }
         };
 
+    /// <summary>Creates a problem for a scheduled task whose last run returned an error code.</summary>
+    public static ActiveProblem ScheduledTaskFailed(
+        string taskPath, int? resultCode, DateTime? lastRunTime, bool isCritical,
+        string? wikiUrl = null, List<string>? remediationSteps = null)
+        => new()
+        {
+            Id = CreateId("schtask", Slug(taskPath), "failed"),
+            Type = "schtask",
+            Source = "ScheduledTasks",
+            Severity = isCritical ? ProblemSeverity.Critical : ProblemSeverity.Warning,
+            Message = resultCode.HasValue
+                ? $"Geplante Task '{taskPath}': letzter Lauf fehlgeschlagen (Ergebnis 0x{resultCode.Value:X8})"
+                : $"Geplante Task '{taskPath}': letzter Lauf fehlgeschlagen (Ergebnis unbekannt)",
+            WikiUrl = wikiUrl,
+            RemediationSteps = remediationSteps ?? new List<string>(),
+            Context = new Dictionary<string, object>
+            {
+                ["taskPath"] = taskPath,
+                ["resultCode"] = resultCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                ["lastRunTime"] = lastRunTime?.ToString("o") ?? string.Empty
+            }
+        };
+
+    /// <summary>Creates a problem for a scheduled task that has been running longer than allowed.</summary>
+    public static ActiveProblem ScheduledTaskRuntimeExceeded(
+        string taskPath, double? runningMinutes, int maxRuntimeMinutes,
+        string? wikiUrl = null, List<string>? remediationSteps = null)
+        => new()
+        {
+            Id = CreateId("schtask", Slug(taskPath), "runtime"),
+            Type = "schtask",
+            Source = "ScheduledTasks",
+            Severity = ProblemSeverity.Warning,
+            Message = runningMinutes.HasValue
+                ? $"Geplante Task '{taskPath}' läuft seit {FormatMinutes(runningMinutes.Value)} (erlaubt {maxRuntimeMinutes} min)"
+                : $"Geplante Task '{taskPath}' läuft länger als erlaubt ({maxRuntimeMinutes} min)",
+            WikiUrl = wikiUrl,
+            RemediationSteps = remediationSteps ?? new List<string>(),
+            Context = new Dictionary<string, object>
+            {
+                ["taskPath"] = taskPath,
+                ["runningMinutes"] = runningMinutes?.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                ["maxRuntimeMinutes"] = maxRuntimeMinutes
+            }
+        };
+
+    /// <summary>
+    /// Creates a problem for a scheduled task that missed its scheduled run. <paramref name="expectedRunTime"/>
+    /// (UTC) only goes into the context — the message stays time-zone neutral. Null when the miss was detected
+    /// via the NumberOfMissedRuns counter.
+    /// </summary>
+    public static ActiveProblem ScheduledTaskMissedRun(
+        string taskPath, DateTime? expectedRunTime, DateTime? lastRunTime,
+        string? wikiUrl = null, List<string>? remediationSteps = null)
+        => new()
+        {
+            Id = CreateId("schtask", Slug(taskPath), "missed"),
+            Type = "schtask",
+            Source = "ScheduledTasks",
+            Severity = ProblemSeverity.Warning,
+            Message = $"Geplante Task '{taskPath}': geplanter Lauf wurde nicht ausgeführt",
+            WikiUrl = wikiUrl,
+            RemediationSteps = remediationSteps ?? new List<string>(),
+            Context = new Dictionary<string, object>
+            {
+                ["taskPath"] = taskPath,
+                ["expectedRunTime"] = expectedRunTime?.ToString("o") ?? string.Empty,
+                ["lastRunTime"] = lastRunTime?.ToString("o") ?? string.Empty
+            }
+        };
+
+    /// <summary>Creates a problem for Task Scheduler error events of the watched tasks.</summary>
+    public static ActiveProblem ScheduledTaskEvents(int eventCount, string? sampleTaskPath, bool isCritical)
+        => new()
+        {
+            Id = CreateId("schtask", "events", isCritical ? "critical" : "warning"),
+            Type = "schtask",
+            Source = "ScheduledTasks",
+            Severity = isCritical ? ProblemSeverity.Critical : ProblemSeverity.Warning,
+            Message = $"Aufgabenplanung: {eventCount} Fehler-Ereignisse" +
+                      (string.IsNullOrEmpty(sampleTaskPath) ? string.Empty : $" (u. a. '{sampleTaskPath}')"),
+            Context = new Dictionary<string, object> { ["eventCount"] = eventCount }
+        };
+
+    /// <summary>Creates a problem when the scheduled tasks of a server could not be queried.</summary>
+    public static ActiveProblem ScheduledTaskQueryError(string error)
+        => new()
+        {
+            Id = CreateId("schtask", "query", "error"),
+            Type = "schtask",
+            Source = "ScheduledTasks",
+            Severity = ProblemSeverity.Warning,
+            Message = $"Geplante Tasks konnten nicht abgefragt werden — {error}",
+            Context = new Dictionary<string, object> { ["error"] = error }
+        };
+
+    /// <summary>
+    /// Creates the cross-server problem "single-active task is enabled on no server" of an environment.
+    /// Anchored to one server of the group (see ScheduledTaskGroupEvaluator); the message names all servers.
+    /// </summary>
+    public static ActiveProblem ScheduledTaskNoneActive(string environment, string taskPath, IReadOnlyList<string> servers)
+        => new()
+        {
+            Id = CreateId("schtask", $"{Slug(environment)}_{Slug(taskPath)}", "noneactive"),
+            Type = "schtask",
+            Source = "ScheduledTasks",
+            Severity = ProblemSeverity.Critical,
+            Message = $"Geplante Task '{taskPath}' ist auf keinem Server aktiv ({string.Join(", ", servers)})",
+            Context = new Dictionary<string, object>
+            {
+                ["environment"] = environment,
+                ["taskPath"] = taskPath,
+                ["servers"] = string.Join(",", servers)
+            }
+        };
+
+    /// <summary>Creates the cross-server problem "single-active task is enabled on several servers".</summary>
+    public static ActiveProblem ScheduledTaskMultipleActive(string environment, string taskPath, IReadOnlyList<string> activeServers)
+        => new()
+        {
+            Id = CreateId("schtask", $"{Slug(environment)}_{Slug(taskPath)}", "multiactive"),
+            Type = "schtask",
+            Source = "ScheduledTasks",
+            Severity = ProblemSeverity.Critical,
+            Message = $"Geplante Task '{taskPath}' ist auf {activeServers.Count} Servern aktiv ({string.Join(", ", activeServers)}) — erlaubt ist genau einer",
+            Context = new Dictionary<string, object>
+            {
+                ["environment"] = environment,
+                ["taskPath"] = taskPath,
+                ["activeServers"] = string.Join(",", activeServers)
+            }
+        };
+
+    /// <summary>
+    /// Creates a problem when Task Scheduler error events cannot be evaluated: the history
+    /// (TaskScheduler/Operational) is disabled/missing (<see cref="ScheduledTaskState.EventLogDisabledReason"/>)
+    /// or reading it failed. Warning by default — failed runs would otherwise go unnoticed silently.
+    /// </summary>
+    public static ActiveProblem ScheduledTaskEventsUnavailable(string reason, bool isWarning = true)
+        => new()
+        {
+            Id = CreateId("schtask", "events", "unavailable"),
+            Type = "schtask",
+            Source = "ScheduledTasks",
+            Severity = isWarning ? ProblemSeverity.Warning : ProblemSeverity.Info,
+            Message = $"Geplante Tasks: {reason}",
+            Context = new Dictionary<string, object> { ["reason"] = reason }
+        };
+
+    /// <summary>Creates a problem for a watch pattern that selects no task (typo, renamed or deleted task).</summary>
+    public static ActiveProblem ScheduledTaskPatternNoMatch(string pattern)
+        => new()
+        {
+            Id = CreateId("schtask", $"pattern_{Slug(pattern)}", "nomatch"),
+            Type = "schtask",
+            Source = "ScheduledTasks",
+            Severity = ProblemSeverity.Warning,
+            Message = $"Geplante Tasks: Muster '{pattern}' trifft keine Task",
+            Context = new Dictionary<string, object> { ["pattern"] = pattern }
+        };
+
+    /// <summary>
+    /// Creates a problem when Get-ScheduledTaskInfo failed for a watched task: its last result, next run and
+    /// missed runs are unknown, so failures of this task cannot be detected.
+    /// </summary>
+    public static ActiveProblem ScheduledTaskInfoUnavailable(string taskPath, string error)
+        => new()
+        {
+            Id = CreateId("schtask", Slug(taskPath), "infoerror"),
+            Type = "schtask",
+            Source = "ScheduledTasks",
+            Severity = ProblemSeverity.Warning,
+            Message = $"Geplante Task '{taskPath}': Laufzeitinformationen nicht lesbar — {error}",
+            Context = new Dictionary<string, object> { ["taskPath"] = taskPath, ["error"] = error }
+        };
+
+    private static string FormatMinutes(double minutes)
+        => minutes >= 120 ? $"{minutes / 60.0:N1} h" : $"{minutes:N0} min";
+
     /// <summary>Reduces an arbitrary label to an ID-safe token (ASCII letters/digits, others to underscore).</summary>
     private static string Slug(string value)
         => string.IsNullOrEmpty(value)

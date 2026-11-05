@@ -138,5 +138,8 @@
 
         <!-- File / Log Monitoring -->
         @await Html.PartialAsync("_FileMonitoringChecksPartial", Model.Checks)
+
+        <!-- Scheduled Tasks -->
+        @await Html.PartialAsync("_ScheduledTaskChecksPartial", Model.Checks)
     </div>
 </div>

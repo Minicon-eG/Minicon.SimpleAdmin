@@ -101,6 +101,9 @@ public static class SimpleAdminWorkerHost
         services.AddSingleton<IFileSystemAccess, FileSystemAccess>();
         services.AddSingleton<IFileMonitoringChecker, FileShareChecker>();
 
+        // Register Windows Scheduled Task checker
+        services.AddSingleton<IScheduledTaskChecker, ScheduledTaskChecker>();
+
         // Register SQL Query checker (pass encryption key if configured)
         services.AddSingleton<ISqlQueryExecutor>(sp =>
             new DefaultSqlQueryExecutor(sp.GetRequiredService<ILogger<DefaultSqlQueryExecutor>>()));

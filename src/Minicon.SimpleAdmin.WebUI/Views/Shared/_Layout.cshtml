@@ -79,6 +79,15 @@
                                   title="Offene (nicht quittierte) Probleme"></span>
                         </a>
                     </li>
+                    @if (ConfigService.IsLoaded && ConfigService.GetFeatures().ScheduledTasks.Enabled)
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ScheduledTasks" ? "active" : "")"
+                               asp-controller="ScheduledTasks" asp-action="Index">
+                                <i class="bi bi-calendar2-check me-1"></i>Geplante Tasks
+                            </a>
+                        </li>
+                    }
                     @if (ScriptRunnerOptions.Enabled)
                     {
                         <li class="nav-item">

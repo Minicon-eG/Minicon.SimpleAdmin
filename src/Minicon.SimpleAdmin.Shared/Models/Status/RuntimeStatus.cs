@@ -93,6 +93,11 @@ public class RuntimeStatus
     public FileMonitoringState? FileMonitoring { get; set; }
 
     /// <summary>
+    /// Gets or sets the Windows Scheduled Task monitoring state for this server (null if not enabled)
+    /// </summary>
+    public ScheduledTaskState? ScheduledTasks { get; set; }
+
+    /// <summary>
     /// Gets or sets when each currently active problem was first observed (problem ID -> UTC).
     /// Carried forward by the worker every cycle; resolved problems drop out (null if none).
     /// </summary>

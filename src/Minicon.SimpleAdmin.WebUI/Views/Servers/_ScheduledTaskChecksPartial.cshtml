@@ -1,0 +1,164 @@
+@using Minicon.SimpleAdmin.Models.Config
+@using Minicon.SimpleAdmin.WebUI.ViewModels
+@model ServerChecksViewModel
+@{
+    var st = Model?.ScheduledTasks ?? new ScheduledTaskChecksViewModel();
+
+    async Task WatchRow(string idx, ScheduledTaskWatchRowViewModel? t)
+    {
+        var p = $"Checks.ScheduledTasks.Tasks[{idx}]";
+        var mode = t?.Mode ?? ScheduledTaskMode.SingleActive;
+        <div class="st-watch-item border rounded p-2 mb-2" data-watch-index="@idx">
+            <div class="row g-2">
+                <div class="col-md-5">
+                    <label class="form-label small mb-0">Task-Muster (Pfad, Wildcards * und ?)</label>
+                    <input type="text" name="@(p).Pattern" value="@(t?.Pattern)" class="form-control form-control-sm font-monospace" placeholder="\Minicon\*" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-0">Ausschließen (kommagetrennt)</label>
+                    <input type="text" name="@(p).ExcludePatterns" value="@(t?.ExcludePatterns)" class="form-control form-control-sm font-monospace" placeholder="\Minicon\Test*" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Aktiv auf</label>
+                    <select name="@(p).Mode" class="form-select form-select-sm">
+                        <option value="@ScheduledTaskMode.SingleActive" selected="@(mode == ScheduledTaskMode.SingleActive)">Nur auf einem Server aktiv</option>
+                        <option value="@ScheduledTaskMode.AllServers" selected="@(mode == ScheduledTaskMode.AllServers)">Auf allen Servern</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Max. Laufzeit (min, 0 = aus)</label>
+                    <input type="number" min="0" name="@(p).MaxRuntimeMinutes" value="@(t?.MaxRuntimeMinutes)" class="form-control form-control-sm" placeholder="(Standard)" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Toleranz verpasster Lauf (min)</label>
+                    <input type="number" min="0" name="@(p).MissedRunGraceMinutes" value="@(t?.MissedRunGraceMinutes)" class="form-control form-control-sm" placeholder="(Standard)" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-0">Weitere Erfolgs-Codes (z. B. <code>1, 0x41306</code>)</label>
+                    <input type="text" name="@(p).AllowedResultCodes" value="@(t?.AllowedResultCodes)" class="form-control form-control-sm font-monospace" placeholder="0 ist immer Erfolg" />
+                </div>
+                <div class="col-md-6 d-flex flex-wrap align-items-end gap-3">
+                    <div class="form-check">
+                        <input type="checkbox" name="@(p).CheckMissedRun" value="true" class="form-check-input" id="@(p)_missed" @(t?.CheckMissedRun != false ? "checked" : "") />
+                        <input type="hidden" name="@(p).CheckMissedRun" value="false" />
+                        <label class="form-check-label small" for="@(p)_missed">Verpasste Läufe melden</label>
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" name="@(p).FailureIsCritical" value="true" class="form-check-input" id="@(p)_crit" @(t?.FailureIsCritical != false ? "checked" : "") />
+                        <input type="hidden" name="@(p).FailureIsCritical" value="false" />
+                        <label class="form-check-label small" for="@(p)_crit">Fehlgeschlagener Lauf ist kritisch</label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-0">Wiki-/Lösungs-Link</label>
+                    <input type="text" name="@(p).WikiUrl" value="@(t?.WikiUrl)" class="form-control form-control-sm" placeholder="https://wiki.intern/tasks/export" />
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label small mb-0">Nachbearbeitung (eine Zeile pro Schritt)</label>
+                    <textarea name="@(p).RemediationSteps" class="form-control form-control-sm" rows="2" placeholder="Protokoll der Task prüfen&#10;Task über „Geplante Tasks“ erneut starten">@(t?.RemediationSteps)</textarea>
+                </div>
+            </div>
+            <div class="text-end mt-1">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeStWatch(this)">
+                    <i class="bi bi-trash"></i> Muster entfernen
+                </button>
+            </div>
+        </div>
+    }
+}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-calendar2-check me-2"></i>Geplante Tasks</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
+                data-bs-target="#scheduledTasksHelp" aria-expanded="false">
+            <i class="bi bi-question-circle me-1"></i>Hilfe
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="collapse mb-3" id="scheduledTasksHelp">
+            <div class="card card-body">
+                <h6><i class="bi bi-info-circle me-1"></i>Was wird überwacht?</h6>
+                <p class="mb-2">
+                    Jedes <strong>Task-Muster</strong> wählt Tasks der Windows-Aufgabenplanung über ihren vollständigen Pfad aus
+                    (z. B. <code>\Minicon\*</code> oder <code>\Export*</code>). Gemeldet werden fehlgeschlagene Läufe,
+                    überschrittene Laufzeiten und verpasste Läufe. Tasks unter <code>\Microsoft\</code> werden nur erfasst,
+                    wenn das Muster selbst mit <code>\Microsoft\</code> beginnt.
+                </p>
+                <p class="mb-2">
+                    <strong>Nur auf einem Server aktiv</strong>: Die Task darf in der Umgebung auf genau einem Server
+                    aktiviert sein (z. B. ein Export, der nicht doppelt laufen darf). Ist sie auf mehreren oder auf keinem
+                    Server aktiv, wird das gemeldet. <strong>Auf allen Servern</strong>: keine solche Prüfung.
+                </p>
+                <p class="mb-0">
+                    Leere Felder übernehmen die Standardwerte aus <em>Einstellungen → Feature-Toggles → Geplante Tasks</em>
+                    (dort auch der globale Schalter). Gesteuert werden die Tasks auf der Seite <em>Geplante Tasks</em>.
+                </p>
+            </div>
+        </div>
+
+        <div class="form-check form-switch mb-2">
+            <input type="checkbox" name="Checks.ScheduledTasks.Enabled" value="true"
+                   class="form-check-input" id="scheduledTasksEnabled" @(st.Enabled ? "checked" : "") />
+            <label class="form-check-label" for="scheduledTasksEnabled"><strong>Überwachung geplanter Tasks aktivieren</strong></label>
+        </div>
+
+        <div id="scheduledTasksConfig" style="@(st.Enabled ? "" : "display:none;")">
+            <div class="form-check mb-3">
+                <input type="checkbox" name="Checks.ScheduledTasks.CheckEvents" value="true"
+                       class="form-check-input" id="scheduledTasksCheckEvents" @(st.CheckEvents ? "checked" : "") />
+                <input type="hidden" name="Checks.ScheduledTasks.CheckEvents" value="false" />
+                <label class="form-check-label" for="scheduledTasksCheckEvents">
+                    Fehlerereignisse der Aufgabenplanung auswerten
+                    <span class="text-body-secondary small">(Ereignisprotokoll <code>TaskScheduler/Operational</code>)</span>
+                </label>
+            </div>
+
+            <h6 class="mt-2"><i class="bi bi-funnel me-1"></i>Überwachte Tasks</h6>
+            <div id="stWatchList">
+                @for (var i = 0; i < st.Tasks.Count; i++)
+                {
+                    await WatchRow(i.ToString(), st.Tasks[i]);
+                }
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addStWatch()">
+                <i class="bi bi-plus-circle me-1"></i>Task-Muster hinzufügen
+            </button>
+            <div class="form-text">Zeilen ohne Task-Muster werden beim Speichern verworfen.</div>
+        </div>
+    </div>
+</div>
+
+<template id="stWatchRowTemplate">
+    @{ await WatchRow("__INDEX__", null); }
+</template>
+
+<script>
+    document.getElementById('scheduledTasksEnabled')?.addEventListener('change', function () {
+        document.getElementById('scheduledTasksConfig').style.display = this.checked ? '' : 'none';
+        if (this.checked && document.querySelectorAll('#stWatchList .st-watch-item').length === 0) addStWatch();
+    });
+
+    function addStWatch() {
+        var list = document.getElementById('stWatchList');
+        var idx = list.querySelectorAll('.st-watch-item').length;
+        var html = document.getElementById('stWatchRowTemplate').innerHTML.replaceAll('__INDEX__', idx);
+        list.insertAdjacentHTML('beforeend', html);
+    }
+
+    function removeStWatch(btn) {
+        btn.closest('.st-watch-item').remove();
+        var re = /Checks\.ScheduledTasks\.Tasks\[\d+\]/g;
+        document.getElementById('stWatchList').querySelectorAll('.st-watch-item').forEach(function (item, i) {
+            item.querySelectorAll('[name]').forEach(function (el) {
+                el.name = el.name.replace(re, 'Checks.ScheduledTasks.Tasks[' + i + ']');
+            });
+            item.querySelectorAll('[id]').forEach(function (el) {
+                el.id = el.id.replace(re, 'Checks.ScheduledTasks.Tasks[' + i + ']');
+            });
+            item.querySelectorAll('label[for]').forEach(function (el) {
+                el.htmlFor = el.htmlFor.replace(re, 'Checks.ScheduledTasks.Tasks[' + i + ']');
+            });
+        });
+    }
+</script>

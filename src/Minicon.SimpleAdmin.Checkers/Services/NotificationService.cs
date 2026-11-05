@@ -89,7 +89,7 @@ public sealed class NotificationService(
         var reportDue = IsStatusReportDue(notif.StatusReport, now, retryAfter, ownState, peerStates, TimeZoneInfo.Local);
 
         // The status report always lists unreachable/stale servers, even when notifyOnStaleServer is off.
-        var (problems, polledServers) = await CollectProblemsAsync(
+        var (problems, polledServers, pendingKeys, unknownTaskParticipants) = await CollectProblemsAsync(
             config, notif, acknowledges, now, includeStale: notif.NotifyOnStaleServer || reportDue, cancellationToken);
 
         // 3. Scope filter: unacknowledged and at/above the configured minimum severity.
@@ -101,6 +101,21 @@ public sealed class NotificationService(
         // Set of server-scoped problem IDs that are currently open — drives reminders/pruning.
         var openProblemIds = new HashSet<string>(candidates.Select(p => GetStateKey(p.ServerId, p.Problem.Id)), StringComparer.OrdinalIgnoreCase);
 
+        // Pending scheduled task group problems (undecidable while a server is unknown) count as open for the
+        // all-clear and pruning — no false "Behoben" and no lost entry — but are never sent or reminded.
+        var heldOpen = new HashSet<string>(openProblemIds, StringComparer.OrdinalIgnoreCase);
+        heldOpen.UnionWith(pendingKeys);
+        // Also when no group can be built at all (every member unknown): hold own group entries of environments
+        // with unknown participants — unless the problem was derived (decided) in this cycle, e.g. acknowledged.
+        var derivedKeys = new HashSet<string>(problems.Select(p => GetStateKey(p.ServerId, p.Problem.Id)), StringComparer.OrdinalIgnoreCase);
+        foreach (var (storedKey, entry) in ownState.Entries)
+        {
+            var problemId = GetProblemId(storedKey, entry);
+            var key = GetStateKey(entry.ServerId, problemId);
+            if (!derivedKeys.Contains(key) && ScheduledTaskGroupEvaluator.IsHeldByUnknownParticipants(problemId, unknownTaskParticipants))
+                heldOpen.Add(key);
+        }
+
         // 4b. Due decision per problem.
         var reNotify = TimeSpan.FromHours(Math.Max(1, notif.ReNotifyIntervalHours));
 
@@ -111,7 +126,7 @@ public sealed class NotificationService(
 
         // 5. Determine all-clear candidates: previously notified, no longer open, not yet cleared by anyone.
         var resolved = notif.SendResolvedNotice
-            ? FindResolvedEntries(ownState, peerStates, openProblemIds)
+            ? FindResolvedEntries(ownState, peerStates, heldOpen)
             : new List<(string ServerId, NotifyEntry Entry, string ProblemId)>();
 
         var mailsSent = 0;
@@ -127,7 +142,7 @@ public sealed class NotificationService(
         }
 
         // 6. Prune state entries that are no longer open and have been cleared (or clearing disabled).
-        PruneState(ownState, openProblemIds, notif.SendResolvedNotice);
+        PruneState(ownState, heldOpen, notif.SendResolvedNotice);
         ownState.GeneratedBy = instanceId;
         ownState.GeneratedAt = now;
         await SaveAndPublishStateAsync(localPath, ownState, cancellationToken);
@@ -137,7 +152,11 @@ public sealed class NotificationService(
 
     // --- problem collection -------------------------------------------------
 
-    private async Task<(List<(string ServerId, ActiveProblem Problem)> Problems, List<string> PolledServers)> CollectProblemsAsync(
+    private async Task<(
+        List<(string ServerId, ActiveProblem Problem)> Problems,
+        List<string> PolledServers,
+        HashSet<string> PendingKeys,
+        Dictionary<string, IReadOnlyList<string>> UnknownTaskParticipants)> CollectProblemsAsync(
         Config config,
         NotificationsFeatureConfig notif,
         List<Acknowledge> acknowledges,
@@ -149,6 +168,14 @@ public sealed class NotificationService(
         var collected = new List<(string ServerId, ActiveProblem Problem)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // serverId|problemId
         var polled = new List<string>();
+        // Statuses of all reachable sources for the cross-server single-active check of scheduled tasks — also the
+        // ones older than the notifier's stale threshold: whether a server is unknown is decided only by
+        // SnapshotsFromStatuses with GetStaleAfter (same rule as WebUI/HTML). Unreachable sources and servers
+        // without baseUrl contribute nothing and therefore count as unknown.
+        var taskStatuses = new List<RuntimeStatus>();
+        var pendingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // anchor|problemId
+        var unknownTaskParticipants = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var lastUpdateByServer = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (serverName, url) in BuildStatusSources(config, notif))
         {
@@ -164,6 +191,15 @@ public sealed class NotificationService(
                 continue;
             }
 
+            foreach (var status in central.Statuses)
+            {
+                if (string.IsNullOrEmpty(status.Server))
+                    status.Server = serverName;
+                if (!lastUpdateByServer.TryGetValue(status.Server, out var lastUpdate) || status.LastUpdate > lastUpdate)
+                    lastUpdateByServer[status.Server] = status.LastUpdate;
+                taskStatuses.Add(status);
+            }
+
             var age = now - central.GeneratedAt;
             if (age > staleThreshold)
             {
@@ -174,10 +210,13 @@ public sealed class NotificationService(
 
             foreach (var status in central.Statuses)
             {
-                var serverId = string.IsNullOrEmpty(status.Server) ? serverName : status.Server;
+                var serverId = status.Server; // filled above
+
                 // Central ignore rules: an event ignored in the central WebUI must not be mailed.
                 var eventLogConfig = config.Features?.EventLog;
                 EventLogIgnoreMatcher.ApplyCentral(status.EventLogs, serverId, eventLogConfig?.IgnoreRules, eventLogConfig?.Defaults, now);
+                var taskConfig = config.Features?.ScheduledTasks;
+                ScheduledTaskIgnoreMatcher.ApplyCentral(status.ScheduledTasks, serverId, taskConfig?.IgnoreRules, taskConfig?.Defaults, now);
                 var derived = ProblemDerivationService.DeriveProblems(
                     status.Metrics ?? new List<Metric>(),
                     status.AppPools,
@@ -188,12 +227,41 @@ public sealed class NotificationService(
                     status.EmailDelivery,
                     status.Certificates,
                     status.BizTalk,
-                    status.FileMonitoring);
+                    status.FileMonitoring,
+                    status.ScheduledTasks);
                 ProblemDerivationService.ApplyOccurrences(derived, status.ProblemsSince, status.LastUpdate);
 
                 foreach (var problem in derived)
                     AddProblem(collected, seen, serverId, problem);
             }
+        }
+
+        // Cross-server single-active check of scheduled tasks — same snapshot and staleness rule as the WebUI.
+        // The problems belong to the group's anchor server (acknowledged there). The worker cannot track their
+        // start, so the notifier keeps its own first-seen file next to notify-state.json.
+        if (config.GetEffectiveFeatures().ScheduledTasks.Enabled)
+        {
+            var snapshots = ScheduledTaskGroupEvaluator.SnapshotsFromStatuses(taskStatuses, now, ScheduledTaskGroupEvaluator.GetStaleAfter(config));
+            var groups = ScheduledTaskGroupEvaluator.BuildGroups(config, snapshots);
+            unknownTaskParticipants = ScheduledTaskGroupEvaluator.UnknownParticipantsByEnvironment(config, snapshots);
+            var groupProblems = ScheduledTaskGroupEvaluator.DeriveGroupProblems(groups)
+                .SelectMany(kv => kv.Value.Select(p => (Anchor: kv.Key, Problem: p)))
+                .ToList();
+            var pending = ScheduledTaskGroupEvaluator.DerivePendingGroupProblemIds(groups)
+                .SelectMany(kv => kv.Value.Select(id => (Anchor: kv.Key, Id: id)))
+                .ToList();
+            foreach (var (anchor, id) in pending)
+                pendingKeys.Add(GetStateKey(anchor, id));
+            var sinceStore = new ScheduledTaskGroupSinceStore(Path.GetDirectoryName(Path.GetFullPath(ResolveLocalStatePath(notif))), logger);
+            var heldIds = pending.Select(p => p.Id)
+                .Concat(sinceStore.TrackedIds().Where(id => ScheduledTaskGroupEvaluator.IsHeldByUnknownParticipants(id, unknownTaskParticipants)));
+            sinceStore.Track(
+                groupProblems.Select(g => (g.Problem, lastUpdateByServer.TryGetValue(g.Anchor, out var lu) ? lu : now)).ToList(),
+                now,
+                ScheduledTaskGroupEvaluator.GetStaleAfter(config),
+                heldIds.ToList());
+            foreach (var (anchor, problem) in groupProblems)
+                AddProblem(collected, seen, anchor, problem);
         }
 
         // Apply acknowledges per server group (sets Acknowledged + AcknowledgeId).
@@ -203,7 +271,7 @@ public sealed class NotificationService(
                 group.Select(g => g.Problem).ToList(), acknowledges, group.Key);
         }
 
-        return (collected, polled);
+        return (collected, polled, pendingKeys, unknownTaskParticipants);
     }
 
     private static bool IsServerStale(ActiveProblem problem)

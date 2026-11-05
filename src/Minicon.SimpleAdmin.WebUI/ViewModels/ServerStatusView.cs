@@ -21,6 +21,13 @@ public class ServerStatusView
     public Dictionary<string, CertificateState>? Certificates { get; set; }
     public BizTalkState? BizTalk { get; set; }
     public FileMonitoringState? FileMonitoring { get; set; }
+    public ScheduledTaskState? ScheduledTasks { get; set; }
+
+    /// <summary>
+    /// True when the server has no status at all and is only shown because it is the anchor of scheduled task
+    /// group problems (anchor = first participant of the environment from config.json).
+    /// </summary>
+    public bool IsTaskGroupAnchorPlaceholder { get; set; }
     public List<ActiveProblem> ActiveProblems { get; set; } = new();
     public List<RuntimeStatus> Services { get; set; } = new();
     public string? BaseUrl { get; set; }

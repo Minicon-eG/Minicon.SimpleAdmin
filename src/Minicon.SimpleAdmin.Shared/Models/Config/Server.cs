@@ -120,6 +120,11 @@ public class ServerChecksConfig
     /// File-share / log monitoring configuration (stuck files + log error signatures)
     /// </summary>
     public ServerFileMonitoringConfig? FileMonitoring { get; set; }
+
+    /// <summary>
+    /// Windows Scheduled Task checks (null = disabled)
+    /// </summary>
+    public ServerScheduledTasksConfig? ScheduledTasks { get; set; }
 }
 
 /// <summary>

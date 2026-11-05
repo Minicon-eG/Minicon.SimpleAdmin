@@ -132,6 +132,7 @@
                             <li><a href="#email-monitoring">E-Mail-Monitoring</a></li>
                             <li><a href="#biztalk">BizTalk-Überwachung</a></li>
                             <li><a href="#filemonitoring">Datei-/Protokollüberwachung</a></li>
+                            <li><a href="#scheduledtasks">Geplante Tasks</a></li>
                         </ul>
                     </li>
                     <li><a href="#monitoring-badges">Monitoring-Badges</a></li>
@@ -1632,6 +1633,75 @@ $.version != deprecated</code></pre>
                     Mit <em>Betriebszeiten</em> (z.B. <code>Mon-Fri 06:00-22:00</code>) wird außerhalb des Fensters nicht
                     geprüft. Das Tool meldet nur — es verschiebt/löscht keine Dateien.
                 </div>
+            </section>
+
+            <!-- Geplante Tasks -->
+            <section id="scheduledtasks" class="doc-section">
+                <h2><i class="bi bi-calendar2-check me-2"></i>Geplante Tasks</h2>
+                <p>
+                    SimpleAdmin überwacht ausgewählte Tasks der <strong>Windows-Aufgabenplanung</strong> und macht sie über die
+                    Seite <em>Geplante Tasks</em> steuerbar – für diese Tasks muss die Aufgabenplanung (<code>taskschd.msc</code>)
+                    nicht mehr geöffnet werden.
+                </p>
+                <h4>Was überwacht wird</h4>
+                <ul>
+                    <li><strong>Zustand</strong> jeder Task (aktiv, deaktiviert, läuft gerade) mit letztem und nächstem Lauf.</li>
+                    <li><strong>Letztes Ergebnis</strong> als Code (z.&nbsp;B. <code>0x0</code>) mit Klartext für bekannte Codes. Ein
+                        fehlgeschlagener Lauf wird als Problem gemeldet.</li>
+                    <li><strong>Laufzeit</strong>: Läuft eine Task länger als erlaubt, erscheint eine Warnung.</li>
+                    <li><strong>Verpasste Läufe</strong>: Ist der geplante Zeitpunkt deutlich überschritten, ohne dass die Task lief.
+                        Ein verpasster Lauf verschwindet nach 24 Stunden wieder aus den Problemen.</li>
+                    <li><strong>Fehlerereignisse</strong> der Aufgabenplanung (z.&nbsp;B. „Start fehlgeschlagen“) im Ereignisprotokoll.</li>
+                </ul>
+                <p>
+                    Welche Tasks überwacht werden, legen Sie pro Server unter <em>Server → Bearbeiten → Geplante Tasks</em> über
+                    Task-Muster fest (z.&nbsp;B. <code>\Minicon\*</code>). Der globale Schalter und die Standardwerte liegen unter
+                    <em>Einstellungen → Feature-Toggles → Geplante Tasks</em>.
+                </p>
+                <h4>„Nur auf einem Server aktiv“</h4>
+                <p>
+                    Manche Tasks dürfen innerhalb einer Umgebung nur auf <strong>genau einem</strong> Server laufen – etwa ein
+                    Export, der sonst doppelt erzeugt würde. Für solche Tasks prüft SimpleAdmin über alle Server der Umgebung:
+                </p>
+                <ul>
+                    <li><strong>Auf mehreren Servern aktiv</strong> → Problem „mehrfach aktiv“, die Zeile ist rot markiert.</li>
+                    <li><strong>Auf keinem Server aktiv</strong> → Problem „nirgends aktiv“, die Task läuft gar nicht.</li>
+                    <li>Liefert ein Server gerade keine Daten, steht er als <em>unbekannt</em> in der Übersicht. Solange das so ist,
+                        wird „nirgends aktiv“ nicht gemeldet, weil die Task dort aktiv sein könnte.</li>
+                </ul>
+                <p>
+                    Die Meldungen „auf mehreren Servern aktiv“ und „auf keinem Server aktiv“ erscheinen immer bei einem festen
+                    Server der Umgebung – dem alphabetisch ersten überwachten – und werden dort quittiert, auch wenn dieser
+                    Server die Task selbst nicht hat. Welche Server betroffen sind, steht in der Meldung.
+                </p>
+                <p>Tasks im Modus <strong>„Auf allen Servern“</strong> dürfen überall aktiv sein und werden nur einzeln geprüft.</p>
+                <h4>Steuerung</h4>
+                <p>
+                    Auf der Seite <em>Geplante Tasks</em> zeigt eine Übersicht je Umgebung alle Tasks und Server. In jeder Zelle
+                    können angemeldete Benutzer die Task <strong>aktivieren</strong>, <strong>deaktivieren</strong>,
+                    <strong>starten</strong> oder eine laufende Ausführung <strong>beenden</strong>; jede Aktion wird vorher
+                    bestätigt. Mit <strong>„Hier exklusiv aktiv“</strong> wählen Sie den Server, auf dem die Task laufen soll:
+                    SimpleAdmin deaktiviert sie zuerst auf allen anderen Servern und aktiviert sie erst danach auf dem gewählten.
+                    Klappt das Deaktivieren irgendwo nicht, bleibt der gewählte Server unverändert – die Task läuft so nie doppelt.
+                </p>
+                <p>
+                    Nach einer Aktion zeigt der Dialog das Ergebnis je Server. Die betroffenen Zellen werden sofort mit dem
+                    <strong>Live-Stand</strong> vom Server aktualisiert (blau hervorgehoben). Die übrigen Angaben stammen vom
+                    <strong>Stand Worker</strong> und folgen mit dem nächsten Prüfzyklus. Alle Aktionen stehen mit Benutzer, Zeit und
+                    Ergebnis im <em>Verlauf der Aktionen</em> unten auf der Seite.
+                </p>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Ist die Anmeldung an der Oberfläche abgeschaltet, ist die Steuerung gesperrt; die Seite zeigt dann den Grund an.
+                    Die Anzeige bleibt verfügbar.
+                </div>
+                <h4>Ereignisse ignorieren</h4>
+                <p>
+                    Bekannte, harmlose Fehlerereignisse lassen sich in der Server-Detailansicht direkt über
+                    <strong>„Ignorieren“</strong> ausblenden – für 1, 7, 30 oder 90 Tage, bis zu einem Datum oder dauerhaft, immer mit
+                    Begründung. Die Regel gilt nur für diesen Server und wird unter <em>Einstellungen → Feature-Toggles → Geplante
+                    Tasks</em> verwaltet. Ignorierte Ereignisse werden weiterhin gezählt und ausgewiesen.
+                </p>
             </section>
 
             <!-- Benachrichtigungen / Notifier -->
