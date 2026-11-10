@@ -9,6 +9,14 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
+## [2.37.1] – 2026-11-10 – Technische Korrekturen
+
+### Entwickler
+- Die Quellcode- und Testextraktion akzeptiert jetzt Leerraum um die Werte von `SimpleAdminExtractSources` und `SimpleAdminExtractTests`.
+- Bei eingeschalteter Testextraktion nennt der Host-Build fehlende Voraussetzungen und konkrete Abhilfe: deaktivierte Quellcode-Extraktion, fehlende Worker-Testquellen oder fehlende WebUI-Quellen. Die Erfolgsmeldung nennt den vollständigen Pfad der Testprojektdatei.
+- Diagnosemeldungen erscheinen höchstens einmal je Projekt-Build; unveränderte Folgebuilds bleiben ruhig. Explizit gemeinsam konfigurierte Quellordner verursachen beim ersten Build keine falsche Warnung wegen der noch ausstehenden WebUI-Extraktion.
+- README und Integrationshinweise erläutern Paketversion, Worker-Opt-in, Build-Assets, Restore und den gemeinsamen Quellordner für ausführbare extrahierte Tests.
+
 ## [2.37.0] – 2026-11-05 – Geplante Tasks überwachen und steuern
 
 **SimpleAdmin überwacht jetzt geplante Windows-Tasks, warnt, wenn eine Task auf mehreren oder auf keinem Server aktiv ist, und schaltet Tasks auf Knopfdruck.**
@@ -354,6 +362,7 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.37.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.0...v2.37.1
 [2.37.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.1...v2.37.0
 [2.36.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.0...v2.36.1
 [2.36.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.35.0...v2.36.0

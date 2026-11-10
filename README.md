@@ -151,10 +151,37 @@ host's compilation — the host keeps using the package DLLs until you switch to
 </PropertyGroup>
 ```
 
-The test project references all packages including the WebUI, so the worker host and
-the WebUI host must extract into the **same** folder (e.g.
-`<SimpleAdminSourcesDirectory>..\SimpleAdmin.Sources</SimpleAdminSourcesDirectory>` in
-both). Run it with `dotnet test` on the extracted `*.Tests` project (requires the .NET SDK).
+Das Testprojekt benötigt die Quellen aller Pakete einschließlich WebUI. Worker- und
+WebUI-Host müssen für `dotnet test` denselben Ordner verwenden, beispielsweise in
+einer gemeinsamen `Directory.Build.props` neben der Solution:
+
+```xml
+<Project>
+  <PropertyGroup>
+    <SimpleAdminExtractTests>true</SimpleAdminExtractTests>
+    <SimpleAdminSourcesDirectory>$(MSBuildThisFileDirectory)SimpleAdmin.Sources</SimpleAdminSourcesDirectory>
+  </PropertyGroup>
+</Project>
+```
+
+**Fehlersuche: Testprojekt entsteht nicht**
+
+- Nur `Minicon.SimpleAdmin.Worker` ab **2.36.0** liefert Testquellen. Tatsächlich
+  aufgelöste Worker-Version prüfen, bei Bedarf anheben und Restore ausführen.
+- `SimpleAdminExtractTests=true` gehört in den **Worker-Host** oder gemeinsame
+  `Directory.Build.props`; nur im WebUI-Host genügt es nicht. Leerraum um `true` ist erlaubt.
+- Asset-Filter (`ExcludeAssets`/`IncludeAssets`, besonders `buildTransitive`) am
+  Paketverweis und `SimpleAdminExtractSources=false` prüfen. Entscheidend ist, ob
+  `obj/*.nuget.g.targets` die Paket-Targets importiert; `ExcludeAssets="build"`
+  allein schaltet `buildTransitive` nicht zuverlässig ab.
+- Nur ein echter Build entpackt: Restore, Design-Time-Build und `publish --no-build`
+  genügen nicht; nach einer Versionsanhebung zuerst Restore, kein direktes `--no-restore`.
+- Ohne gemeinsamen Ordner liegt das Projekt relativ zum **Worker-Host-Projekt** unter
+  `SimpleAdmin.Sources/Minicon.SimpleAdmin.Tests/`. `SimpleAdminSourcesDirectory`
+  ändert den Ort, `SimpleAdminSourcesNamespace` den Namen zu `<Namespace>.Tests`.
+  Die Erfolgsmeldung nennt den vollständigen Projektpfad. Erst nach dem Build beider
+  Hosts im gemeinsamen Ordner `dotnet test <Pfad>/<Prefix>.Tests.csproj`
+  (`<Prefix>` ist standardmäßig `Minicon.SimpleAdmin`, sonst der gesetzte Namespace) ausführen.
 
 To switch extraction off, set `<SimpleAdminExtractSources>false</SimpleAdminExtractSources>`.
 

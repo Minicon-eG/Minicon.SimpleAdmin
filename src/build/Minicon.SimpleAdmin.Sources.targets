@@ -21,6 +21,9 @@
           <Zielordner>/Minicon.SimpleAdmin.Tests/. Es referenziert alle Pakete, auch die
           WebUI - Worker- und WebUI-Host muessen dafuer denselben
           SimpleAdminSourcesDirectory verwenden (z. B. ..\SimpleAdmin.Sources).
+          Entsteht kein Testprojekt oder ist es nicht lauffaehig, nennt das Target
+          SimpleAdminExtractTestsDiagnose (unten) den Grund - hoechstens einmal je
+          Projekt-Build.
 
     Entpackt wird nur, wenn sich Paketversion oder Namespace geaendert haben
     (Marker-Datei); lokale Aenderungen an den entpackten Dateien werden dann
@@ -28,13 +31,26 @@
 
     Mehrere Pakete importieren diese Datei unter verschiedenen Namen. Jede Kopie
     registriert ihr Paket als Item; das (gleichnamige, identische) Target
-    verarbeitet alle Items per Batching.
+    verarbeitet alle Items per Batching. Was je Projekt-Build nur einmal
+    erscheinen darf (Diagnose zum Testprojekt), steht deshalb in einem eigenen
+    Target ohne Batching.
   -->
 
+  <!-- Leerraum um die Schalter (" true ", Zeilenumbruch im Element) darf sie nicht still abschalten. -->
   <PropertyGroup>
-    <SimpleAdminExtractSources Condition="'$(SimpleAdminExtractSources)' == ''">true</SimpleAdminExtractSources>
+    <_SaExtractSourcesValue>$(SimpleAdminExtractSources.Trim())</_SaExtractSourcesValue>
+    <_SaExtractTestsValue>$(SimpleAdminExtractTests.Trim())</_SaExtractTestsValue>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <SimpleAdminExtractSources Condition="'$(_SaExtractSourcesValue)' == ''">true</SimpleAdminExtractSources>
     <SimpleAdminSourcesDirectory Condition="'$(SimpleAdminSourcesDirectory)' == ''">SimpleAdmin.Sources</SimpleAdminSourcesDirectory>
-    <SimpleAdminExtractTests Condition="'$(SimpleAdminExtractTests)' == ''">false</SimpleAdminExtractTests>
+    <SimpleAdminExtractTests Condition="'$(_SaExtractTestsValue)' == ''">false</SimpleAdminExtractTests>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <_SaExtractSourcesValue>$(SimpleAdminExtractSources.Trim())</_SaExtractSourcesValue>
+    <_SaExtractTestsValue>$(SimpleAdminExtractTests.Trim())</_SaExtractTestsValue>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(_SimpleAdminSourcesExcluded)' != 'true'">
@@ -42,6 +58,9 @@
     <_SimpleAdminSourcesExcluded>true</_SimpleAdminSourcesExcluded>
   </PropertyGroup>
 
+  <!-- Identity = MSBuildThisFileName ohne Endung: Pack-Ziel ist
+       buildTransitive/$(PackageId).targets (siehe Directory.Build.props).
+       Beim Namespace-Rename werden Paket-ID und dieser Vergleich gemeinsam umbenannt. -->
   <ItemGroup>
     <SimpleAdminSourcePackage Include="$(MSBuildThisFileName)"
                               PackageRoot="$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..'))" />
@@ -99,7 +118,7 @@
 
   <Target Name="SimpleAdminExtractSources"
           BeforeTargets="BeforeBuild"
-          Condition="'$(SimpleAdminExtractSources)' == 'true'"
+          Condition="'$(_SaExtractSourcesValue)' == 'true'"
           Outputs="%(SimpleAdminSourcePackage.Identity)">
 
     <Error Condition="'$(SimpleAdminSourcesNamespace)' != '' And !$([System.Text.RegularExpressions.Regex]::IsMatch('$(SimpleAdminSourcesNamespace)', '^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$'))"
@@ -143,12 +162,14 @@
     <PropertyGroup>
       <_SaTestsSource>$(_SaPackageRoot)sources-tests</_SaTestsSource>
       <_SaExtractTests>false</_SaExtractTests>
-      <_SaExtractTests Condition="'$(SimpleAdminExtractTests)' == 'true' And Exists('$(_SaTestsSource)')">true</_SaExtractTests>
+      <_SaExtractTests Condition="'$(_SaExtractTestsValue)' == 'true' And Exists('$(_SaTestsSource)')">true</_SaExtractTests>
       <_SaPrefix>Minicon.SimpleAdmin</_SaPrefix>
       <_SaPrefix Condition="'$(SimpleAdminSourcesNamespace)' != ''">$(SimpleAdminSourcesNamespace)</_SaPrefix>
       <_SaTestsDir>$([MSBuild]::NormalizeDirectory('$(_SaBaseDir)', '$(_SaPrefix).Tests'))</_SaTestsDir>
       <_SaTestsMarker>$(_SaTestsDir).simpleadmin-package</_SaTestsMarker>
       <_SaTestsMarkerValue></_SaTestsMarkerValue>
+      <_SaTestsDirHint></_SaTestsDirHint>
+      <_SaTestsDirHint Condition="!$([System.IO.Path]::IsPathRooted('$(SimpleAdminSourcesDirectory)'))"> Der Ordner richtet sich nach SimpleAdminSourcesDirectory='$(SimpleAdminSourcesDirectory)', relativ zum Projekt $(MSBuildProjectName) - nicht zur Solution.</_SaTestsDirHint>
     </PropertyGroup>
 
     <ReadLinesFromFile File="$(_SaTestsMarker)" Condition="'$(_SaExtractTests)' == 'true' And Exists('$(_SaTestsMarker)')">
@@ -168,9 +189,85 @@
     <WriteLinesToFile Condition="'$(_SaTestsUpToDate)' != 'true'"
                       File="$(_SaTestsMarker)" Lines="$(_SaMarkerExpected)" Overwrite="true" />
     <Message Condition="'$(_SaTestsUpToDate)' != 'true'" Importance="high"
-             Text="SimpleAdmin: Testprojekt nach $(_SaTestsDir) entpackt." />
-    <Warning Condition="'$(_SaTestsUpToDate)' != 'true' And !Exists('$(_SaBaseDir)$(_SaPrefix).WebUI')"
-             Text="SimpleAdmin: Das Testprojekt referenziert auch $(_SaPrefix).WebUI, dessen Quellcode in $(_SaBaseDir) (noch) fehlt. Worker- und WebUI-Host muessen denselben SimpleAdminSourcesDirectory verwenden; der WebUI-Quellcode erscheint dort beim Build des WebUI-Hosts." />
+             Text="SimpleAdmin: Testprojekt nach $(_SaTestsDir) entpackt (Projektdatei: $(_SaTestsDir)$(_SaPrefix).Tests.csproj).$(_SaTestsDirHint)" />
+  </Target>
+
+  <!--
+    Diagnose zum Testprojekt: laeuft einmal je Projekt-Build (kein Batching) und
+    nur, wenn SimpleAdminExtractTests eingeschaltet ist. Warnungen gibt es für
+    fehlende Worker-Testquellen und fehlende WebUI-Quellen im lokalen Hostordner;
+    was im korrekten Aufbau vorkommt - WebUI-Host ohne Worker-Paket, WebUI-Quellen
+    beim ersten Build noch nicht da - ist nur eine Meldung.
+      SIMPLEADMIN002  Worker-Paket ohne "sources-tests" (aelter als 2.36.0)
+      SIMPLEADMIN003  WebUI-Quellcode fehlt neben dem Testprojekt
+  -->
+  <Target Name="SimpleAdminExtractTestsDiagnose"
+          BeforeTargets="BeforeBuild"
+          DependsOnTargets="SimpleAdminExtractSources"
+          Condition="'$(_SaExtractTestsValue)' == 'true'">
+
+    <ItemGroup>
+      <_SaDiagWorker Remove="@(_SaDiagWorker)" />
+      <_SaDiagTests Remove="@(_SaDiagTests)" />
+      <_SaDiagWorker Include="@(SimpleAdminSourcePackage)" Condition="'%(SimpleAdminSourcePackage.Identity)' == 'Minicon.SimpleAdmin.Worker'" />
+      <_SaDiagTests Include="@(SimpleAdminSourcePackage)" Condition="Exists('%(SimpleAdminSourcePackage.PackageRoot)sources-tests')" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <_SaDiagPrefix>Minicon.SimpleAdmin</_SaDiagPrefix>
+      <_SaDiagPrefix Condition="'$(SimpleAdminSourcesNamespace)' != ''">$(SimpleAdminSourcesNamespace)</_SaDiagPrefix>
+      <_SaDiagProjectDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)'))</_SaDiagProjectDir>
+      <_SaDiagBaseDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(SimpleAdminSourcesDirectory)'))</_SaDiagBaseDir>
+      <_SaDiagTestsDir>$([MSBuild]::NormalizeDirectory('$(_SaDiagBaseDir)', '$(_SaDiagPrefix).Tests'))</_SaDiagTestsDir>
+      <_SaDiagHasWorker>false</_SaDiagHasWorker>
+      <_SaDiagHasWorker Condition="'@(_SaDiagWorker)' != ''">true</_SaDiagHasWorker>
+      <_SaDiagHasTests>false</_SaDiagHasTests>
+      <_SaDiagHasTests Condition="'@(_SaDiagTests)' != ''">true</_SaDiagHasTests>
+      <_SaDiagTestsPresent>false</_SaDiagTestsPresent>
+      <_SaDiagTestsPresent Condition="Exists('$(_SaDiagTestsDir)$(_SaDiagPrefix).Tests.csproj')">true</_SaDiagTestsPresent>
+      <_SaDiagWebUIPresent>false</_SaDiagWebUIPresent>
+      <_SaDiagWebUIPresent Condition="Exists('$(_SaDiagBaseDir)$(_SaDiagPrefix).WebUI')">true</_SaDiagWebUIPresent>
+      <!-- Nur der relative Standardpfad deutet auf getrennte Hostordner hin.
+           Explizite Pfade können auch innerhalb eines Hosts gemeinsam genutzt werden. -->
+      <_SaDiagPrivateDir>false</_SaDiagPrivateDir>
+      <_SaDiagPrivateDir Condition="'$(SimpleAdminSourcesDirectory)' == 'SimpleAdmin.Sources' And $(_SaDiagBaseDir.StartsWith('$(_SaDiagProjectDir)', System.StringComparison.OrdinalIgnoreCase))">true</_SaDiagPrivateDir>
+      <_SaDiagSharedHint>Beide Hosts brauchen denselben Ordner, z. B. in einer gemeinsamen Directory.Build.props neben der Solution: &lt;SimpleAdminSourcesDirectory&gt;%24(MSBuildThisFileDirectory)SimpleAdmin.Sources&lt;/SimpleAdminSourcesDirectory&gt;</_SaDiagSharedHint>
+      <_SaDiagCase></_SaDiagCase>
+      <_SaDiagCase Condition="'$(_SaExtractSourcesValue)' != 'true'">off</_SaDiagCase>
+      <_SaDiagCase Condition="'$(_SaDiagCase)' == '' And '$(_SaDiagHasTests)' != 'true' And '$(_SaDiagHasWorker)' == 'true'">old</_SaDiagCase>
+      <_SaDiagCase Condition="'$(_SaDiagCase)' == '' And '$(_SaDiagHasTests)' != 'true' And '$(_SaDiagTestsPresent)' != 'true'">noworker</_SaDiagCase>
+      <_SaDiagCase Condition="'$(_SaDiagCase)' == '' And '$(_SaDiagHasTests)' == 'true' And '$(_SaDiagWebUIPresent)' != 'true' And '$(_SaDiagPrivateDir)' != 'true'">webui-pending</_SaDiagCase>
+      <_SaDiagCase Condition="'$(_SaDiagCase)' == '' And '$(_SaDiagHasTests)' == 'true' And '$(_SaDiagWebUIPresent)' != 'true'">webui-missing</_SaDiagCase>
+    </PropertyGroup>
+
+    <!-- Ein unveränderter Zweitbuild bleibt ruhig. Die Diagnose prüft dennoch bei jedem Build
+         den Zustand: nach reparierten und erneut fehlenden WebUI-Quellen wird wieder
+         gewarnt. Auch Schalter- und Paketpfadwechsel ändern die Signatur. -->
+    <PropertyGroup>
+      <_SaDiagMarker>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'simpleadmin-tests-diagnose.txt'))</_SaDiagMarker>
+      <_SaDiagExpected>$(_SaDiagCase)|$(_SaExtractSourcesValue)|$(_SaExtractTestsValue)|$(_SaDiagTestsDir)|@(SimpleAdminSourcePackage->'%(PackageRoot)', '|')</_SaDiagExpected>
+      <_SaDiagPrevious></_SaDiagPrevious>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(_SaDiagMarker)" Condition="Exists('$(_SaDiagMarker)')">
+      <Output TaskParameter="Lines" PropertyName="_SaDiagPrevious" />
+    </ReadLinesFromFile>
+
+    <Message Condition="'$(_SaDiagCase)' == 'off' And '$(_SaDiagPrevious)' != '$(_SaDiagExpected)'" Importance="high"
+             Text="SimpleAdmin: SimpleAdminExtractTests ist eingeschaltet, aber SimpleAdminExtractSources='$(_SaExtractSourcesValue)' verhindert das Entpacken im Projekt $(MSBuildProjectName). Abhilfe: SimpleAdminExtractSources auf true setzen." />
+
+    <Warning Condition="'$(_SaDiagCase)' == 'old' And '$(_SaDiagPrevious)' != '$(_SaDiagExpected)'" Code="SIMPLEADMIN002"
+             Text="SimpleAdmin: SimpleAdminExtractTests ist eingeschaltet, aber das aufgelöste Paket Minicon.SimpleAdmin.Worker (%(_SaDiagWorker.PackageRoot)) enthält kein Testprojekt (Ordner 'sources-tests' fehlt). Das Testprojekt wird erst ab Version 2.36.0 mitgeliefert. Abhilfe: Paketversion im Projekt $(MSBuildProjectName) auf 2.36.0 oder neuer anheben und mit Restore bauen ('dotnet restore', nicht 'dotnet build --no-restore'); liegt die Version schon vor, das Paket im NuGet-Paketordner löschen und neu wiederherstellen." />
+
+    <Message Condition="'$(_SaDiagCase)' == 'noworker' And '$(_SaDiagPrevious)' != '$(_SaDiagExpected)'" Importance="high"
+             Text="SimpleAdmin: SimpleAdminExtractTests ist eingeschaltet, aber für das Projekt $(MSBuildProjectName) wurden keine Worker-Testquellen importiert. Nur Minicon.SimpleAdmin.Worker ab 2.36.0 liefert das Testprojekt. In $(_SaDiagBaseDir) liegt (noch) kein Testprojekt. Bei gemeinsamem Ordner kann der Build des Worker-Hosts noch ausstehen. Andernfalls prüfen: Worker-Version, SimpleAdminExtractTests im Worker-Host oder gemeinsamen Directory.Build.props und Import der Paket-Build-Targets (ExcludeAssets/IncludeAssets). Danach Restore und Worker-Host bauen. $(_SaDiagSharedHint)" />
+
+    <Message Condition="'$(_SaDiagCase)' == 'webui-pending' And '$(_SaDiagPrevious)' != '$(_SaDiagExpected)'" Importance="high"
+             Text="SimpleAdmin: Das Testprojekt referenziert auch $(_SaDiagPrefix).WebUI. Dessen Quellcode liegt noch nicht in $(_SaDiagBaseDir); er erscheint dort beim Build des WebUI-Hosts, wenn dieser denselben SimpleAdminSourcesDirectory verwendet. Erst danach ist das Testprojekt mit 'dotnet test' lauffähig." />
+
+    <Warning Condition="'$(_SaDiagCase)' == 'webui-missing' And '$(_SaDiagPrivateDir)' == 'true' And '$(_SaDiagPrevious)' != '$(_SaDiagExpected)'" Code="SIMPLEADMIN003"
+             Text="SimpleAdmin: Das Testprojekt in $(_SaDiagTestsDir) ist so nicht lauffähig: Es referenziert auch $(_SaDiagPrefix).WebUI, dessen Quellcode in $(_SaDiagBaseDir) fehlt. Der Ordner liegt innerhalb des Projekts $(MSBuildProjectName) (SimpleAdminSourcesDirectory='$(SimpleAdminSourcesDirectory)'). Bei getrennten Hostordnern fehlt damit die WebUI; bei bewusst gemeinsamem Ordner zuerst auch den WebUI-Host bauen. Abhilfe: $(_SaDiagSharedHint)" />
+    <WriteLinesToFile Condition="'$(_SaDiagPrevious)' != '$(_SaDiagExpected)'"
+                      File="$(_SaDiagMarker)" Lines="$(_SaDiagExpected)" Overwrite="true" />
   </Target>
 
 </Project>
