@@ -56,6 +56,12 @@ internal sealed class BizTalkAuditLog(string directory, int capacity, ILogger lo
     private async Task<List<BizTalkAuditEntry>> Merge(List<BizTalkAuditEntry> disk, IEnumerable<BizTalkAuditEntry> added)
     {
         var incoming = added.ToList();
+        // The main audit's cross-process file lock is held here. Validate all historical evidence
+        // before admitting a new mutation, one segment at a time, without a stale integrity cache.
+        // Completions/rejection audits must still be recordable if older evidence becomes unreadable.
+        if (incoming.Any(e => e.Phase == "Requested") && Directory.Exists(directory))
+            foreach (var file in Directory.EnumerateFiles(directory, "biztalk-instance-actions.archive-*.json"))
+                ParseArchive(file, await File.ReadAllBytesAsync(file));
         var operations = disk.Concat(incoming).DistinctBy(e => (e.OperationId, e.Phase))
             .GroupBy(e => e.OperationId).OrderByDescending(g => g.Max(e => e.Timestamp)).ToList();
         var open = operations.Where(g => !g.Any(e => e.Phase == "Completed")).ToList();
@@ -74,8 +80,7 @@ internal sealed class BizTalkAuditLog(string directory, int capacity, ILogger lo
             var hash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(entries, AtomicAuditLog<BizTalkAuditEntry>.JsonOptions)));
             var archive = Path.Combine(directory, $"biztalk-instance-actions.archive-{hash}.json");
             if (!File.Exists(archive)) await AtomicAuditLog<BizTalkAuditEntry>.WriteSnapshotAsync(archive, entries);
-            else if (Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(archive))) != hash)
-                throw new IOException("Auditarchiv beschädigt; aktive Einträge bleiben erhalten.");
+            else ParseArchive(archive, await File.ReadAllBytesAsync(archive));
         }
         return open.Concat(completed.Take(limit)).SelectMany(g => g).OrderByDescending(e => e.Timestamp).ToList();
     }
@@ -105,7 +110,19 @@ internal sealed class BizTalkAuditLog(string directory, int capacity, ILogger lo
         Include(store.Read());
         if (Directory.Exists(directory))
             foreach (var file in Directory.EnumerateFiles(directory, "biztalk-instance-actions.archive-*.json"))
-                Include(new AtomicAuditLog<BizTalkAuditEntry>(file, logger).Read());
+                Include(ParseArchive(file, File.ReadAllBytes(file)));
         return selected.Values.OrderByDescending(e => e.Timestamp).ToList();
     }
+
+    private static List<BizTalkAuditEntry> ParseArchive(string file, byte[] bytes)
+    {
+        const string prefix = "biztalk-instance-actions.archive-";
+        var expected = Path.GetFileNameWithoutExtension(file)[prefix.Length..];
+        var actual = Convert.ToHexString(SHA256.HashData(bytes));
+        if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("Auditarchiv beschädigt; aktive Einträge bleiben erhalten.");
+        return JsonSerializer.Deserialize<List<BizTalkAuditEntry>>(bytes, AtomicAuditLog<BizTalkAuditEntry>.JsonOptions)
+            ?? throw new JsonException("Ungültiges Auditarchiv.");
+    }
+
 }

@@ -1,3 +1,4 @@
+using Minicon.SimpleAdmin.WebUI.Helpers;
 using System.Text.Json.Serialization;
 
 namespace Minicon.SimpleAdmin.WebUI.Models.BizTalk;
@@ -12,4 +13,7 @@ public sealed record BizTalkActionResult(Guid OperationId, string ServerId, Guid
 public sealed record BizTalkAuditEntry(Guid OperationId, string Phase, DateTimeOffset Timestamp,
     string User, string ExecutingAccount, string Server, Guid InstanceId, string? Application,
     BizTalkApplicationMapping ApplicationMapping, string Provider, BizTalkInstanceAction Action,
-    BizTalkActionOutcome Outcome, string Message, string? RequestedServer = null, bool? ServerKnown = null);
+    BizTalkActionOutcome Outcome, string Message, string? RequestedServer = null, bool? ServerKnown = null)
+{
+    public string TimestampDisplay => Display.LocalTimeWithZone(Timestamp);
+}

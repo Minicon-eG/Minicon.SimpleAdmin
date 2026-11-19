@@ -262,6 +262,73 @@ public sealed class BizTalkControlTests : IDisposable
         Assert.Contains(audit.Read(),e=>e.OperationId==first && e.Phase=="Completed");
         Assert.Contains(audit.Read(),e=>e.OperationId==second && e.Phase=="Completed");
     }
+    [Theory]
+    [InlineData(false, BizTalkInstanceAction.Resume)]
+    [InlineData(false, BizTalkInstanceAction.Terminate)]
+    [InlineData(true, BizTalkInstanceAction.Resume)]
+    [InlineData(true, BizTalkInstanceAction.Terminate)]
+    public async Task FinalReview_OldCorruptArchive_BlocksMutationPreservesEvidenceAndAllowsCompletion(
+        bool validJson, BizTalkInstanceAction action)
+    {
+        var audit = Audit(10);
+        var first = Guid.NewGuid();
+        var start = DateTimeOffset.UtcNow.AddHours(-1);
+        for (var i = 0; i < 12; i++)
+            Assert.True(await audit.AppendAsync(Entry(i == 0 ? first : Guid.NewGuid(), "Completed", BizTalkActionOutcome.Accepted)
+                with { Timestamp = start.AddSeconds(i) }));
+        // The first archive is no longer part of the active rotation window.
+        var archive = Directory.GetFiles(dir, "biztalk-instance-actions.archive-*.json")
+            .Single(file => File.ReadAllText(file).Contains(first.ToString()));
+        var original = await File.ReadAllBytesAsync(archive);
+        var alreadyStarted = Guid.NewGuid();
+        Assert.True(await audit.AppendAsync(Entry(alreadyStarted)));
+        var corrupt = validJson ? "[]" : "BROKEN JSON";
+        await File.WriteAllTextAsync(archive, corrupt);
+        // A fresh instance also detects old corruption: no integrity result may be cached across calls/restarts.
+        var restarted = Audit(10);
+        var provider = Provider(Row());
+        var result = await Control(provider.Object, restarted).ExecuteAsync("bt-id", Id, action, "user", default);
+        Assert.Equal(503, result.HttpStatus);
+        Assert.Equal(BizTalkActionOutcome.Rejected, result.Outcome);
+        Assert.True(result.AuditPersisted); // The rejection itself can still be recorded.
+        provider.Verify(p => p.ExecuteAsync(It.IsAny<BizTalkTarget>(), It.IsAny<Guid>(), It.IsAny<BizTalkInstanceAction>(), It.IsAny<CancellationToken>()), Times.Never);
+        using (var active = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(dir, "biztalk-instance-actions.json"))))
+            Assert.DoesNotContain(active.RootElement.EnumerateArray(), e =>
+                e.GetProperty("operationId").GetGuid() == result.OperationId && e.GetProperty("phase").GetString() == "Requested");
+        Assert.Throws<IOException>(() => restarted.Read()); // Even valid JSON with the wrong content hash is corrupt.
+        var api = new BizTalkInstancesController(config, new(), provider.Object) { ControllerContext = new() { HttpContext = new DefaultHttpContext() } };
+        Assert.Equal(503, Assert.IsType<ObjectResult>(api.Audit(Control(provider.Object, restarted))).StatusCode);
+        Assert.True(await restarted.AppendAsync(Entry(alreadyStarted, "Completed", BizTalkActionOutcome.Accepted)));
+        Assert.Equal(corrupt, await File.ReadAllTextAsync(archive));
+        // Restore only in the test: all original phases plus the rejection and existing completion survive.
+        await File.WriteAllBytesAsync(archive, original);
+        Assert.Equal(15, restarted.Read().Count);
+        Assert.Contains(restarted.Read(), e => e.OperationId == alreadyStarted && e.Phase == "Completed");
+        var repaired = await Control(provider.Object, restarted).ExecuteAsync("bt-id", Id, action, "user", default);
+        Assert.Equal(BizTalkActionOutcome.Accepted, repaired.Outcome);
+        provider.Verify(p => p.ExecuteAsync(It.IsAny<BizTalkTarget>(), Id, action, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("2026-01-15T23:30:45+02:00")]
+    [InlineData("2026-07-15T23:30:45-04:00")]
+    public void FinalReview_DisplayFields_UseServerLocalTimeAndExplicitOffset(string timestamp)
+    {
+        var value = DateTimeOffset.Parse(timestamp, System.Globalization.CultureInfo.InvariantCulture);
+        var display = Minicon.SimpleAdmin.WebUI.Helpers.Display.LocalTimeWithZone(value);
+        Assert.Equal(display, Minicon.SimpleAdmin.WebUI.Helpers.Display.LocalTimeWithZone(value.ToUniversalTime()));
+        Assert.StartsWith(Minicon.SimpleAdmin.WebUI.Helpers.Display.LocalTimeSeconds(value.UtcDateTime), display);
+        Assert.Matches(@" \(UTC[+-]\d{2}:\d{2}\)$", display);
+        var row = Row() with { SuspendedSince = value };
+        Assert.Equal(display, row.SuspendedSinceDisplay);
+        Assert.Equal(display, (Page(row) with { FetchedAtUtc = value }).FetchedAtDisplay);
+        Assert.Equal(display, (Entry(Guid.NewGuid()) with { Timestamp = value }).TimestampDisplay);
+        Assert.Null(Row().SuspendedSinceDisplay);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(row, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        Assert.Equal(display, json.RootElement.GetProperty("suspendedSinceDisplay").GetString());
+        Assert.Equal(value, json.RootElement.GetProperty("suspendedSince").GetDateTimeOffset());
+    }
+
     [Fact]
     public async Task Review_CapacityReduction_AllExistingOperationsCanCompleteAndRemainQueryable()
     {

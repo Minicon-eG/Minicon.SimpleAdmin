@@ -186,6 +186,10 @@ else
                                 {
                                     <div class="small text-body-secondary"><code class="problem-origin">@origin</code></div>
                                 }
+                                @if (problem.Id == "biztalk_suspended_instances")
+                                {
+                                    <a class="d-inline-block mt-1" asp-controller="BizTalk" asp-action="Instances" asp-route-server="@serverId">Instanzen prüfen</a>
+                                }
                                 @if (!string.IsNullOrWhiteSpace(problem.WikiUrl) || problem.RemediationSteps.Count > 0)
                                 {
                                     <div class="small mt-1 d-flex flex-wrap gap-3">

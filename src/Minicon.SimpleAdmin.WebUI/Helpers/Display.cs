@@ -25,6 +25,10 @@ internal static class Display
 
     public static string LocalTimeSeconds(DateTime value) => AsUtc(value).ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss", German);
 
+    /// <summary>Server-local display time with its offset at the instant, including daylight-saving rules.</summary>
+    public static string LocalTimeWithZone(DateTimeOffset value) =>
+        LocalTimeSeconds(value.UtcDateTime) + " (UTC" + value.ToLocalTime().ToString("zzz", CultureInfo.InvariantCulture) + ")";
+
     public static string LocalShort(DateTime value) => AsUtc(value).ToLocalTime().ToString("dd.MM. HH:mm", German);
 
     /// <summary>

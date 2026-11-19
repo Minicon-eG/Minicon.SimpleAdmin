@@ -14,7 +14,7 @@ public sealed class BizTalkInstancesController(
     ConfigurationService config, BizTalkOptions options, IBizTalkInstanceProvider provider) : ControllerBase
 {
     [HttpGet("live")]
-    [LiveQueryValidation]
+    [BizTalkModelValidation("Ungültige Filter oder Seitengrenzen. Offset und Seitengröße müssen ganze Zahlen sein; fehlende Anwendung muss true oder false sein.")]
     public async Task<IActionResult> Live([FromQuery] string? server, [FromQuery] string? application = null,
         [FromQuery] string? error = null, [FromQuery] int offset = 0, [FromQuery] int pageSize = 50,
         [FromQuery] bool missingApplication = false, CancellationToken ct = default)
@@ -46,7 +46,7 @@ public sealed class BizTalkInstancesController(
     [HttpPost("action")]
     [Consumes("application/json")]
     [ValidateAntiForgeryToken]
-    [LiveQueryValidation]
+    [BizTalkModelValidation("Ungültige Aktionsdaten. Server, Instanz-GUID und Resume/Terminate erforderlich.")]
     public async Task<IActionResult> Action([FromBody] ActionRequest request,
         [FromServices] IBizTalkInstanceControl control, CancellationToken ct)
     {
@@ -61,6 +61,7 @@ public sealed class BizTalkInstancesController(
     }
 
     [HttpGet("audit")]
+    [BizTalkModelValidation("Ungültige Auditfilter. max muss eine ganze Zahl zwischen 1 und 1000 sein.")]
     public IActionResult Audit([FromServices] IBizTalkInstanceControl control, string? server = null, string? instanceId = null, int max = 200)
     {
         Response.Headers.CacheControl = "no-store";
@@ -82,18 +83,18 @@ public sealed class BizTalkInstancesController(
         catch { return StatusCode(503, Failure("Datei-Audit nicht lesbar. Keine Vollständigkeit garantiert.", server)); }
     }
 
-    // Runs before ApiController's ModelStateInvalidFilter (-2000), scoped to this GET only.
-    private sealed class LiveQueryValidationAttribute : ActionFilterAttribute
+    // Runs before ApiController's ModelStateInvalidFilter (-2000) on each BizTalk endpoint.
+    private sealed class BizTalkModelValidationAttribute : ActionFilterAttribute
     {
-        public LiveQueryValidationAttribute() => Order = -2001;
+        public BizTalkModelValidationAttribute(string message) { this.message = message; Order = -2001; }
+        private readonly string message;
 
         public override void OnActionExecuting(ActionExecutingContext context)
         {
             if (context.ModelState.IsValid) return;
             context.HttpContext.Response.Headers.CacheControl = "no-store";
             context.Result = new BadRequestObjectResult(Failure(
-                context.HttpContext.Request.Method == "POST" ? "Ungültige Aktionsdaten. Server, Instanz-GUID und Resume/Terminate erforderlich." :
-                "Ungültige Filter oder Seitengrenzen. Offset und Seitengröße müssen ganze Zahlen sein; fehlende Anwendung muss true oder false sein.",
+                message,
                 context.HttpContext.Request.Query["server"].FirstOrDefault()));
         }
     }

@@ -223,6 +223,10 @@ else
                                     <span class="fw-semibold">@title</span>
                                 }
                                 <div class="small text-body-secondary"><code class="problem-origin">@origin</code></div>
+                                @if (problem.Id == "biztalk_suspended_instances")
+                                {
+                                    <a class="d-inline-block mt-1" asp-controller="BizTalk" asp-action="Instances" asp-route-server="@Model.ServerId">Instanzen prüfen</a>
+                                }
                                 @if (!string.IsNullOrWhiteSpace(problem.WikiUrl) || problem.RemediationSteps.Count > 0)
                                 {
                                     <div class="small mt-1 d-flex flex-wrap gap-3">
@@ -966,7 +970,7 @@ else
                 <p class="text-muted mb-3">
                     Anwendungen: @bt.ApplicationsTotal · Orchestrierungen: @bt.OrchestrationsTotal ·
                     Sendeports: @bt.SendPortsTotal · Empfangsorte: @bt.ReceiveLocationsTotal ·
-                    Suspendiert: <strong>@bt.SuspendedTotal</strong>
+                    Suspendiert: <a asp-controller="BizTalk" asp-action="Instances" asp-route-server="@Model.ServerId" aria-label="@($"{bt.SuspendedTotal} suspendierte Instanzen live prüfen")"><strong>@bt.SuspendedTotal</strong></a>
                 </p>
                 @if (bt.Problems.Count > 0)
                 {

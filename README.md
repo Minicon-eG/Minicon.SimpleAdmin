@@ -221,11 +221,10 @@ service types, feature toggles and the PRTG/NetScaler endpoints. Supported featu
   specific servers (wildcards), with reason and optional expiry
 - SQL query checks (row-count and column assertions)
 - Email monitoring (SMTP probes + IMAP delivery checks)
-- **Read-only BizTalk live instances** at `/BizTalk/Instances`, accessible from server
-  details: GUID, application, suspended time with timezone and bounded error details,
-  filters and live paging. No Resume/Terminate or audit endpoints in this package.
-  The existing productive REST monitoring is confirmed; verify the new instance route
-  and rights/connectivity from the WebUI host under its service account before customer use.
+- **BizTalk instance control** at `/BizTalk/Instances`: live suspended instances,
+  application/error filters, single Resume/Terminate with confirmation, and durable
+  file audit plus best-effort Windows Application events. Enter through server details,
+  application groups or “Instanzen prüfen” on suspended problems. See the operator guide below.
 - BizTalk monitoring (management API) and file/log monitoring (stuck files on shares,
   error signatures in logs) — with a **setup assistant** in the admin UI that tests
   paths and regex signatures against the real files before saving, offers templates
@@ -251,7 +250,9 @@ covering every check type, the notifier, authentication and the REST API.
 
 MIT — see [LICENSE](LICENSE).
 
-### BizTalk live instances and single actions (P3a/P3b)
+## BizTalk instance control — operator guide (REST)
+
+Management REST was introduced with BizTalk Server 2016 Feature Pack 1; Microsoft's installation guide currently lists Feature Pack 2 or newer as prerequisite. For BizTalk Server 2020+, ManagementService and OperationalDataService are separate services. Configure the management-service base for these instance actions, not the separate OData service. Exact version/feature pack, routes and response/status contracts still require customer verification; this is not a blanket compatibility claim. [Microsoft REST installation](https://learn.microsoft.com/en-us/biztalk/core/install-and-configure-the-management-rest-apis-in-biztalk-server), [2020+ service configuration](https://learn.microsoft.com/en-us/biztalk/install-and-config-guides/configure-biztalk-server).
 
 Set these in the WebUI host's `appsettings.json`, not `config.json`:
 
@@ -358,3 +359,32 @@ pre-action status; the UI performs the fresh observation. The event platform che
 runs once on the background worker; overflow degrades the event channel until restart
 with one asynchronously scheduled warning. The intentionally retained Wait/TryWrite
 combination detects dropped events without waiting; DropWrite would hide overflow.
+
+### Troubleshooting BizTalk instance control
+
+| Symptom | Operator check |
+|---|---|
+| Live/actions return 403 | Check host `BizTalk:ControlEnabled`, authentication and global `Authentication:RequiredRole`. Keep authentication enabled for normal operation. Audit history remains readable. |
+| Target returns 404 | Check config server ID, Active, global BizTalk feature and server check. A vanished instance or upstream action 404 is also rejected; refresh live. |
+| API failure / 502 | From the WebUI host under its actual service account, check the configured management-service base, DNS, network/TLS, integrated authentication and read/PUT permissions. Worker access alone does not prove WebUI access. Use the displayed account/OperationId for correlation. |
+| Limited/empty results | Filters cover only the bounded scan; active entries count too. Check the warning, reset filters/page and adjust host limits only within the documented bounds. |
+| 409 | A state changed, another operation is pending, or the GUID lock conflicts. Refresh and inspect history before acting. |
+| Unknown / 504 or connection loss | The command may have been accepted. Inspect live state and audit; never repeat automatically. |
+| 503 / AuditPersisted=false | Check audit path, free space, inherited directory rights, active/archive files and lock access. Preserve corrupt/unresolved evidence; repair storage before another mutation. |
+| No Windows Application event | Check the local WebUI-host source and Application mapping/write rights, plus the one-time host warning. Repair and restart; file audit stays authoritative. Events are best effort and can be lost on shutdown/overflow. |
+
+WebUI REST routes are `GET /api/biztalk/instances/live`, JSON-only
+`POST /api/biztalk/instances/action` and `GET /api/biztalk/instances/audit`.
+The provider uses management-base-relative `GET OperationalData/Instances` and
+`PUT OperationalData/Instances/Resume/{guid}` or `Terminate/{guid}`. Validate these
+new routes and response/status contracts at the customer before release; the existing
+productive REST application monitoring is already confirmed.
+
+Before a new Requested phase, all existing archive segments are read and their filename
+SHA256 and JSON checked under the main audit lock, one segment at a time. Corruption
+blocks new mutations (503) and makes audit reads return 503, including valid JSON with
+a mismatching hash; evidence stays unchanged. Existing completions and rejection audits
+can still be recorded. There is no integrity cache: validation cost grows with retained
+archive history. Diagnose/restore damaged evidence from a trusted backup before retrying.
+All BizTalk display timestamps use the WebUI host's local timezone and the shared
+German format with seconds and explicit UTC offset; raw API timestamps retain their offsets.

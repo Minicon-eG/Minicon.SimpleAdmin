@@ -17,11 +17,14 @@ namespace Minicon.SimpleAdmin.Tests.WebUI;
 public sealed class BizTalkLivePipelineTests
 {
     [Theory]
-    [InlineData("offset=abc")]
-    [InlineData("offset=2147483648")]
-    [InlineData("pageSize=x")]
-    [InlineData("missingApplication=falsch")]
-    public async Task InvalidBinding_UsesGermanFailureEnvelopeBeforeProviderCall(string invalidQuery)
+    [InlineData("live", "offset=abc", "Ungültige Filter oder Seitengrenzen")]
+    [InlineData("live", "offset=2147483648", "Ungültige Filter oder Seitengrenzen")]
+    [InlineData("live", "pageSize=x", "Ungültige Filter oder Seitengrenzen")]
+    [InlineData("live", "missingApplication=falsch", "Ungültige Filter oder Seitengrenzen")]
+    [InlineData("audit", "max=abc", "Ungültige Auditfilter")]
+    [InlineData("audit", "max=2147483648", "Ungültige Auditfilter")]
+    [InlineData("audit", "max=1.5", "Ungültige Auditfilter")]
+    public async Task InvalidBinding_UsesGermanFailureEnvelopeBeforeProviderCall(string route, string invalidQuery, string expectedMessage)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
@@ -31,6 +34,8 @@ public sealed class BizTalkLivePipelineTests
         builder.Services.AddSingleton(new BizTalkOptions());
         var provider = new Mock<IBizTalkInstanceProvider>(MockBehavior.Strict);
         builder.Services.AddSingleton(provider.Object);
+        var control = new Mock<IBizTalkInstanceControl>(MockBehavior.Strict);
+        builder.Services.AddSingleton(control.Object);
         await using var app = builder.Build();
         app.MapControllers();
         await app.StartAsync();
@@ -38,19 +43,20 @@ public sealed class BizTalkLivePipelineTests
         {
             var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
             using var http = new HttpClient { BaseAddress = new Uri(address) };
-            using var response = await http.GetAsync("/api/biztalk/instances/live?server=bt-id&" + invalidQuery);
+            using var response = await http.GetAsync("/api/biztalk/instances/" + route + "?server=bt-id&" + invalidQuery);
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
             Assert.True(response.Headers.CacheControl?.NoStore);
             using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             Assert.True(Guid.TryParse(body.RootElement.GetProperty("operationId").GetString(), out var id));
             Assert.NotEqual(Guid.Empty, id);
             var message = body.RootElement.GetProperty("message").GetString();
-            Assert.Contains("Ungültige Filter oder Seitengrenzen", message);
+            Assert.Contains(expectedMessage, message);
             Assert.Contains("Zielserver: bt-id", message);
             Assert.Contains("Ausführungskonto:", message);
             Assert.False(string.IsNullOrWhiteSpace(body.RootElement.GetProperty("executingAccount").GetString()));
             Assert.False(body.RootElement.TryGetProperty("errors", out _));
             provider.VerifyNoOtherCalls();
+            control.VerifyNoOtherCalls();
         }
         finally { await app.StopAsync(); }
     }
