@@ -9,6 +9,11 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
+## [2.38.1] – 2026-11-19 – Technische Korrekturen
+
+### Entwickler
+- Das extrahierte WebUI-Projekt erzwingt den Razor-Source-Generator auch bei abweichenden Host-Einstellungen in `Directory.Build.props`/`.targets`, Umgebungsvariablen oder globalem `-p:UseRazorSourceGenerator=false`. Views bleiben dadurch mit den benötigten internen Typen in derselben Assembly; die öffentliche API wird nicht erweitert.
+
 ## [2.38.0] – 2026-11-19 – BizTalk-Instanzen prüfen, fortsetzen und beenden
 
 **Suspendierte BizTalk-Instanzen lassen sich jetzt direkt ansehen und nach Bestätigung einzeln fortsetzen oder endgültig beenden; Aktionen werden protokolliert.**
@@ -391,6 +396,7 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.38.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.38.0...v2.38.1
 [2.38.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.1...v2.38.0
 [2.37.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.0...v2.37.1
 [2.37.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.1...v2.37.0
@@ -411,3 +417,4 @@ in der WebUI nicht angezeigt.
 [2.27.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.27.0...v2.27.1
 [2.27.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.26.0...v2.27.0
 [2.26.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/releases/tag/v2.26.0
+

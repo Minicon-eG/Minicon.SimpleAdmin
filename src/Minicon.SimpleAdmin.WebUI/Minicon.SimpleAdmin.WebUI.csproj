@@ -1,4 +1,6 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+<Project TreatAsLocalProperty="UseRazorSourceGenerator">
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk.Razor" />
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -8,7 +10,7 @@
     <RootNamespace>Minicon.SimpleAdmin.WebUI</RootNamespace>
     <AssemblyName>Minicon.SimpleAdmin.WebUI</AssemblyName>
     <PackageId>Minicon.SimpleAdmin.WebUI</PackageId>
-    <Version>2.38.0</Version>
+    <Version>2.38.1</Version>
     <Authors>Minicon Contributors</Authors>
     <Description>Razor Class Library providing the full SimpleAdmin admin UI (controllers, views, REST API and services) for the Minicon SimpleAdmin monitoring platform. A host application only needs to call AddSimpleAdminWebUI / UseSimpleAdminWebUI.</Description>
     <PackageTags>monitoring;simpleadmin;webui;mvc;razor-class-library</PackageTags>
@@ -54,4 +56,11 @@
     </None>
   </ItemGroup>
 
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+  <!-- Nach Directory.Build.targets, vor den Razor-Imports: Views brauchen Zugriff auf
+       internal-Typen derselben Assembly. TreatAsLocalProperty gilt auch fuer globale -p:-Werte. -->
+  <PropertyGroup>
+    <UseRazorSourceGenerator>true</UseRazorSourceGenerator>
+  </PropertyGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk.Razor" />
 </Project>

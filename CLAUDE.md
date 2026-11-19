@@ -28,7 +28,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.38.0`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.38.1`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
@@ -36,6 +36,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 - `src/Directory.Build.props` sets `DebugType=embedded` + `EmbedAllSources=true` for every project, so each DLL carries an **embedded portable PDB including the full C# sources**. Consumers can debug and step into the original code without a symbol server. No separate `.snupkg` is produced (`IncludeSymbols=false`). Trade-off: larger DLLs and the source is visible inside every package.
 
 ### Source Extraction in Consumers (v2.32.0)
+- The WebUI project enforces the Razor source generator (v2.38.1), including against host `Directory.Build.props`/`.targets`, environment settings and global `-p:UseRazorSourceGenerator=false`: views need access to `internal` types in the same assembly. `TreatAsLocalProperty` is limited to this property; explicit SDK imports set it after the common .NET targets and before Razor selects its compilation path.
 - Every package additionally ships its project files under `sources/` (copied via `obj/simpleadmin-sources/` because NuGet drops `Content` items with `Pack=false`, which Razor sets on all `.cshtml`) and the shared files (`Directory.Build.props`, `build/`, README, LICENSE) under `sources-root/`.
 - `src/build/Minicon.SimpleAdmin.Sources.targets` is packed as `buildTransitive/<PackageId>.targets`: on build, the host extracts every referenced SimpleAdmin package to `SimpleAdmin.Sources/<PackageId>/` (re-extracted only when the package path/version changes, marker `.simpleadmin-package`; local edits are overwritten on upgrade). The folder is added to `DefaultItemExcludes`, so the host keeps compiling against the package DLLs. Opt-out: `<SimpleAdminExtractSources>false</SimpleAdminExtractSources>`, target folder: `SimpleAdminSourcesDirectory`.
 - Customer namespace: `<SimpleAdminSourcesNamespace>Kunde.Monitoring</SimpleAdminSourcesNamespace>` replaces the token `Minicon.SimpleAdmin` (whole identifier, not after `Minicon-eG/`) in text files and in file/folder names during extraction (inline `RoslynCodeTaskFactory` task — netstandard2.0, so no `Path.GetRelativePath`). Namespaces, project names, `_content/<PackageId>` paths and logger categories stay consistent; LICENSE, `Authors` and repository URLs are kept. Keep `Minicon.SimpleAdmin` as the only spelling of the prefix in code so the rename stays complete.
