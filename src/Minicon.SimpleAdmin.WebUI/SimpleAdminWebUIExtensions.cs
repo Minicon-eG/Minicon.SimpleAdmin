@@ -1,3 +1,4 @@
+using Minicon.SimpleAdmin.WebUI.Services.BizTalk;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -100,6 +101,13 @@ public static class SimpleAdminWebUIExtensions
 
         AddScriptRunner(services, configuration, ResolveConfigDirectory(configuration));
         AddScheduledTaskControl(services, configuration, ResolveConfigDirectory(configuration));
+        services.AddSingleton(BizTalkOptions.Resolve(configuration, IsAuthenticationEnabled(configuration)));
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddHttpClient(RestBizTalkInstanceProvider.ClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(RestBizTalkInstanceProvider.CreateHandler);
+        services.AddTransient<IBizTalkInstanceProvider>(sp => new RestBizTalkInstanceProvider(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient(RestBizTalkInstanceProvider.ClientName),
+            sp.GetRequiredService<BizTalkOptions>(), sp.GetRequiredService<TimeProvider>()));
 
         // Release notes ("Neuigkeiten") from the embedded CHANGELOG.md.
         services.AddSingleton<ChangelogProvider>();
@@ -312,6 +320,10 @@ public static class SimpleAdminWebUIExtensions
         {
             app.Logger.LogInformation("SimpleAdmin WebUI: PowerShell script runner is OFF — {Reason}", scriptRunner.DisabledReason);
         }
+
+        var bizTalk = app.Services.GetRequiredService<BizTalkOptions>();
+        app.Logger.LogInformation("SimpleAdmin WebUI: BizTalk live REST enabled={Enabled}, account={Account}, reason={Reason}",
+            bizTalk.ControlEnabled, $"{Environment.UserDomainName}\\{Environment.UserName}", bizTalk.DisabledReason);
 
         var taskControl = app.Services.GetRequiredService<ScheduledTaskControlOptions>();
         if (!taskControl.ControlEnabled)

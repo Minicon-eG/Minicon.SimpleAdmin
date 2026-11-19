@@ -221,6 +221,11 @@ service types, feature toggles and the PRTG/NetScaler endpoints. Supported featu
   specific servers (wildcards), with reason and optional expiry
 - SQL query checks (row-count and column assertions)
 - Email monitoring (SMTP probes + IMAP delivery checks)
+- **Read-only BizTalk live instances** at `/BizTalk/Instances`, accessible from server
+  details: GUID, application, suspended time with timezone and bounded error details,
+  filters and live paging. No Resume/Terminate or audit endpoints in this package.
+  The existing productive REST monitoring is confirmed; verify the new instance route
+  and rights/connectivity from the WebUI host under its service account before customer use.
 - BizTalk monitoring (management API) and file/log monitoring (stuck files on shares,
   error signatures in logs) — with a **setup assistant** in the admin UI that tests
   paths and regex signatures against the real files before saving, offers templates
@@ -245,3 +250,37 @@ covering every check type, the notifier, authentication and the REST API.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+### BizTalk live-list host configuration (P3a)
+
+Set these in the WebUI host's `appsettings.json`, not `config.json`:
+
+```json
+{
+  "BizTalk": {
+    "ControlEnabled": true,
+    "AllowWithoutAuthentication": false,
+    "QueryTimeoutSeconds": 30,
+    "MaxInstances": 1000,
+    "MaxResponseBytes": 8388608,
+    "AllowedApiHosts": { "bt-config-id": "explicit-api-host" }
+  }
+}
+```
+
+Omit `AllowedApiHosts` when the API runs on the configured server. Loopback URLs in
+server BizTalk checks are rewritten to that server, preserving port/path. Only
+HTTP(S) without credentials/query/fragment is accepted; redirects are disabled,
+TLS validation stays active, and HTTP uses the WebUI process credentials without
+user impersonation. The global authentication/RequiredRole policy stays in force.
+Without authentication, live IO requires explicit opt-in on an isolated host.
+Targets also require loaded config, the BizTalk feature, an active server and its
+enabled BizTalk check. Query timeout is the smaller of the host limit (5–120 s)
+and positive server `timeoutSeconds` (otherwise 30 s).
+
+Scan limits (1–5000 entries, default 1000; at most 8 MiB) apply before filtering,
+including active entries. Partial results show a warning and counts only within
+the scanned range. Error text is capped at 32 KiB UTF-8; search cannot cover the
+removed tail. Paging reads live again and may shift; refresh resets the offset.
+Unknown applications have a separate filter. URI or ServiceType is labelled as
+provider information, not a verified port name. Worker status sums remain unchanged.

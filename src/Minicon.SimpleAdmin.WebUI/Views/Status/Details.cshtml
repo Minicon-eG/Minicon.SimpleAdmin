@@ -956,6 +956,7 @@ else
             <h5 class="mb-0"><i class="bi bi-gear-wide-connected me-2"></i>BizTalk</h5>
         </div>
         <div class="card-body">
+            <a class="btn btn-outline-primary mb-3" asp-controller="BizTalk" asp-action="Instances" asp-route-server="@Model.ServerId">Suspendierte Instanzen anzeigen</a>
             @if (!bt.ApiReachable)
             {
                 <div class="alert alert-danger mb-0">Management-API nicht erreichbar: @bt.ApiError</div>
@@ -994,7 +995,9 @@ else
                     <ul class="mb-0">
                         @foreach (var g in bt.SuspendedGroups)
                         {
-                            <li>@g.Scope: @g.Count</li>
+                            <li><a asp-controller="BizTalk" asp-action="Instances" asp-route-server="@Model.ServerId"
+                                asp-route-application="@(g.Scope == "(unbekannt)" ? null : g.Scope)"
+                                asp-route-missingApplication="@(g.Scope == "(unbekannt)" ? "true" : null)">@g.Scope: @g.Count</a></li>
                         }
                     </ul>
                 }

@@ -1,0 +1,148 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.BizTalkInstancesViewModel
+@{
+    ViewData["Title"] = "Suspendierte BizTalk-Instanzen";
+}
+<style>
+    .bt-live { min-width: 0; }
+    .bt-live .bt-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+    .bt-live .form-control, .bt-live .form-select { width: 100%; min-width: 0; }
+    .bt-live .bt-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0 .75rem; }
+    .bt-live .bt-table th, .bt-live .bt-table td { padding: .75rem; vertical-align: top; }
+    .bt-live .bt-table td { background: var(--sa-surface); border-block: 1px solid var(--sa-surface-border); }
+    .bt-live .bt-table th { color: var(--bs-secondary-color); }
+    .bt-live .bt-table .bt-label { display: none; }
+    .bt-live .bt-status { background: var(--bs-secondary-bg); color: var(--bs-body-color); white-space: normal; }
+    .bt-live .bt-pager { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+    @@media (max-width: 1199px) {
+        .bt-live .bt-table, .bt-live .bt-table tbody { display: block; }
+        .bt-live .bt-table colgroup, .bt-live .bt-table thead { display: none; }
+        .bt-live .bt-instance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 1rem; background: var(--sa-surface); border: 1px solid var(--sa-surface-border); border-radius: 1rem; box-shadow: var(--sa-surface-shadow); }
+        .bt-live .bt-table td { display: block; min-width: 0; border: 0; background: none; }
+        .bt-live .bt-table .bt-label { display: block; color: var(--bs-secondary-color); font-weight: 600; font-size: .85rem; margin-bottom: .25rem; }
+        .bt-live .bt-table .bt-error { grid-column: 1 / -1; }
+    }
+    @@media (max-width: 700px) {
+        .bt-live .bt-filters, .bt-live .bt-instance { grid-template-columns: minmax(0, 1fr); }
+    }
+</style>
+<div class="bt-live">
+    <h1 class="h3">Suspendierte BizTalk-Instanzen</h1>
+    <p class="text-muted">Rein lesende Live-Abfrage über das WebUI-Dienstkonto. Die Worker-Summen stammen weiterhin aus dem letzten Überwachungszyklus.</p>
+    @if (!Model.Enabled)
+    {
+        <div class="alert alert-warning" role="status">@Model.DisabledReason</div>
+    }
+    <form id="bt-filter" class="card card-body mb-3">
+        <div class="bt-filters">
+            <div><label class="form-label" for="bt-server">Server</label>
+                <select id="bt-server" class="form-select" disabled="@(!Model.Enabled)">
+                    @if (Model.Server == null)
+                    {
+                        <option value="" selected>Kein gültiger Server ausgewählt</option>
+                    }
+                    @foreach (var server in Model.Servers)
+                    {
+                        <option value="@server.Id" selected="@(server.Id == Model.Server)">@server.Name</option>
+                    }
+                </select>
+            </div>
+            <div><label class="form-label" for="bt-application">Anwendung (exakt)</label><input id="bt-application" class="form-control" maxlength="1024" value="@Model.Application" /></div>
+            <div><label class="form-label" for="bt-error">Fehlercode oder Fehlertext</label><input id="bt-error" class="form-control" maxlength="200" value="@Model.Error" /></div>
+        </div>
+        <div class="form-check mt-3"><input type="checkbox" class="form-check-input" id="bt-missing" checked="@Model.MissingApplication" /><label class="form-check-label" for="bt-missing">Nur Instanzen ohne bekannte Anwendung</label></div>
+        <div class="mt-3"><button class="btn btn-primary" id="bt-refresh" disabled="@(!Model.Enabled)">Live aktualisieren</button></div>
+    </form>
+    <p class="text-muted">Filter und Seitenwechsel fragen erneut live ab. Änderungen können Treffer zwischen Seiten verschieben. Aktualisieren setzt die Seite zurück. Service/Port zeigt die URI oder den Servicetyp; ein tatsächlicher Portname ist damit nicht bestätigt.</p>
+    <div id="bt-message" class="text-wrap-anywhere" role="status" aria-live="polite"></div>
+    <div id="bt-warning" class="alert alert-warning text-wrap-anywhere" role="status" hidden></div>
+    <table class="bt-table" aria-label="Live abgefragte suspendierte Instanzen">
+        <colgroup><col style="width:16%" /><col style="width:14%" /><col style="width:15%" /><col style="width:11%" /><col style="width:16%" /><col style="width:9%" /><col style="width:19%" /></colgroup>
+        <thead><tr><th scope="col">Instanz-ID / Status</th><th scope="col">Anwendung</th><th scope="col">Service/Port</th><th scope="col">Typ / Operation</th><th scope="col">Suspendiert seit (Zeitzone)</th><th scope="col">Fehlercode</th><th scope="col">Fehlertext</th></tr></thead>
+        <tbody id="bt-items" aria-busy="false"></tbody>
+    </table>
+    <nav class="bt-pager my-3" aria-label="Instanzseiten">
+        <button type="button" class="btn btn-outline-secondary" id="bt-prev" disabled>Zurück</button>
+        <span id="bt-page"></span>
+        <button type="button" class="btn btn-outline-secondary" id="bt-next" disabled>Weiter</button>
+    </nav>
+</div>
+@section Scripts {
+<script>
+(() => {
+    const form = document.getElementById('bt-filter');
+    const server = document.getElementById('bt-server');
+    const application = document.getElementById('bt-application');
+    const missing = document.getElementById('bt-missing');
+    const error = document.getElementById('bt-error');
+    const message = document.getElementById('bt-message');
+    const warning = document.getElementById('bt-warning');
+    const items = document.getElementById('bt-items');
+    const prev = document.getElementById('bt-prev');
+    const next = document.getElementById('bt-next');
+    const refresh = document.getElementById('bt-refresh');
+    const page = document.getElementById('bt-page');
+    const endpoint = @Json.Serialize(Url.Content("~/api/biztalk/instances/live"));
+    let offset = 0, busy = false;
+    const syncApplication = () => { application.disabled = missing.checked; };
+    missing.addEventListener('change', syncApplication);
+    syncApplication();
+    function cell(label, value, longText = false) {
+        const td = document.createElement('td');
+        const caption = document.createElement('span'); caption.className = 'bt-label'; caption.textContent = label;
+        const content = document.createElement('div');
+        if (longText) content.className = 'text-wrap-anywhere';
+        content.textContent = value || 'Unbekannt';
+        td.append(caption, content); return td;
+    }
+    function render(item) {
+        const row = document.createElement('tr'); row.className = 'bt-instance';
+        const id = cell('Instanz-ID / Status', item.instanceId, true);
+        const badge = document.createElement('span'); badge.className = 'badge bt-status mt-2';
+        badge.textContent = Number(item.status) === 1 || item.status === 'SuspendedResumable' ? 'Suspendiert · fortsetzbar' : Number(item.status) === 2 || item.status === 'SuspendedNotResumable' ? 'Suspendiert · nicht fortsetzbar' : 'Suspendiert · Status unbekannt';
+        id.append(badge);
+        const raw = document.createElement('div'); raw.className = 'small text-muted mt-1 text-wrap-anywhere'; raw.textContent = item.rawStatus || 'Originalstatus unbekannt'; id.append(raw);
+        row.append(id, cell('Anwendung', item.application, true), cell('Service/Port (Providerangabe)', item.serviceOrPort, true),
+            cell('Typ / laufende Operation', (item.type || 'Unbekannt') + ' / ' + (item.pendingOperation || 'Unbekannt'), true),
+            cell('Suspendiert seit (mit Zeitzone)', item.suspendedSince), cell('Fehlercode', item.errorCode, true));
+        const errorCell = cell('Fehlertext', ''); errorCell.className = 'bt-error'; errorCell.lastChild.remove();
+        const details = document.createElement('details');
+        const summary = document.createElement('summary'); summary.textContent = item.errorTextTruncated ? 'Anzeigen (auf 32 KiB gekürzt)' : 'Anzeigen';
+        const text = document.createElement('p'); text.className = 'mt-2 mb-0 text-wrap-anywhere'; text.style.whiteSpace = 'pre-wrap'; text.textContent = item.errorText || 'Unbekannt';
+        details.append(summary, text); errorCell.append(details); row.append(errorCell);
+        return row;
+    }
+    async function load() {
+        if (busy || server.disabled) return;
+        busy = true; prev.disabled = next.disabled = refresh.disabled = true;
+        items.replaceChildren(); warning.hidden = true; page.textContent = '';
+        items.setAttribute('aria-busy', 'true'); message.textContent = 'Live-Abfrage läuft …';
+        const query = new URLSearchParams({ server: server.value, offset, pageSize: 50 });
+        if (missing.checked) query.set('missingApplication', 'true');
+        else if (application.value) query.set('application', application.value);
+        if (error.value) query.set('error', error.value);
+        try {
+            const response = await fetch(endpoint + '?' + query, { cache: 'no-store', credentials: 'same-origin' });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Live-Abfrage fehlgeschlagen.');
+            message.textContent = 'Live abgefragt um ' + new Date(data.fetchedAtUtc).toLocaleString('de-DE', { timeZoneName: 'short' }) + ' · Provider: ' + data.provider;
+            warning.textContent = data.warning || ''; warning.hidden = !data.warning;
+            for (const item of data.items) items.append(render(item));
+            if (!data.items.length) {
+                const empty = document.createElement('tr');
+                const text = document.createElement('td'); text.colSpan = 7;
+                text.textContent = data.truncated ? 'Keine Treffer auf dieser Seite im begrenzten Ausschnitt.' : data.filteredCountWithinLimit > 0 ? 'Keine Treffer auf dieser Seite. Bitte aktualisieren.' : 'Keine suspendierten Instanzen für diese Filter gefunden.';
+                empty.append(text); items.append(empty);
+            }
+            page.textContent = 'Seite ' + (offset / 50 + 1) + ' · ' + data.filteredCountWithinLimit + ' Treffer im gelesenen Bereich · ' + data.scannedCount + ' Einträge geprüft';
+            next.disabled = !data.hasMore;
+            const url = new URL(location.href); url.search = query; url.searchParams.delete('offset'); url.searchParams.delete('pageSize'); history.replaceState(null, '', url);
+        } catch (e) { message.textContent = 'Fehler: ' + e.message; }
+        finally { busy = false; refresh.disabled = false; prev.disabled = offset === 0; items.setAttribute('aria-busy', 'false'); }
+    }
+    form.addEventListener('submit', e => { e.preventDefault(); if (!busy) { offset = 0; load(); } });
+    prev.addEventListener('click', () => { if (!busy) { offset = Math.max(0, offset - 50); load(); } });
+    next.addEventListener('click', () => { if (!busy) { offset += 50; load(); } });
+    load();
+})();
+</script>
+}
