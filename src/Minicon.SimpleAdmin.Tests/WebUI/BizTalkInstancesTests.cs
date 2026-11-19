@@ -324,7 +324,7 @@ public sealed class BizTalkInstancesTests
     }
 
     [Fact]
-    public void Page_OffersOnlyValidatedConfigTargets_AndApiExposesNoMutation()
+    public void Page_OffersOnlyValidatedConfigTargets_AndApiExposesOneGuardedMutation()
     {
         var config = new ConfigurationService(new ConfigurationBuilder().Build());
         var data = Config(); data.Servers.Add(new Server { Name = "disabled", Active = false });
@@ -335,8 +335,11 @@ public sealed class BizTalkInstancesTests
         Assert.Equal("bt-id", Assert.Single(model.Servers).Id); Assert.Equal("A&B/Ä", model.Application);
         var method = typeof(BizTalkInstancesController).GetMethod(nameof(BizTalkInstancesController.Live))!;
         Assert.Equal("live", Assert.Single(method.GetCustomAttributes(typeof(HttpGetAttribute), false).Cast<HttpGetAttribute>()).Template);
-        Assert.DoesNotContain(typeof(BizTalkInstancesController).GetMethods(), m => m.GetCustomAttributes(typeof(HttpPostAttribute), false).Length > 0);
-        Assert.Single(typeof(IBizTalkInstanceProvider).GetMethods());
+        var action = Assert.Single(typeof(BizTalkInstancesController).GetMethods(), m => m.GetCustomAttributes(typeof(HttpPostAttribute), false).Length > 0);
+        Assert.Equal("action", Assert.Single(action.GetCustomAttributes(typeof(HttpPostAttribute), false).Cast<HttpPostAttribute>()).Template);
+        Assert.Single(action.GetCustomAttributes(typeof(ValidateAntiForgeryTokenAttribute), false));
+        Assert.Single(action.GetCustomAttributes(typeof(ConsumesAttribute), false));
+        Assert.Equal(2, typeof(IBizTalkInstanceProvider).GetMethods().Length);
     }
 
     [Theory]

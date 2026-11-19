@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Minicon.SimpleAdmin.WebUI.Services.Control;
 using Microsoft.Extensions.Logging;
 using Minicon.SimpleAdmin.WebUI.Models.ScheduledTasks;
 
@@ -19,18 +20,19 @@ internal sealed class ScheduledTaskAuditLog
     private readonly string _directory;
     private readonly int _maxEntries;
     private readonly ILogger _logger;
-    private readonly SemaphoreSlim _writeGate = new(1, 1);
+    private readonly AtomicAuditLog<ScheduledTaskAuditEntry> _store;
     private readonly object _pendingLock = new();
     private readonly List<ScheduledTaskAuditEntry> _pending = new();
 
     /// <summary>Attempts × delay for the cross-process file lock (default 30 × 100 ms).</summary>
-    internal int LockAttempts { get; set; } = 30;
+    internal int LockAttempts { get => _store.LockAttempts; set => _store.LockAttempts = value; }
 
     public ScheduledTaskAuditLog(string directory, int maxEntries, ILogger logger)
     {
         _directory = directory;
         _maxEntries = Math.Max(10, maxEntries);
         _logger = logger;
+        _store = new AtomicAuditLog<ScheduledTaskAuditEntry>(FilePath, logger, nullIsEmpty: true, detailedErrors: true);
     }
 
     internal string FilePath => Path.Combine(_directory, ScheduledTaskControlOptions.AuditFileName);
@@ -49,37 +51,15 @@ internal sealed class ScheduledTaskAuditLog
             }
         }
 
-        await _writeGate.WaitAsync().ConfigureAwait(false);
-        var tmp = FilePath + "." + Environment.ProcessId + ".tmp";
-        try
+        List<ScheduledTaskAuditEntry> snapshot = [];
+        var error = await _store.UpdateAsync(disk =>
         {
-            List<ScheduledTaskAuditEntry> snapshot;
             lock (_pendingLock) snapshot = _pending.ToList();
-            if (snapshot.Count == 0) return null; // written by a concurrent append
-
-            Directory.CreateDirectory(_directory);
-            await using var fileLock = await AcquireFileLockAsync().ConfigureAwait(false);
-            if (fileLock == null)
-                return "Die Sperrdatei des Audit-Logs konnte nicht belegt werden.";
-
-            var merged = Merge(await ReadFileAsync(moveCorruptAside: true).ConfigureAwait(false), snapshot);
-            await File.WriteAllTextAsync(tmp, JsonSerializer.Serialize(merged, JsonOptions)).ConfigureAwait(false);
-            File.Move(tmp, FilePath, overwrite: true);
-
-            lock (_pendingLock)
-                _pending.RemoveAll(e => snapshot.Contains(e));
-            return null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Could not write scheduled task audit log {Path}", FilePath);
-            try { File.Delete(tmp); } catch { /* best effort */ }
-            return ex.Message;
-        }
-        finally
-        {
-            _writeGate.Release();
-        }
+            return Merge(disk, snapshot);
+        }, recoverCorrupt: true).ConfigureAwait(false);
+        if (error == null)
+            lock (_pendingLock) _pending.RemoveAll(e => snapshot.Contains(e));
+        return error;
     }
 
     /// <summary>Newest entries first (file + not yet written entries). The file is replaced atomically, so no lock is needed.</summary>
@@ -123,40 +103,4 @@ internal sealed class ScheduledTaskAuditLog
             string.Join('\u001f', e.Timestamp.ToUniversalTime().Ticks, e.User, e.Server, e.TaskPath, e.Action, e.Success, e.Message);
     }
 
-    private async Task<List<ScheduledTaskAuditEntry>> ReadFileAsync(bool moveCorruptAside)
-    {
-        if (!File.Exists(FilePath)) return new List<ScheduledTaskAuditEntry>();
-        try
-        {
-            return JsonSerializer.Deserialize<List<ScheduledTaskAuditEntry>>(await File.ReadAllTextAsync(FilePath).ConfigureAwait(false), JsonOptions)
-                   ?? new List<ScheduledTaskAuditEntry>();
-        }
-        catch (JsonException ex) when (moveCorruptAside)
-        {
-            // Never overwrite an unreadable audit log — keep it for inspection and start a new one.
-            var aside = FilePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-            File.Move(FilePath, aside, overwrite: true);
-            _logger.LogError(ex, "Scheduled task audit log {Path} was unreadable and has been moved to {Aside}", FilePath, aside);
-            return new List<ScheduledTaskAuditEntry>();
-        }
-    }
-
-    /// <summary>Cross-process lock for the audit file; null when it cannot be obtained (then nothing is written).</summary>
-    private async Task<FileStream?> AcquireFileLockAsync()
-    {
-        var path = FilePath + ".lock";
-        for (var attempt = 0; attempt < LockAttempts; attempt++)
-        {
-            try
-            {
-                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                await Task.Delay(100).ConfigureAwait(false);
-            }
-        }
-        _logger.LogWarning("Could not lock {Path}; audit entries stay pending until the next write", path);
-        return null;
-    }
 }

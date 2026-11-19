@@ -1,3 +1,4 @@
+using Minicon.SimpleAdmin.WebUI.Services.Control;
 using Minicon.SimpleAdmin.WebUI.Services.BizTalk;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
@@ -102,6 +103,19 @@ public static class SimpleAdminWebUIExtensions
         AddScriptRunner(services, configuration, ResolveConfigDirectory(configuration));
         AddScheduledTaskControl(services, configuration, ResolveConfigDirectory(configuration));
         services.AddSingleton(BizTalkOptions.Resolve(configuration, IsAuthenticationEnabled(configuration)));
+        // Preserve the ASP.NET Core default explicitly as the Razor/JavaScript header contract.
+        services.AddAntiforgery(o => o.HeaderName = "RequestVerificationToken");
+        services.AddSingleton<IWindowsEventSink, WindowsEventSink>();
+        services.AddSingleton<WindowsActionEventAudit>();
+        services.AddSingleton<IActionEventAudit>(sp => sp.GetRequiredService<WindowsActionEventAudit>());
+        services.AddHostedService(sp => sp.GetRequiredService<WindowsActionEventAudit>());
+        services.AddSingleton<IBizTalkAuditLog>(sp =>
+        {
+            var o = sp.GetRequiredService<BizTalkOptions>();
+            return new BizTalkAuditLog(Path.GetFullPath(string.IsNullOrWhiteSpace(o.AuditLogDirectory) ? ResolveConfigDirectory(configuration) : o.AuditLogDirectory),
+                o.AuditHistorySize, sp.GetRequiredService<ILogger<BizTalkAuditLog>>());
+        });
+        services.AddSingleton<IBizTalkInstanceControl, BizTalkInstanceControl>();
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddHttpClient(RestBizTalkInstanceProvider.ClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
             .ConfigurePrimaryHttpMessageHandler(RestBizTalkInstanceProvider.CreateHandler);
@@ -322,7 +336,7 @@ public static class SimpleAdminWebUIExtensions
         }
 
         var bizTalk = app.Services.GetRequiredService<BizTalkOptions>();
-        app.Logger.LogInformation("SimpleAdmin WebUI: BizTalk live REST enabled={Enabled}, account={Account}, reason={Reason}",
+        app.Logger.LogInformation("SimpleAdmin WebUI: BizTalk live/control REST enabled={Enabled}, account={Account}, reason={Reason}",
             bizTalk.ControlEnabled, $"{Environment.UserDomainName}\\{Environment.UserName}", bizTalk.DisabledReason);
 
         var taskControl = app.Services.GetRequiredService<ScheduledTaskControlOptions>();

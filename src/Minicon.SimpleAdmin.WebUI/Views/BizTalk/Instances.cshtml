@@ -3,6 +3,10 @@
     ViewData["Title"] = "Suspendierte BizTalk-Instanzen";
 }
 <style>
+    .bt-confirm { width: min(34rem, calc(100% - 2rem)); max-height: calc(100vh - 2rem); overflow-y: auto; color: var(--bs-body-color); background: var(--sa-surface), var(--sa-surface-solid); border: 1px solid var(--sa-surface-border); border-radius: 1rem; box-shadow: var(--sa-surface-shadow); }
+    .bt-confirm::backdrop { background: rgb(0 0 0 / .5); }
+    .bt-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+    .bt-actions .btn { white-space: normal; }
     .bt-live { min-width: 0; }
     .bt-live .bt-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
     .bt-live .form-control, .bt-live .form-select { width: 100%; min-width: 0; }
@@ -27,10 +31,14 @@
 </style>
 <div class="bt-live">
     <h1 class="h3">Suspendierte BizTalk-Instanzen</h1>
-    <p class="text-muted">Rein lesende Live-Abfrage über das WebUI-Dienstkonto. Die Worker-Summen stammen weiterhin aus dem letzten Überwachungszyklus.</p>
+    <p class="text-muted">Live-Abfrage und Einzelaktionen über das WebUI-Dienstkonto. Die Worker-Summen stammen weiterhin aus dem letzten Überwachungszyklus.</p>
     @if (!Model.Enabled)
     {
         <div class="alert alert-warning" role="status">@Model.DisabledReason</div>
+    }
+    @if (Model.Enabled)
+    {
+        <div id="bt-token" hidden>@Html.AntiForgeryToken()</div>
     }
     <form id="bt-filter" class="card card-body mb-3">
         <div class="bt-filters">
@@ -54,6 +62,7 @@
     </form>
     <p class="text-muted">Filter und Seitenwechsel fragen erneut live ab. Änderungen können Treffer zwischen Seiten verschieben. Aktualisieren setzt die Seite zurück. Service/Port zeigt die URI oder den Servicetyp; ein tatsächlicher Portname ist damit nicht bestätigt.</p>
     <div id="bt-message" class="text-wrap-anywhere" role="status" aria-live="polite"></div>
+    <div id="bt-result" class="alert alert-info text-wrap-anywhere" role="status" aria-live="polite" hidden></div>
     <div id="bt-warning" class="alert alert-warning text-wrap-anywhere" role="status" hidden></div>
     <table class="bt-table" aria-label="Live abgefragte suspendierte Instanzen">
         <colgroup><col style="width:16%" /><col style="width:14%" /><col style="width:15%" /><col style="width:11%" /><col style="width:16%" /><col style="width:9%" /><col style="width:19%" /></colgroup>
@@ -65,6 +74,19 @@
         <span id="bt-page"></span>
         <button type="button" class="btn btn-outline-secondary" id="bt-next" disabled>Weiter</button>
     </nav>
+    <details class="card card-body my-3"><summary>Verlauf der Aktionen (Datei-Audit)</summary>
+        <p>Ein Requested ohne Completed bedeutet: Ausgang nicht abschließend protokolliert. Vor einer weiteren Aktion frisch prüfen.</p>
+        <label for="bt-audit-server" class="form-label">Audit-Server-ID oder Name (optional, auch entfernte Server)</label><input id="bt-audit-server" class="form-control" maxlength="200" />
+        <label for="bt-audit-id" class="form-label">Instanz-GUID (optional)</label><input id="bt-audit-id" class="form-control" />
+        <button id="bt-audit-refresh" type="button" class="btn btn-outline-secondary mt-2">Verlauf laden</button>
+        <div id="bt-audit" class="text-wrap-anywhere" aria-live="polite"></div>
+    </details>
+    <dialog id="bt-confirm" class="bt-confirm" aria-labelledby="bt-confirm-title" aria-describedby="bt-confirm-text">
+        <h2 id="bt-confirm-title" class="h4"></h2><p id="bt-confirm-text"></p>
+        <p id="bt-confirm-target" class="text-wrap-anywhere"></p>
+        <div class="bt-actions"><button type="button" id="bt-cancel" class="btn btn-secondary" autofocus>Abbrechen</button>
+        <button type="button" id="bt-execute" class="btn btn-danger"></button></div>
+    </dialog>
 </div>
 @section Scripts {
 <script>
@@ -82,7 +104,69 @@
     const refresh = document.getElementById('bt-refresh');
     const page = document.getElementById('bt-page');
     const endpoint = @Json.Serialize(Url.Content("~/api/biztalk/instances/live"));
+    const actionEndpoint = @Json.Serialize(Url.Content("~/api/biztalk/instances/action"));
+    const auditEndpoint = @Json.Serialize(Url.Content("~/api/biztalk/instances/audit"));
+    const dialog = document.getElementById('bt-confirm');
+    const result = document.getElementById('bt-result');
+    const rowResults = new Map();
+    let selection = null, returnFocus = null;
     let offset = 0, busy = false;
+    const outcomeLabel = value => ({ Accepted: 'Auftrag angenommen', Rejected: 'Abgelehnt', Failed: 'Fehlgeschlagen', Unknown: 'Ausgang unbekannt' }[value] || 'Abgelehnt');
+    const resumable = item => Number(item.status) === 1 || item.status === 'SuspendedResumable';
+    const pending = item => item.pendingOperation && !['none', '0'].includes(String(item.pendingOperation).toLowerCase());
+    function confirmAction(item, action, button) {
+        if (busy) return;
+        selection = { server: server.value, instanceId: item.instanceId, action };
+        returnFocus = button;
+        const terminate = action === 'Terminate';
+        document.getElementById('bt-confirm-title').textContent = terminate ? 'Instanz endgültig beenden?' : 'Instanz fortsetzen?';
+        document.getElementById('bt-confirm-text').textContent = terminate ? 'Die zugehörige Nachricht wird verworfen. Diese Aktion kann nicht rückgängig gemacht werden.' : 'Fortsetzen kann eine erneute Zustellung und Verarbeitung auslösen.';
+        document.getElementById('bt-confirm-target').textContent = 'Server: ' + server.options[server.selectedIndex].text + ' · Anwendung: ' + (item.application || 'Unbekannt') + ' · Instanz: ' + item.instanceId;
+        document.getElementById('bt-execute').textContent = terminate ? 'Endgültig beenden' : 'Fortsetzen';
+        dialog.showModal(); document.getElementById('bt-cancel').focus();
+    }
+    function cancelDialog() { selection = null; dialog.close(); returnFocus?.focus(); }
+    document.getElementById('bt-cancel').addEventListener('click', cancelDialog);
+    dialog.addEventListener('cancel', e => { e.preventDefault(); cancelDialog(); });
+    document.getElementById('bt-execute').addEventListener('click', async () => {
+        if (busy || !selection) return;
+        const request = selection; selection = null; dialog.close();
+        busy = true;
+        const controls = [...form.querySelectorAll('input,select,button'), ...items.querySelectorAll('button'), prev, next];
+        const disabled = controls.map(c => c.disabled); controls.forEach(c => c.disabled = true);
+        result.hidden = false; result.textContent = 'Aktion läuft …';
+        try {
+            const response = await fetch(actionEndpoint, { method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('#bt-token input[name="__RequestVerificationToken"]').value },
+                body: JSON.stringify(request) });
+            const data = await response.json();
+            result.textContent = outcomeLabel(data.outcome) + ': ' + (data.message || 'Anforderung abgelehnt.') + ' · Operation: ' + (data.operationId || 'Unbekannt') + (data.auditPersisted === false ? ' · WARNUNG: Datei-Audit unvollständig.' : '');
+        } catch { result.textContent = 'Ausgang unbekannt. Verbindung unterbrochen. Nicht automatisch wiederholen; Status und Datei-Audit frisch prüfen.'; }
+        finally {
+            rowResults.set(request.instanceId, result.textContent);
+            busy = false; controls.forEach((c, i) => c.disabled = disabled[i]); offset = 0;
+            await load(); await loadAudit(); refresh.focus();
+        }
+    });
+    async function loadAudit() {
+        const output = document.getElementById('bt-audit'); output.replaceChildren();
+        const query = new URLSearchParams({ max: 100 });
+        const auditServer = document.getElementById('bt-audit-server').value.trim();
+        if (auditServer) query.set('server', auditServer);
+        const id = document.getElementById('bt-audit-id').value.trim(); if (id) query.set('instanceId', id);
+        try {
+            const response = await fetch(auditEndpoint + '?' + query, { cache: 'no-store', credentials: 'same-origin' });
+            const data = await response.json(); if (!response.ok) throw new Error(data.message || 'Audit nicht lesbar.');
+            for (const e of data) {
+                const line = document.createElement('p');
+                const unresolved = e.phase === 'Requested' && !data.some(c => c.operationId === e.operationId && c.phase === 'Completed');
+                line.textContent = new Date(e.timestamp).toLocaleString('de-DE', {timeZoneName: 'short'}) + ' · ' + e.user + ' · ' + e.server + (e.requestedServer && e.requestedServer !== e.server ? ' (angefragt: ' + e.requestedServer + ')' : '') + ' · ' + e.instanceId + ' · ' + (e.application || 'Anwendung unbekannt') + ' · ' + e.action + ' · ' + e.phase + ' / ' + outcomeLabel(e.outcome) + ' · ' + e.message + ' · Operation: ' + e.operationId + (unresolved ? ' · Ausgang nicht abschließend protokolliert.' : '');
+                output.append(line);
+            }
+            if (!data.length) output.textContent = 'Keine protokollierten Aktionen für diesen Filter.';
+        } catch (e) { output.textContent = 'Warnung: ' + e.message; }
+    }
+    document.getElementById('bt-audit-refresh').addEventListener('click', loadAudit);
     const syncApplication = () => { application.disabled = missing.checked; };
     missing.addEventListener('change', syncApplication);
     syncApplication();
@@ -100,6 +184,16 @@
         const badge = document.createElement('span'); badge.className = 'badge bt-status mt-2';
         badge.textContent = Number(item.status) === 1 || item.status === 'SuspendedResumable' ? 'Suspendiert · fortsetzbar' : Number(item.status) === 2 || item.status === 'SuspendedNotResumable' ? 'Suspendiert · nicht fortsetzbar' : 'Suspendiert · Status unbekannt';
         id.append(badge);
+        const actions = document.createElement('div'); actions.className = 'bt-actions';
+        for (const [action, label] of [['Resume', 'Fortsetzen'], ['Terminate', 'Beenden …']]) {
+            const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-sm btn-outline-' + (action === 'Terminate' ? 'danger' : 'primary');
+            button.textContent = label; button.disabled = pending(item) || (action === 'Resume' && !resumable(item));
+            button.addEventListener('click', () => confirmAction(item, action, button)); actions.append(button);
+        }
+        id.append(actions);
+        if (rowResults.has(item.instanceId)) {
+            const feedback = document.createElement('p'); feedback.className = 'small mt-2 text-wrap-anywhere'; feedback.textContent = rowResults.get(item.instanceId); id.append(feedback);
+        }
         const raw = document.createElement('div'); raw.className = 'small text-muted mt-1 text-wrap-anywhere'; raw.textContent = item.rawStatus || 'Originalstatus unbekannt'; id.append(raw);
         row.append(id, cell('Anwendung', item.application, true), cell('Service/Port (Providerangabe)', item.serviceOrPort, true),
             cell('Typ / laufende Operation', (item.type || 'Unbekannt') + ' / ' + (item.pendingOperation || 'Unbekannt'), true),

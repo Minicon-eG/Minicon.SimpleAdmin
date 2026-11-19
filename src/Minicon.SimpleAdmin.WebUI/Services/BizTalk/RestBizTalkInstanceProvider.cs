@@ -4,9 +4,10 @@ using Minicon.SimpleAdmin.WebUI.Models.BizTalk;
 
 namespace Minicon.SimpleAdmin.WebUI.Services.BizTalk;
 
-/// <summary>P3a deliberately exposes reading only. No action or audit contract is enabled.</summary>
+/// <summary>Bounded live reads and fixed single-instance REST actions.</summary>
 public interface IBizTalkInstanceProvider
 {
+    Task ExecuteAsync(BizTalkTarget target, Guid id, BizTalkInstanceAction action, CancellationToken ct);
     Task<BizTalkInstancePage> QuerySuspendedAsync(BizTalkTarget target, BizTalkInstanceQuery query, CancellationToken ct);
 }
 
@@ -84,6 +85,25 @@ public sealed class RestBizTalkInstanceProvider(HttpClient http, BizTalkOptions 
             filtered.Count, warnings.Count == 0 ? null : string.Join(" ", warnings));
     }
 
+    public async Task ExecuteAsync(BizTalkTarget target, Guid id, BizTalkInstanceAction action, CancellationToken ct)
+    {
+        if (id == Guid.Empty || !Enum.IsDefined(action)) throw new ArgumentException("Ungültige Instanz/Aktion.");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(options.ActionTimeout);
+        using var request = new HttpRequestMessage(HttpMethod.Put,
+            new Uri(target.BaseUri, $"OperationalData/Instances/{action}/{id:D}"));
+        request.Headers.Accept.ParseAdd("application/json");
+        try
+        {
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+            if (!response.IsSuccessStatusCode)
+                throw new BizTalkActionHttpException(response.StatusCode);
+            // No documented result schema. A successful response means acceptance only.
+        }
+        catch (OperationCanceledException) { throw new TimeoutException("Ausgang unbekannt nach Übergabe an die Management-API. Nicht automatisch wiederholen."); }
+        catch (HttpRequestException ex) { throw new BizTalkMutationUnknownException("Verbindung nach möglicher Übergabe unterbrochen. Ausgang unbekannt; nicht automatisch wiederholen.", ex); }
+    }
+
     private sealed class ResponseLimitException : IOException;
 
     /// <summary>Caps transport bytes, including giant individual JSON values. One byte of lookahead detects overflow.</summary>
@@ -125,4 +145,12 @@ public sealed class RestBizTalkInstanceProvider(HttpClient http, BizTalkOptions 
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
+}
+
+public sealed class BizTalkMutationUnknownException(string message, Exception? inner = null) : Exception(message, inner);
+
+public sealed class BizTalkActionHttpException(HttpStatusCode statusCode)
+    : Exception($"Management-API antwortet mit HTTP {(int)statusCode}. Zielzustand und Rechte des WebUI-Dienstkontos prüfen.")
+{
+    public HttpStatusCode StatusCode { get; } = statusCode;
 }

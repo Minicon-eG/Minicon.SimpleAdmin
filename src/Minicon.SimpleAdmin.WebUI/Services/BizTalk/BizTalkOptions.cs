@@ -8,6 +8,10 @@ public sealed class BizTalkOptions
     public const string SectionName = "BizTalk";
     public bool ControlEnabled { get; set; } = true;
     public bool AllowWithoutAuthentication { get; set; }
+    public int ActionTimeoutSeconds { get; set; } = 60;
+    public string? AuditLogDirectory { get; set; }
+    public int AuditHistorySize { get; set; } = 2000;
+    public TimeSpan ActionTimeout => TimeSpan.FromSeconds(Math.Clamp(ActionTimeoutSeconds, 5, 600));
     public int QueryTimeoutSeconds { get; set; } = 30;
     public int MaxInstances { get; set; } = 1000;
     public long MaxResponseBytes { get; set; } = 8 * 1024 * 1024;
@@ -23,11 +27,11 @@ public sealed class BizTalkOptions
     {
         var options = configuration.GetSection(SectionName).Get<BizTalkOptions>() ?? new();
         if (!options.ControlEnabled)
-            options.DisabledReason = "Die Live-Abfrage ist auf diesem Host abgeschaltet (BizTalk:ControlEnabled=false).";
+            options.DisabledReason = "Die Live-Abfrage und Steuerung ist auf diesem Host abgeschaltet (BizTalk:ControlEnabled=false).";
         else if (!authenticationEnabled && !options.AllowWithoutAuthentication)
         {
             options.ControlEnabled = false;
-            options.DisabledReason = "Die Live-Abfrage ist ohne Anmeldung abgeschaltet. Nur für isolierte Test-Hosts: BizTalk:AllowWithoutAuthentication=true.";
+            options.DisabledReason = "Die Live-Abfrage und Steuerung ist ohne Anmeldung abgeschaltet. Nur für isolierte Test-Hosts: BizTalk:AllowWithoutAuthentication=true.";
         }
         return options;
     }

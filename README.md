@@ -251,7 +251,7 @@ covering every check type, the notifier, authentication and the REST API.
 
 MIT — see [LICENSE](LICENSE).
 
-### BizTalk live-list host configuration (P3a)
+### BizTalk live instances and single actions (P3a/P3b)
 
 Set these in the WebUI host's `appsettings.json`, not `config.json`:
 
@@ -261,6 +261,8 @@ Set these in the WebUI host's `appsettings.json`, not `config.json`:
     "ControlEnabled": true,
     "AllowWithoutAuthentication": false,
     "QueryTimeoutSeconds": 30,
+    "ActionTimeoutSeconds": 60,
+    "AuditHistorySize": 2000,
     "MaxInstances": 1000,
     "MaxResponseBytes": 8388608,
     "AllowedApiHosts": { "bt-config-id": "explicit-api-host" }
@@ -273,7 +275,7 @@ server BizTalk checks are rewritten to that server, preserving port/path. Only
 HTTP(S) without credentials/query/fragment is accepted; redirects are disabled,
 TLS validation stays active, and HTTP uses the WebUI process credentials without
 user impersonation. The global authentication/RequiredRole policy stays in force.
-Without authentication, live IO requires explicit opt-in on an isolated host.
+Without authentication, live IO and mutations require explicit opt-in on an isolated host.
 Targets also require loaded config, the BizTalk feature, an active server and its
 enabled BizTalk check. Query timeout is the smaller of the host limit (5–120 s)
 and positive server `timeoutSeconds` (otherwise 30 s).
@@ -284,3 +286,75 @@ the scanned range. Error text is capped at 32 KiB UTF-8; search cannot cover the
 removed tail. Paging reads live again and may shift; refresh resets the offset.
 Unknown applications have a separate filter. URI or ServiceType is labelled as
 provider information, not a verified port name. Worker status sums remain unchanged.
+
+Single-instance **Fortsetzen** (Resume) and **Beenden** (Terminate) use the management
+REST API under the WebUI service account. Every signed-in user may act within the
+global RequiredRole policy. Resume requires a fresh resumable state. Terminate asks
+for explicit confirmation with server/application/GUID and warns that the message
+is permanently discarded. No bulk actions, WMI, automatic retries or fallback.
+Accepted means accepted for processing; live state is refreshed. A timeout after
+possible submission is **Unknown**: check live state/audit before acting again.
+
+Host options above are exclusively appsettings settings. Action timeout is 5–600 s;
+`AuditHistorySize` bounds new open operations and the independent active completed-history window (minimum 10 each). Optional `AuditLogDirectory`
+defaults to ConfigPath. Grant the WebUI service account management read/PUT rights
+and audit-directory write access. With explicit auth-off opt-in the audit user is
+`anonymous`. The JSON-only action POST additionally requires the Razor antiforgery
+token header `RequestVerificationToken`. GUID and config targets are validated
+under a process-local lock shared by Resume and Terminate.
+
+The required `biztalk-instance-actions.json` records user, UTC time, process account,
+configured server, GUID, provider application/mapping, action, outcome and OperationId.
+Durable Requested precedes mutation. If it cannot be written, HTTP 503 prevents the
+mutation. Completed write failure returns `AuditPersisted=false`; Requested remains
+visibly unresolved, pending completion is retained in memory and further mutations
+are blocked until that write can drain. Open Requested operations are never trimmed, even after reducing the limit;
+full open capacity blocks only new mutations, never completions or rejection audits.
+Closed history overflow is durably moved to immutable
+`biztalk-instance-actions.archive-<SHA256>.json` segments before replacing the active
+file. Trimming never deletes audit phases; archives are retained without automatic
+deletion. Back up active and archive files together. Reads combine/deduplicate them
+and apply filters before the bounded result limit. Corrupt files remain in place and block
+mutations. This is no distributed transaction with BizTalk. The bounded audit GET
+`/api/biztalk/instances/audit?server=&instanceId=&max=200` stays available with control
+off even for disabled or removed targets, or when config cannot be loaded.
+The page has independent server-ID/name and GUID filters; a blank server filter
+shows all history. Known disabled targets retain their canonical ID; unknown targets
+are explicitly marked and the original bounded target reference is preserved as
+RequestedServer.
+
+On Windows an additional **Application** event is attempted asynchronously:
+source **Minicon.SimpleAdmin.WebUI**, fallback existing **SimpleAdmin**, both checked
+for Application mapping. Prepare the preferred source during installation using an
+elevated PowerShell, for example:
+
+```powershell
+New-EventLog -LogName Application -Source 'Minicon.SimpleAdmin.WebUI'
+```
+
+Runtime never reassigns or creates sources, and does not require elevated logging
+rights. IDs: **3100 Information** Accepted, **3101 Warning** Rejected/Unknown,
+**3102 Error** Failed; payload correlates the same action/user/GUID/OperationId.
+One result per request is queued, not one per file phase. The 128-entry background
+buffer never waits for Windows IO in an HTTP request. Missing/misassigned sources,
+denied rights, event exceptions/hangs or overflow fall back to file audit with one
+host warning per process; restart after repair to check sources again. Events can
+be lost during failure/shutdown. Their failure never changes the action or file
+persistence result. **Non-Windows: file audit only**, no expected-platform warning.
+ScheduledTasks keeps its existing file format and does not gain event auditing.
+
+Before customer release, verify the new GET/PUT routes and responses, account rights,
+network/TLS, authorized resumable/non-resumable test instances and an explicitly
+approved disposable message for Terminate. Correlate file and Windows events, and
+exercise missing-source/rights fallback. Productive REST monitoring already exists;
+these new operation checks have not been performed against the customer environment.
+
+Audit snapshots, archive segments and lock files inherit permissions from their
+directory. Protect ConfigPath/AuditLogDirectory so only the service account and
+authorized administrators/readers have access; keep the same protections for backups.
+Upstream mutation 404/409 remains Rejected with HTTP 404/409; upstream 408/504 is
+Unknown/504, never automatically retried. ObservedStatus is null rather than a stale
+pre-action status; the UI performs the fresh observation. The event platform check
+runs once on the background worker; overflow degrades the event channel until restart
+with one asynchronously scheduled warning. The intentionally retained Wait/TryWrite
+combination detects dropped events without waiting; DropWrite would hide overflow.
