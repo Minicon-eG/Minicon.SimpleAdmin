@@ -2996,6 +2996,97 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     Der Laufzeitstatus der Host-Instanz-Dienste (<code>BTSSvc$…</code>) ist nicht Teil der API — diese
                     über die Windows-Dienste-Überwachung auf den BizTalk-Servern abdecken.
                 </div>
+                <h3 id="biztalk-instances">15.2 Instanzsteuerung in der WebUI (ab v2.38.0)</h3>
+                <p>
+                    „Suspendierte Instanzen anzeigen“ in den Serverdetails und „Instanzen prüfen“ bei suspendierten
+                    Problemen öffnen eine <strong>Live-Liste</strong> mit GUID, Anwendung, Zustand, Suspendierungszeit
+                    und Fehlerdetails. Filter und weitere Ergebnisse helfen bei der Suche; begrenzte Ausschnitte und
+                    fehlende Angaben werden gekennzeichnet. Zeiten zeigen Sekunden und UTC-Offset in der lokalen
+                    Zeitzone des WebUI-Hosts. Seitenwechsel lesen erneut live; Worker-Summen ändern sich erst im nächsten Zyklus.
+                </p>
+                <p>
+                    Einzelne Instanzen lassen sich <strong>nach Bestätigung fortsetzen oder beenden</strong>.
+                    Fortsetzen ist nur bei frisch bestätigtem resumierbarem Zustand ohne laufende Operation möglich
+                    und kann erneute Zustellung/Verarbeitung auslösen. Beenden fragt Server, Anwendung und GUID ab:
+                    <strong>Die Nachricht wird endgültig verworfen und kann nicht wiederhergestellt werden.</strong>
+                    Abbrechen und Escape senden keine Aktion. Es gibt keine Sammelaktionen und kein WMI.
+                </p>
+                <p>
+                    „Auftrag angenommen“ bestätigt noch keine abgeschlossene Nachrichtenverarbeitung; anschließend
+                    wird die Liste live aktualisiert. Bei „Ausgang unbekannt“ zuerst Live-Zustand und Verlauf prüfen.
+                    Es gibt keinen automatischen Aktionsretry. Nach dauerhaftem Requested läuft die Aktion mit eigener
+                    Zeitgrenze auch bei Browserabbruch weiter und wird protokolliert.
+                </p>
+                <h3 id="biztalk-host-options">15.3 Host-Optionen und Dienstkontorechte</h3>
+                <p>
+                    Die Optionen stehen <strong>ausschließlich im WebUI-Host in appsettings.json, Abschnitt BizTalk</strong>.
+                    Nur aktive, konfigurierte Server mit global und serverseitig aktivierter BizTalk-Prüfung sind Ziele.
+                    Ohne Anmeldung sind Live-Zugriff und Aktionen standardmäßig gesperrt; eine ausdrückliche Freigabe
+                    über AllowWithoutAuthentication ist nur für isolierte Hosts vorgesehen (Audit-Benutzer: anonymous).
+                </p>
+                <pre><code>{
+  "BizTalk": {
+    "ControlEnabled": true,
+    "AllowWithoutAuthentication": false,
+    "QueryTimeoutSeconds": 30,
+    "ActionTimeoutSeconds": 60,
+    "MaxInstances": 1000,
+    "MaxResponseBytes": 8388608,
+    "AuditHistorySize": 2000
+  }
+}</code></pre>
+                <p>
+                    QueryTimeoutSeconds erlaubt 5–120, ActionTimeoutSeconds 5–600 Sekunden, MaxInstances 1–5000,
+                    MaxResponseBytes 1–8388608 Bytes und AuditHistorySize mindestens 10 Vorgänge.
+                    AuditLogDirectory verwendet standardmäßig das ConfigPath-Verzeichnis. Abweichende API-Hosts
+                    benötigen eine ausdrückliche Zuordnung unter BizTalk, etwa
+                    <code>"AllowedApiHosts": { "bt-config-id": "api-host" }</code>.
+                    Loopback-Adressen werden auf den konfigurierten Servernamen umgesetzt; Pfad und Port bleiben erhalten.
+                    Die Live-Abfrage wird vor der Filterung begrenzt.
+                </p>
+                <p>
+                    Die REST-Aufrufe laufen integriert unter dem <strong>WebUI-Dienstkonto</strong>, ohne
+                    Benutzer-Impersonation, Redirects oder Umgehung der TLS-Prüfung. Dieses Konto benötigt Netz-/API-Leserechte,
+                    PUT-Rechte und Schreibrechte im Audit-Verzeichnis; Rechte des Worker-Kontos reichen nicht aus.
+                    Globale Anmeldung und Authentication:RequiredRole gelten für Lesen, Fortsetzen und Beenden;
+                    es gibt keine zusätzliche BizTalk-Rolle. JSON-POSTs benötigen ein Antiforgery-Token
+                    im Header RequestVerificationToken.
+                </p>
+                <h3 id="biztalk-audit">15.4 Audit-Verlauf und Windows-Ereignisprotokoll</h3>
+                <p>
+                    Der Verlauf zeigt Benutzer, UTC-Zeit, Ausführungskonto, Server, Instanz-GUID, Anwendung/Zuordnung,
+                    Aktion, Ergebnis und OperationId. Filter nach Server-ID/Name und optional GUID finden auch Vorgänge
+                    zu deaktivierten oder entfernten Servern und bei ausgeschalteter Steuerung; ein leerer Serverfilter zeigt alle Vorgänge.
+                </p>
+                <p>
+                    Pflicht-Datei-Audit: <code>biztalk-instance-actions.json</code>. <strong>Requested</strong> wird vor
+                    der Mutation dauerhaft geschrieben; scheitert dies, startet keine Aktion.
+                    <strong>Completed</strong> hält das Ergebnis fest. Fehlt der Abschluss, bleibt der Ausgang sichtbar
+                    ungeklärt und weitere Mutationen warten auf das nachholbare Datei-Audit.
+                    Offene Vorgänge bleiben erhalten; ältere abgeschlossene Vorgänge werden dauerhaft nach
+                    <code>biztalk-instance-actions.archive-&lt;SHA256&gt;.json</code> archiviert. Der Verlauf liest aktive Datei und Archive.
+                    Beide gemeinsam sichern und durch Verzeichnisrechte für Dienstkonto und berechtigte Administratoren/Leser schützen.
+                    Vor neuen Mutationen werden alle Archive auf Hash und gültiges JSON geprüft; beschädigte Nachweise
+                    bleiben erhalten und sperren neue Mutationen. Speicherbedarf und Prüfaufwand wachsen mit der Historie.
+                    Datei und BizTalk bilden keine gemeinsame Transaktion.
+                </p>
+                <p>
+                    Zusätzlich wird je gültiger Aktionsanforderung ein Ergebnis im lokalen Windows-<strong>Application</strong>-Log
+                    versucht: Quelle <code>Minicon.SimpleAdmin.WebUI</code>, ersatzweise die vorhandene, korrekt zugeordnete
+                    und beschreibbare Quelle <code>SimpleAdmin</code>. Ereignisse: <strong>3100</strong> (Accepted),
+                    <strong>3101</strong> (Rejected/Unknown), <strong>3102</strong> (Failed), korreliert über OperationId und Instanz-GUID.
+                    Quelle und Schreibrechte bei der Installation mit berechtigtem Konto vorbereiten; die Laufzeit legt keine Quelle an.
+                    Das WebUI-Konto benötigt dafür keine erhöhten Rechte. Eine begrenzte Hintergrundwarteschlange entkoppelt Windows-Zugriffe.
+                    Eventverluste bei Ausfall oder Prozessende sind möglich; Fehler beeinträchtigen das Pflicht-Datei-Audit nicht
+                    und lösen keine erneute BizTalk-Aktion aus. Außerhalb von Windows wird ausschließlich Datei-Audit verwendet.
+                </p>
+                <div class="info-box">
+                    Management REST wurde mit BizTalk Server 2016 FP1 eingeführt; die Microsoft-Installationsanleitung nennt FP2 oder neuer.
+                    Ab 2020 ManagementService und OperationalDataService unterscheiden und die Management-Service-Basis verwenden.
+                    Vor Kundenfreigabe konkrete Version, neue GET-/PUT-Routen, Antworten/Statuswerte, Netzweg, TLS,
+                    Dienstkontorechte und echte Windows-Ereignisse prüfen. Fortsetzen nur an freigegebener Testinstanz,
+                    Beenden nur an ausdrücklich freigegebener Wegwerf-Nachricht erproben. Kunden-/Windows-Nachweise stehen noch aus.
+                </div>
             </section>
 
             <!-- 16. Datei-/Protokollüberwachung -->
@@ -3088,7 +3179,7 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
   "Enabled": true,
   "RequiredRole": "DOMAIN\\SimpleAdmin-Skripte",
   "AllowedDirectories": [ "D:\\Skripte" ],
-  "BrowseRoots": [ "D:\\" ],
+  "BrowseRoots": [ "D:\" ],
   "PowerShellPath": "powershell.exe",
   "MaxConcurrentRuns": 4
 }</code></pre>

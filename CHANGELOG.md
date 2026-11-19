@@ -9,6 +9,35 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
+## [2.38.0] – 2026-11-19 – BizTalk-Instanzen prüfen, fortsetzen und beenden
+
+**Suspendierte BizTalk-Instanzen lassen sich jetzt direkt ansehen und nach Bestätigung einzeln fortsetzen oder endgültig beenden; Aktionen werden protokolliert.**
+
+### Neu
+- Aus den Serverdetails und aus suspendierten Problemen öffnet „Instanzen prüfen“ eine frisch abgefragte Liste. Sie zeigt Anwendung, Zustand, Fehler und Zeitpunkt der Suspendierung; Filter und weitere Ergebnisse helfen bei der Suche. Begrenzte Ausschnitte und fehlende Angaben werden gekennzeichnet.
+- Einzelne Instanzen lassen sich nach Bestätigung fortsetzen oder beenden. „Fortsetzen“ ist nur bei dafür geeigneten Instanzen verfügbar; laufende Änderungen sperren weitere Aktionen. Anschließend wird die Liste neu abgefragt.
+- Der Verlauf zeigt, wer wann welche Instanz bearbeitet hat und mit welchem Ergebnis. Filter nach Server und Instanz finden auch ältere Vorgänge zu inzwischen entfernten Servern.
+
+### Sicherheit
+- Jede Aktion wird vorab geprüft und protokolliert. Kann das notwendige Protokoll nicht sicher geschrieben werden, wird die Aktion nicht gestartet. Fehler und ein unklarer Ausgang werden ausdrücklich angezeigt.
+
+### Hinweise
+- **Beenden ist endgültig:** Die betroffene Nachricht geht verloren. Den Bestätigungsdialog deshalb sorgfältig prüfen.
+- Eine angenommene Aktion bedeutet noch nicht, dass die Nachrichtenverarbeitung abgeschlossen ist. Bei unklarem Ausgang zuerst den aktuellen Zustand prüfen; die Aktion wird nicht automatisch wiederholt.
+- Zeitangaben der Instanzen und des Verlaufs zeigen die Zeitzone der Oberfläche mit UTC-Abweichung.
+
+### Entwickler
+- Neue WebUI-Seite `/BizTalk/Instances` und Endpunkte `GET /api/biztalk/instances/live`, `POST /api/biztalk/instances/action` sowie `GET /api/biztalk/instances/audit`. Einzelaktionen `Resume` und `Terminate` benötigen ein Antiforgery-Token im Header `RequestVerificationToken`; globale Anmeldung und `Authentication:RequiredRole` gelten weiterhin. Keine zusätzliche BizTalk-Rolle, keine Sammelaktionen, kein WMI und kein automatischer Aktionsretry.
+- Optionen ausschließlich im WebUI-Host unter `BizTalk` in `appsettings.json`: `ControlEnabled=true`, `AllowWithoutAuthentication=false`, `QueryTimeoutSeconds=30` (5–120), `ActionTimeoutSeconds=60` (5–600), `MaxInstances=1000` (1–5000), `MaxResponseBytes=8388608` (1–8388608), `AllowedApiHosts` als Zuordnung von kanonischer Server-ID zu API-Host, `AuditLogDirectory` (Standard: ConfigPath-Verzeichnis), `AuditHistorySize=2000` (mindestens 10 Vorgänge). Ohne Anmeldung sind Live-Zugriff und Aktionen standardmäßig gesperrt. Zielserver, Feature und Überwachung müssen freigegeben sein; andere API-Hosts benötigen die explizite Hostfreigabe.
+- Live-Abfragen sind vor der Filterung begrenzt. Die Management-REST-API wird unter dem WebUI-Dienstkonto angesprochen, ohne Benutzer-Impersonation, Redirects oder Umgehung der TLS-Prüfung. Das Konto benötigt Netz-/API-Leserechte und PUT-Rechte sowie Schreibrechte im Audit-Verzeichnis; die Rechte des Worker-Kontos reichen dafür nicht aus.
+- Pflicht-Datei-Audit in `biztalk-instance-actions.json`: Requested wird vor der Mutation dauerhaft geschrieben, Completed hält das Ergebnis fest. Fehlende Abschlussprotokollierung bleibt sichtbar und sperrt weitere Mutationen bis zum Nachschreiben. Offene Vorgänge bleiben erhalten; ältere abgeschlossene Vorgänge werden dauerhaft in `biztalk-instance-actions.archive-<SHA256>.json` archiviert. Aktive Datei und Archive gemeinsam sichern und durch Verzeichnisrechte schützen. Vor neuen Mutationen werden alle Archive auf Hash und gültiges JSON geprüft; beschädigte Nachweise bleiben erhalten und sperren neue Mutationen. Speicherbedarf und Prüfaufwand wachsen mit der Historie. Keine gemeinsame Transaktion zwischen Datei und BizTalk.
+- Zusätzliches Windows-Application-Protokoll über Quelle `Minicon.SimpleAdmin.WebUI`, ersatzweise vorhandene, korrekt zugeordnete und beschreibbare Quelle `SimpleAdmin`: Ereignisse 3100 (Accepted), 3101 (Rejected/Unknown), 3102 (Failed), korreliert über OperationId und Instanz-GUID. Quelle und Rechte bei der Installation vorbereiten; die Laufzeit legt keine Quelle an. Eine begrenzte Hintergrundwarteschlange entkoppelt Windows-Zugriffe. Ausfälle beeinträchtigen das Pflicht-Datei-Audit nicht und lösen keine erneute BizTalk-Aktion aus; außerhalb von Windows bleibt es beim Datei-Audit.
+- Management REST wurde mit BizTalk Server 2016 FP1 eingeführt; die aktuelle Microsoft-Installationsanleitung nennt FP2 oder neuer. Ab 2020 ManagementService und OperationalDataService unterscheiden und die Management-Service-Basis verwenden. Konkrete Kunden-Version, neue GET-/PUT-Routen, Antworten und Statuswerte sowie Netzweg, TLS, AD-Rechte und echte Windows-Ereignisse müssen vor Kundenfreigabe geprüft werden. Resume nur an freigegebener Testinstanz, Terminate nur an freigegebener Wegwerf-Nachricht erproben.
+
+### Intern
+- Gemeinsamer atomarer Datei-Audit-Kern für BizTalk und geplante Tasks; bestehendes Task-Dateiformat und dessen Fehler-/Lesepolitik bleiben erhalten. Keine zusätzlichen Windows-Ereignisse für geplante Tasks.
+- Regressionen für Live-Abfragen, Zielprüfung, Anmeldung, Antiforgery, Einzelaktionen, Archivintegrität, Audit-Aufbewahrung, Windows-Ereignisausfälle und Zeitanzeige; lokale Browserprüfungen für Einstiege, Filter, Bestätigungen und Verlauf bei mehreren Breiten und beiden Farbschemata. Reale Kunden- und Windows-Nachweise sowie eine manuelle Screenreader-Abnahme bleiben gesondert offen.
+
 ## [2.37.1] – 2026-11-10 – Technische Korrekturen
 
 ### Entwickler
@@ -362,6 +391,7 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.38.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.1...v2.38.0
 [2.37.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.0...v2.37.1
 [2.37.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.1...v2.37.0
 [2.36.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.36.0...v2.36.1

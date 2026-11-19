@@ -28,7 +28,7 @@ dotnet pack  Minicon.SimpleAdmin.slnx -c Release -o local-feed --no-build
 ```
 
 ### Versioning
-- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.37.1`).
+- All package `Version` properties are kept in sync across the `*.csproj` files (currently `2.38.0`).
 - Bump every package's `<Version>` together — mixed package versions across the seven projects will break consumers because they all depend on each other.
 - `GeneratePackageOnBuild=true` is set on each publishable project, so a Release build emits `.nupkg` files automatically.
 
@@ -313,7 +313,7 @@ Central long-term suppression of known event log noise, configured in `features.
 - **WebUI/HTML**: Servers/Edit „BizTalk-Überwachung" card (`_BizTalkChecksPartial.cshtml`); Settings/Features global toggle + suspended defaults; Status/Details renders a BizTalk section; HTML detail page shows a `⚙️ BizTalk` section + a `⚙️ K/N BizTalk` monitoring badge.
 - Problems flow through the normal pipeline (notifier mails with acknowledge deep-link, central overview, status escalation) — no BizTalk-specific notification path. `RuntimeStatus.BizTalk` is included in the per-server status JSON published over HTTP so the notifier sees it.
 
-### BizTalk Instance Control
+### BizTalk Instance Control (v2.38.0)
 
 Management REST was introduced with BizTalk Server 2016 Feature Pack 1; Microsoft's installation guide currently lists Feature Pack 2 or newer as prerequisite. For BizTalk Server 2020+, ManagementService and OperationalDataService are separate services. Configure the management-service base for these instance actions, not the separate OData service. Exact version/feature pack, routes and response/status contracts still require customer verification; this is not a blanket compatibility claim. [Microsoft REST installation](https://learn.microsoft.com/en-us/biztalk/core/install-and-configure-the-management-rest-apis-in-biztalk-server), [2020+ service configuration](https://learn.microsoft.com/en-us/biztalk/install-and-config-guides/configure-biztalk-server).
 
