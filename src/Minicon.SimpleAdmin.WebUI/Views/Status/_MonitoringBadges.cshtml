@@ -1,0 +1,20 @@
+@model Minicon.SimpleAdmin.WebUI.ViewModels.ServerStatusView
+@inject Minicon.SimpleAdmin.WebUI.Services.ConfigurationService ConfigService
+
+@{
+    var badges = MonitoringBadges.Create(ConfigService.Config, Model);
+    var detailsUrl = Url.Action("Details", "Status", new { id = Model.ServerId });
+}
+
+@if (badges.Count > 0)
+{
+    <div class="monitoring-badges d-flex flex-wrap gap-1 mb-3" aria-label="Aktive Überwachungen">
+        @foreach (var badge in badges)
+        {
+            <a href="@detailsUrl@badge.Fragment" class="pill pill-@badge.Tone text-decoration-none position-relative z-2"
+               data-monitoring="@badge.Key" title="@badge.Title" aria-label="@badge.Title">
+                <i class="bi @badge.Icon" aria-hidden="true"></i>@badge.Text
+            </a>
+        }
+    </div>
+}
