@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// JSON path assertion for response validation
 /// </summary>
-public class JsonPathAssertion
+public class JsonPathAssertion : ConfigModel
 {
     public string Path { get; set; } = string.Empty;
     public string Operator { get; set; } = "==";

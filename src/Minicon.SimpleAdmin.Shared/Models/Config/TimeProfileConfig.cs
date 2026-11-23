@@ -3,7 +3,7 @@
 /// <summary>
 /// Time profiles configuration for threshold adjustments based on time of day/week
 /// </summary>
-public class TimeProfilesConfig
+public class TimeProfilesConfig : ConfigModel
 {
     /// <summary>
     /// Business hours profile
@@ -84,7 +84,7 @@ public class TimeProfilesConfig
 /// <summary>
 /// A time profile that defines when it's active and what multiplier to apply
 /// </summary>
-public class TimeProfile
+public class TimeProfile : ConfigModel
 {
     /// <summary>
     /// Schedule definition (e.g., "Mon-Fri 07:00-18:00", "Sat 00:00 - Mon 07:00")

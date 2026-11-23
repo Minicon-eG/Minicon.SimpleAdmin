@@ -3,7 +3,7 @@
 /// <summary>
 /// Certificate expiration monitoring feature configuration
 /// </summary>
-public class CertificateFeatureConfig
+public class CertificateFeatureConfig : ConfigModel
 {
     /// <summary>
     /// Whether the feature is enabled globally (default: false - opt-in)
@@ -24,7 +24,7 @@ public class CertificateFeatureConfig
 /// <summary>
 /// Default settings for certificate monitoring
 /// </summary>
-public class CertificateDefaults
+public class CertificateDefaults : ConfigModel
 {
     /// <summary>
     /// Days before expiration to trigger warning (default: 30)
@@ -40,7 +40,7 @@ public class CertificateDefaults
 /// <summary>
 /// Server-specific certificate checks configuration
 /// </summary>
-public class CertificateChecksConfig
+public class CertificateChecksConfig : ConfigModel
 {
     /// <summary>
     /// Whether certificate checks are enabled for this server (default: false)
@@ -56,7 +56,7 @@ public class CertificateChecksConfig
 /// <summary>
 /// Configuration for a specific certificate check
 /// </summary>
-public class CertificateCheckConfig
+public class CertificateCheckConfig : ConfigModel
 {
     /// <summary>
     /// Certificate source (e.g., "store://LocalMachine/My", "iis://", "file://path/to/cert.pfx")
@@ -82,7 +82,7 @@ public class CertificateCheckConfig
 /// <summary>
 /// Filter criteria for certificates
 /// </summary>
-public class CertificateFilter
+public class CertificateFilter : ConfigModel
 {
     /// <summary>
     /// Subject must contain this string

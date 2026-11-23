@@ -5,7 +5,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// SMTP connection settings for sending probe emails
 /// </summary>
-public class SmtpConfig
+public class SmtpConfig : ConfigModel
 {
     /// <summary>SMTP server hostname or IP</summary>
     public string Host { get; set; } = string.Empty;
@@ -45,7 +45,7 @@ public class SmtpConfig
 /// <summary>
 /// A single email probe configuration — one SMTP path to test
 /// </summary>
-public class EmailProbeConfig
+public class EmailProbeConfig : ConfigModel
 {
     /// <summary>Unique slug identifier within this server (e.g., "seg1-relay")</summary>
     public string Name { get; set; } = string.Empty;
@@ -71,7 +71,7 @@ public class EmailProbeConfig
 /// <summary>
 /// Per-server email probe sender configuration
 /// </summary>
-public class ServerEmailProbesConfig
+public class ServerEmailProbesConfig : ConfigModel
 {
     /// <summary>Whether email probe sending is enabled for this server (default: false)</summary>
     public bool Enabled { get; set; } = false;
@@ -85,7 +85,7 @@ public class ServerEmailProbesConfig
 /// <summary>
 /// IMAP connection settings for reading the monitoring mailbox
 /// </summary>
-public class ImapConfig
+public class ImapConfig : ConfigModel
 {
     /// <summary>IMAP server hostname or IP</summary>
     public string Host { get; set; } = string.Empty;
@@ -122,7 +122,7 @@ public class ImapConfig
 /// <summary>
 /// A single email delivery check — verifies that probe emails from one sender arrive on time
 /// </summary>
-public class EmailDeliveryCheckConfig
+public class EmailDeliveryCheckConfig : ConfigModel
 {
     /// <summary>Unique slug identifier within this server (e.g., "seg1-relay-check")</summary>
     public string Name { get; set; } = string.Empty;
@@ -158,7 +158,7 @@ public class EmailDeliveryCheckConfig
 /// from each configured sender (identified by subject filter) arrived on time.
 /// One IMAP connection is opened per worker cycle and reused for all checks.
 /// </summary>
-public class ServerEmailDeliveryConfig
+public class ServerEmailDeliveryConfig : ConfigModel
 {
     /// <summary>Whether email delivery checking is enabled for this server (default: false)</summary>
     public bool Enabled { get; set; } = false;

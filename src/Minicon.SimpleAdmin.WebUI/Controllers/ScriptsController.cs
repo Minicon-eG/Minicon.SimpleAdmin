@@ -35,7 +35,8 @@ public sealed class ScriptsController : Controller
         {
             Scripts = _store.GetAll().ToList(),
             RecentRuns = _runs.GetHistory(max: 30).ToList(),
-            StoreError = _store.LoadError
+            StoreError = _store.LoadError,
+            HistoryError = _runs.LoadError
         };
         return View(model);
     }
@@ -331,6 +332,9 @@ public sealed class ScriptsIndexViewModel
 
     /// <summary>scripts.json could not be read (shown as banner; saving is blocked).</summary>
     public string? StoreError { get; set; }
+
+    /// <summary>history.json could not be read or locked (shown as banner; history writes are blocked).</summary>
+    public string? HistoryError { get; set; }
 }
 
 public sealed class ScriptRunFormViewModel

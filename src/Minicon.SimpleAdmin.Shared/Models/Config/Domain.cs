@@ -6,7 +6,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <c>-prod</c>, no suffix) only produces a suggestion and a warning, never the assignment itself.
 /// Both production variants (<c>app</c> and <c>app-prod</c>) are independent entries.
 /// </summary>
-public class Domain
+public class Domain : ConfigModel
 {
     /// <summary>
     /// Gets or sets the DNS name, e.g. <c>app-services-dev</c> or <c>app-services.example.org</c>

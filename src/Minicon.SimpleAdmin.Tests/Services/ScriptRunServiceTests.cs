@@ -249,6 +249,134 @@ public sealed class ScriptRunServiceTests : IDisposable
         File.Exists(service.LogPath(ids[^1])).Should().BeTrue();
     }
 
+    private string WriteHistory(string json)
+    {
+        var directory = Path.Combine(_dir, "runs");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "history.json");
+        File.WriteAllText(path, json);
+        return path;
+    }
+
+    private static string OneRunHistory(string status) => $$"""
+        [
+          {
+            "id": "old",
+            "scriptId": "copy",
+            "scriptName": "Alter Lauf",
+            "scriptPath": "old.ps1",
+            "startedAt": "2026-01-01T00:00:00Z",
+            "status": "{{status}}"
+          }
+        ]
+        """;
+
+    private string[] UnreadableBackups() =>
+        Directory.GetFiles(Path.Combine(_dir, "runs"), "history.json.unreadable-*");
+
+    [UnixFact]
+    public async Task TruncatedHistory_IsPreservedBackedUpAndReported()
+    {
+        var original = OneRunHistory("Succeeded")[..^3];
+        var path = WriteHistory(original);
+        var service = CreateService("echo neu");
+
+        var started = service.Start(Definition(), Values("BZR"), null);
+        await WaitForFinish(service, started.Id);
+
+        File.ReadAllText(path).Should().Be(original);
+        service.LoadError.Should().Contain("gesperrt");
+        UnreadableBackups().Should().ContainSingle();
+        File.ReadAllText(UnreadableBackups()[0]).Should().Be(original);
+    }
+
+    [UnixFact]
+    public async Task UnknownHistoryStatus_IsVisibleAndDoesNotBlockLaterRuns()
+    {
+        var original = OneRunHistory("FutureStatus");
+        var path = WriteHistory(original);
+        var service = CreateService("echo neu");
+        service.GetRun("old")!.Status.Should().Be(ScriptRunStatus.Unknown);
+
+        var started = service.Start(Definition(), Values("BZR"), null);
+        await WaitForFinish(service, started.Id);
+
+        File.ReadAllText(path).Should().Contain(started.Id).And.Contain("Unknown");
+        service.GetHistory().Select(run => run.Id).Should().Contain(["old", started.Id]);
+        service.LoadError.Should().BeNull();
+        UnreadableBackups().Should().BeEmpty();
+
+        var store = new ScriptDefinitionStore(Path.Combine(_dir, "scripts.json"), NullLogger<ScriptDefinitionStore>.Instance);
+        var controller = new ScriptsController(store, service,
+            new ScriptPathPolicy(_dir, Array.Empty<string>(), Array.Empty<string>()), NullLogger<ScriptsController>.Instance);
+        var model = controller.Index().Should().BeOfType<ViewResult>().Subject.Model.Should().BeOfType<ScriptsIndexViewModel>().Subject;
+        model.HistoryError.Should().BeNull();
+    }
+
+    [UnixFact]
+    public async Task LockedHistory_IsNotReplacedAndBackupCompletesAfterUnlock()
+    {
+        var original = OneRunHistory("Succeeded");
+        var path = WriteHistory(original);
+        using var held = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var service = CreateService("echo neu");
+        service.ReadAttempts = 1;
+        service.IoRetryDelay = TimeSpan.FromMilliseconds(1);
+
+        var started = service.Start(Definition(), Values("BZR"), null);
+        await WaitForFinish(service, started.Id);
+        service.LoadError.Should().NotBeNull();
+        UnreadableBackups().Should().BeEmpty();
+
+        held.Dispose();
+        service.LoadError.Should().NotBeNull();
+        File.ReadAllText(path).Should().Be(original);
+        UnreadableBackups().Should().ContainSingle();
+    }
+
+    [UnixFact]
+    public async Task HistoryLockTimeout_NeverWritesWithoutTheLock()
+    {
+        var original = OneRunHistory("Succeeded");
+        var path = WriteHistory(original);
+        var service = CreateService("echo neu");
+        service.LockAttempts = 2;
+        service.IoRetryDelay = TimeSpan.FromMilliseconds(1);
+        using var held = new FileStream(path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+
+        var started = service.Start(Definition(), Values("BZR"), null);
+        await WaitForFinish(service, started.Id);
+
+        service.LoadError.Should().Contain("Sperrdatei");
+        File.ReadAllText(path).Should().Be(original);
+        service.GetRun(started.Id).Should().NotBeNull();
+    }
+
+    [UnixFact]
+    public async Task HistoryWriteFailure_DoesNotTrimMemoryOrDeleteDroppedLogs()
+    {
+        var oldRuns = Enumerable.Range(0, 11).Select(i => new ScriptRun
+        {
+            Id = "old-" + i,
+            ScriptId = "copy",
+            ScriptName = "Alt " + i,
+            StartedAt = new DateTime(2026, 1, 1, 0, 0, i, DateTimeKind.Utc),
+            Status = ScriptRunStatus.Succeeded
+        }).ToList();
+        var path = WriteHistory(System.Text.Json.JsonSerializer.Serialize(oldRuns, ScriptJson.Options));
+        foreach (var run in oldRuns) File.WriteAllText(Path.Combine(_dir, "runs", run.Id + ".log"), run.Id);
+        var service = CreateService("echo neu", new ScriptRunnerOptions { HistorySize = 10 });
+        Directory.CreateDirectory(path + "." + Environment.ProcessId + ".tmp");
+
+        var started = service.Start(Definition(), Values("BZR"), null);
+        await WaitForFinish(service, started.Id);
+
+        File.Exists(Path.Combine(_dir, "runs", "old-0.log")).Should().BeTrue();
+        File.ReadAllText(path).Should().Contain("old-0");
+        service.GetRun("old-0").Should().NotBeNull();
+        service.LoadError.Should().Contain("konnte nicht geschrieben werden");
+    }
+
     [UnixFact]
     public async Task LogDownload_ReturnsTheCompleteLogFile()
     {
@@ -340,6 +468,38 @@ public sealed class ScriptRunServiceTests : IDisposable
 
         store.Delete("copy").Should().BeTrue();
         store.GetAll().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void DefinitionStore_EverySave_BackupsUpThePreviousFile()
+    {
+        var path = Path.Combine(_dir, "scripts.json");
+        var store = new ScriptDefinitionStore(path, NullLogger<ScriptDefinitionStore>.Instance);
+        store.Save(Definition());
+        var first = Definition();
+        first.Name = "Zweite Version";
+
+        store.Save(first);
+
+        var backup = Directory.GetFiles(Path.Combine(_dir, "backup"), "scripts.json.*").Should().ContainSingle().Subject;
+        File.ReadAllText(backup).Should().Contain("Copy copy").And.NotContain("Zweite Version");
+        File.ReadAllText(path).Should().Contain("Zweite Version");
+    }
+
+    [Fact]
+    public void DefinitionStore_BackupFailure_DoesNotBlockSaving()
+    {
+        var path = Path.Combine(_dir, "scripts.json");
+        var store = new ScriptDefinitionStore(path, NullLogger<ScriptDefinitionStore>.Instance);
+        store.Save(Definition());
+        File.WriteAllText(Path.Combine(_dir, "backup"), "not a directory");
+        var changed = Definition();
+        changed.Name = "Trotzdem gespeichert";
+
+        var act = () => store.Save(changed);
+
+        act.Should().NotThrow();
+        File.ReadAllText(path).Should().Contain("Trotzdem gespeichert");
     }
 
     [Fact]

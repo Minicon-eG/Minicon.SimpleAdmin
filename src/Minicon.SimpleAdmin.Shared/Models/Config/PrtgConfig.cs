@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// PRTG monitoring configuration
 /// </summary>
-public class PrtgConfig
+public class PrtgConfig : ConfigModel
 {
     /// <summary>
     /// Gets or sets whether PRTG monitoring is enabled

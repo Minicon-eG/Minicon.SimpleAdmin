@@ -8,10 +8,14 @@ namespace Minicon.SimpleAdmin.WebUI.Controllers;
 public class SettingsController : Controller
 {
     private readonly ConfigurationService _configService;
+    private readonly IConfiguration? _configuration;
+    private readonly IWebHostEnvironment? _environment;
 
-    public SettingsController(ConfigurationService configService)
+    public SettingsController(ConfigurationService configService, IConfiguration? configuration = null, IWebHostEnvironment? environment = null)
     {
         _configService = configService;
+        _configuration = configuration;
+        _environment = environment;
     }
 
     public IActionResult Index()
@@ -32,7 +36,10 @@ public class SettingsController : Controller
             Output = output,
             Title = _configService.GetApplicationTitle() == ConfigurationService.DefaultApplicationTitle
                 ? null
-                : _configService.GetApplicationTitle()
+                : _configService.GetApplicationTitle(),
+            DataDirectoryWarning = _configuration == null || _environment == null
+                ? null
+                : SimpleAdminWebUIExtensions.GetApplicationDataDirectoryWarning(_configuration, _environment.ContentRootPath)
         };
 
         return View(model);
@@ -204,6 +211,8 @@ public class SettingsViewModel
 
     /// <summary>Application title (<c>general.title</c>); empty = default "SimpleAdmin".</summary>
     public string? Title { get; set; }
+
+    public string? DataDirectoryWarning { get; set; }
 }
 
 public class FeaturesViewModel

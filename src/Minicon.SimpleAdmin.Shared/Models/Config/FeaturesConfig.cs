@@ -3,7 +3,7 @@
 /// <summary>
 /// Global feature toggles - controls which monitoring features are available
 /// </summary>
-public class FeaturesConfig
+public class FeaturesConfig : ConfigModel
 {
     /// <summary>
     /// System metrics feature (CPU, Memory, Disk) - always enabled by default
@@ -69,7 +69,7 @@ public class FeaturesConfig
 /// <summary>
 /// System metrics feature configuration (CPU, Memory, Disk)
 /// </summary>
-public class SystemMetricsFeatureConfig
+public class SystemMetricsFeatureConfig : ConfigModel
 {
     /// <summary>
     /// Whether the feature is enabled globally (default: true)
@@ -80,7 +80,7 @@ public class SystemMetricsFeatureConfig
 /// <summary>
 /// Windows Services feature configuration
 /// </summary>
-public class ServicesFeatureConfig
+public class ServicesFeatureConfig : ConfigModel
 {
     /// <summary>
     /// Whether the feature is enabled globally (default: true)

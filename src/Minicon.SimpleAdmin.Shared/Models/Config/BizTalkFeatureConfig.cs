@@ -4,7 +4,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// Global BizTalk monitoring feature configuration (opt-in). The API endpoint and which artefacts
 /// to watch are configured per server in <see cref="ServerBizTalkConfig"/>.
 /// </summary>
-public class BizTalkFeatureConfig
+public class BizTalkFeatureConfig : ConfigModel
 {
     /// <summary>Whether the feature is enabled globally (default: false - opt-in).</summary>
     public bool Enabled { get; set; } = false;
@@ -17,7 +17,7 @@ public class BizTalkFeatureConfig
 }
 
 /// <summary>Default thresholds for BizTalk monitoring.</summary>
-public class BizTalkDefaults
+public class BizTalkDefaults : ConfigModel
 {
     /// <summary>Suspended-instance count at/above which a Warning is raised (default 1).</summary>
     public int SuspendedWarning { get; set; } = 1;

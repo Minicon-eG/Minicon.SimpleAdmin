@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// Server configuration
 /// </summary>
-public class Server
+public class Server : ConfigModel
 {
     /// <summary>
     /// Gets or sets the unique server ID (defaults to Name if not set)
@@ -59,7 +59,7 @@ public class Server
 /// <summary>
 /// Server-specific checks configuration
 /// </summary>
-public class ServerChecksConfig
+public class ServerChecksConfig : ConfigModel
 {
     /// <summary>
     /// CPU threshold configuration
@@ -130,7 +130,7 @@ public class ServerChecksConfig
 /// <summary>
 /// CPU check configuration
 /// </summary>
-public class CpuCheckConfig
+public class CpuCheckConfig : ConfigModel
 {
     /// <summary>
     /// Warning threshold percentage (e.g., 70)
@@ -146,7 +146,7 @@ public class CpuCheckConfig
 /// <summary>
 /// Memory check configuration
 /// </summary>
-public class MemoryCheckConfig
+public class MemoryCheckConfig : ConfigModel
 {
     /// <summary>
     /// Warning threshold percentage (e.g., 80)
@@ -162,7 +162,7 @@ public class MemoryCheckConfig
 /// <summary>
 /// Disk check configuration
 /// </summary>
-public class DiskCheckConfig
+public class DiskCheckConfig : ConfigModel
 {
     /// <summary>
     /// Drive letter (e.g., "C:")
@@ -183,7 +183,7 @@ public class DiskCheckConfig
 /// <summary>
 /// Per-server Windows Services monitoring container
 /// </summary>
-public class ServerServicesConfig
+public class ServerServicesConfig : ConfigModel
 {
     /// <summary>
     /// Whether Windows Service monitoring is enabled for this server (default: true)
@@ -199,7 +199,7 @@ public class ServerServicesConfig
 /// <summary>
 /// Service check configuration
 /// </summary>
-public class ServiceCheckConfig
+public class ServiceCheckConfig : ConfigModel
 {
     /// <summary>
     /// Windows service name

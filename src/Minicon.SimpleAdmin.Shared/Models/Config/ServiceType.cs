@@ -5,7 +5,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// Service type definitions
 /// </summary>
-public class ServiceType
+public class ServiceType : ConfigModel
 {
     private NetScalerConfig? _netScaler;
     private PrtgConfig? _prtg;

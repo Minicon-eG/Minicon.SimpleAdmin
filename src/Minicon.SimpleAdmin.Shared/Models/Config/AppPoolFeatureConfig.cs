@@ -3,7 +3,7 @@
 /// <summary>
 /// IIS Application Pool feature configuration
 /// </summary>
-public class AppPoolFeatureConfig
+public class AppPoolFeatureConfig : ConfigModel
 {
     /// <summary>
     /// Whether the feature is enabled globally (default: false - opt-in)
@@ -24,7 +24,7 @@ public class AppPoolFeatureConfig
 /// <summary>
 /// Default threshold values for AppPool monitoring
 /// </summary>
-public class AppPoolDefaults
+public class AppPoolDefaults : ConfigModel
 {
     /// <summary>
     /// Memory usage warning threshold in MB (default: 500)
@@ -45,7 +45,7 @@ public class AppPoolDefaults
 /// <summary>
 /// Server-specific AppPool checks configuration
 /// </summary>
-public class AppPoolChecksConfig
+public class AppPoolChecksConfig : ConfigModel
 {
     /// <summary>
     /// Whether AppPool checks are enabled for this server (default: false)
@@ -75,7 +75,7 @@ public class AppPoolChecksConfig
 /// <summary>
 /// Configuration for a specific AppPool to monitor
 /// </summary>
-public class AppPoolConfig
+public class AppPoolConfig : ConfigModel
 {
     /// <summary>
     /// The IIS AppPool name (required)

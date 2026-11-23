@@ -4,7 +4,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// Per-server BizTalk monitoring configuration. Talks to the BizTalk Management Service REST API
 /// (typically on the BizTalk server itself, via integrated Windows authentication).
 /// </summary>
-public class ServerBizTalkConfig
+public class ServerBizTalkConfig : ConfigModel
 {
     /// <summary>Whether BizTalk checks are enabled for this server (default: false).</summary>
     public bool Enabled { get; set; } = false;
@@ -32,7 +32,7 @@ public class ServerBizTalkConfig
 }
 
 /// <summary>Selects which artefacts of a kind to monitor.</summary>
-public class BizTalkArtifactMonitor
+public class BizTalkArtifactMonitor : ConfigModel
 {
     /// <summary>"all" (default), "list" (only <see cref="Include"/>), or "none".</summary>
     public string Monitor { get; set; } = "all";
@@ -55,7 +55,7 @@ public class BizTalkReceiveLocationMonitor : BizTalkArtifactMonitor
 }
 
 /// <summary>Suspended-instance monitoring configuration.</summary>
-public class BizTalkSuspendedConfig
+public class BizTalkSuspendedConfig : ConfigModel
 {
     /// <summary>Whether suspended-instance monitoring is enabled (default: true).</summary>
     public bool Enabled { get; set; } = true;

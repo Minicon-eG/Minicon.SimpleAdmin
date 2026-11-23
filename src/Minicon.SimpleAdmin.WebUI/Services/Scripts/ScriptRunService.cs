@@ -56,6 +56,10 @@ public sealed class ScriptRunService : IDisposable
     private List<ScriptRun> _history;
     private readonly ConcurrentDictionary<string, RunState> _states = new(StringComparer.OrdinalIgnoreCase);
     private volatile bool _disposed;
+    private HistoryLoadState _historyState = HistoryLoadState.Missing;
+    private string? _loadError;
+    private string? _unreadableFingerprint;
+    private bool _unreadableBackupCreated;
 
     /// <summary>Test seam: builds the process start info (default: PowerShell + bootstrap).</summary>
     internal Func<ScriptDefinition, string, ProcessStartInfo>? StartInfoFactory { get; set; }
@@ -69,13 +73,19 @@ public sealed class ScriptRunService : IDisposable
     /// <summary>How long to wait for the process to die after a kill.</summary>
     internal TimeSpan KillWait { get; set; } = TimeSpan.FromSeconds(30);
 
+    internal int LockAttempts { get; set; } = 30;
+    internal int ReadAttempts { get; set; } = 5;
+    internal TimeSpan IoRetryDelay { get; set; } = TimeSpan.FromMilliseconds(100);
+
     public ScriptRunService(ScriptRunnerOptions options, ScriptPathPolicy pathPolicy, string logDirectory, ILogger<ScriptRunService> logger)
     {
         _options = options;
         _pathPolicy = pathPolicy;
         _logger = logger;
         _logDirectory = logDirectory;
-        _history = ReadHistoryFile();
+        var history = ReadHistoryFile();
+        _history = history.Runs;
+        lock (_historyFileLock) ApplyHistoryRead(history);
 
         // Runs still marked "running" belong to a previous WebUI process (recycle/restart). If that
         // process is in fact still alive (overlapped recycle) its later, newer update wins the merge.
@@ -89,6 +99,24 @@ public sealed class ScriptRunService : IDisposable
             interrupted = true;
         }
         if (interrupted) PersistHistory();
+    }
+
+    /// <summary>German persistence error; history.json is never replaced while this is set.</summary>
+    public string? LoadError
+    {
+        get
+        {
+            lock (_historyFileLock)
+            {
+                PreserveUnreadableHistory();
+                return _loadError;
+            }
+        }
+    }
+
+    internal HistoryLoadState HistoryState
+    {
+        get { lock (_historyFileLock) return _historyState; }
     }
 
     /// <summary>All runs, newest first.</summary>
@@ -358,6 +386,7 @@ public sealed class ScriptRunService : IDisposable
         ScriptRunStatus.Cancelled => "Abgebrochen",
         ScriptRunStatus.TimedOut => "Zeitüberschreitung",
         ScriptRunStatus.Interrupted => "Unterbrochen",
+        ScriptRunStatus.Unknown => "Unbekannt",
         _ => status.ToString()
     };
 
@@ -374,39 +403,136 @@ public sealed class ScriptRunService : IDisposable
 
     private string HistoryPath => Path.Combine(_logDirectory, "history.json");
 
-    private List<ScriptRun> ReadHistoryFile()
+    private HistoryReadResult ReadHistoryFile()
+    {
+        for (var attempt = 0; attempt < Math.Max(1, ReadAttempts); attempt++)
+        {
+            try
+            {
+                string json;
+                using (var stream = new FileStream(HistoryPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+                    json = reader.ReadToEnd();
+
+                var runs = JsonSerializer.Deserialize<List<ScriptRun>>(json, ScriptJson.Options);
+                if (runs == null)
+                    return new HistoryReadResult(HistoryLoadState.Error, new List<ScriptRun>(),
+                        new JsonException("Der Skriptverlauf enthält keine Liste."));
+                return new HistoryReadResult(HistoryLoadState.Loaded, runs);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return new HistoryReadResult(HistoryLoadState.Missing, new List<ScriptRun>());
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (attempt + 1 >= Math.Max(1, ReadAttempts))
+                    return new HistoryReadResult(HistoryLoadState.Error, new List<ScriptRun>(), ex);
+                Thread.Sleep(IoRetryDelay);
+            }
+            catch (Exception ex) when (ex is JsonException or NotSupportedException)
+            {
+                return new HistoryReadResult(HistoryLoadState.Error, new List<ScriptRun>(), ex);
+            }
+        }
+
+        return new HistoryReadResult(HistoryLoadState.Error, new List<ScriptRun>(),
+            new IOException("Der Skriptverlauf konnte nicht gelesen werden."));
+    }
+
+    private void ApplyHistoryRead(HistoryReadResult result)
+    {
+        if (result.State != HistoryLoadState.Error)
+        {
+            PreserveUnreadableHistory();
+            _historyState = result.State;
+            _loadError = null;
+            _unreadableFingerprint = null;
+            _unreadableBackupCreated = false;
+            return;
+        }
+
+        var fingerprint = HistoryFingerprint();
+        var changed = fingerprint != _unreadableFingerprint;
+        _unreadableFingerprint = fingerprint;
+        if (changed) _unreadableBackupCreated = false;
+        _historyState = HistoryLoadState.Error;
+        _loadError = $"'{HistoryPath}' konnte nicht gelesen werden: {result.Error!.Message} Das Original bleibt erhalten; das Speichern des Verlaufs ist gesperrt.";
+        PreserveUnreadableHistory();
+        if (changed)
+            _logger.LogError(result.Error, "Script run history {Path} is unreadable; writes are blocked", HistoryPath);
+    }
+
+    private string HistoryFingerprint()
     {
         try
         {
-            if (!File.Exists(HistoryPath)) return new List<ScriptRun>();
-            return JsonSerializer.Deserialize<List<ScriptRun>>(File.ReadAllText(HistoryPath), ScriptJson.Options) ?? new List<ScriptRun>();
+            var info = new FileInfo(HistoryPath);
+            return info.Exists ? $"{info.Length}:{info.LastWriteTimeUtc.Ticks}" : "missing";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.LogWarning(ex, "Could not read script run history {Path}", HistoryPath);
-            return new List<ScriptRun>();
+            return "unavailable";
+        }
+    }
+
+    private void PreserveUnreadableHistory()
+    {
+        if (_unreadableFingerprint == null || _unreadableBackupCreated) return;
+
+        try
+        {
+            var destinationBase = HistoryPath + ".unreadable-" + JsonFileBackup.UtcTimestamp();
+            var destination = destinationBase;
+            for (var suffix = 1; File.Exists(destination); suffix++)
+                destination = destinationBase + "-" + suffix;
+            File.Copy(HistoryPath, destination);
+            _unreadableBackupCreated = true;
+            _logger.LogWarning("Unreadable script run history {Path} preserved as {BackupPath}; the original remains in place", HistoryPath, destination);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Could not preserve unreadable script run history {Path}", HistoryPath);
         }
     }
 
     /// <summary>
-    /// Merges the in-memory history with history.json (newest <see cref="ScriptRun.UpdatedAt"/> per run
-    /// wins; live runs of this process always keep their object), trims it and writes it back.
+    /// Merges the in-memory history with a readable history.json (newest <see cref="ScriptRun.UpdatedAt"/> per run
+    /// wins; live runs of this process always keep their object). Read and lock failures block every write.
     /// </summary>
     private void PersistHistory()
     {
         var deleteLogs = new List<string>();
+        var persisted = false;
         try
         {
             Directory.CreateDirectory(_logDirectory);
             lock (_historyFileLock)
             {
                 using var fileLock = AcquireFileLock();
+                if (fileLock == null)
+                {
+                    _historyState = HistoryLoadState.Error;
+                    _loadError = $"Die Sperrdatei '{HistoryPath}.lock' konnte nicht belegt werden. Der Verlauf wurde nicht geschrieben.";
+                    _logger.LogWarning("Could not lock {Path}; history write is blocked", HistoryPath + ".lock");
+                    return;
+                }
+
                 var disk = ReadHistoryFile();
+                if (disk.State == HistoryLoadState.Error)
+                {
+                    ApplyHistoryRead(disk);
+                    return;
+                }
+                ApplyHistoryRead(disk);
+
+                List<ScriptRun> keep;
+                HashSet<string> previousIds;
                 string json;
                 lock (_lock)
                 {
                     var merged = new Dictionary<string, ScriptRun>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var r in disk) merged[r.Id] = r;
+                    foreach (var r in disk.Runs) merged[r.Id] = r;
                     foreach (var r in _history)
                     {
                         var live = _states.ContainsKey(r.Id);
@@ -416,22 +542,37 @@ public sealed class ScriptRunService : IDisposable
 
                     var ordered = merged.Values.OrderByDescending(r => r.StartedAt).ToList();
                     var max = Math.Max(10, _options.HistorySize);
-                    var keep = ordered.Where((r, i) => i < max || r.IsRunning).ToList();
+                    keep = ordered.Where((r, i) => i < max || r.IsRunning).ToList();
                     deleteLogs.AddRange(ordered.Except(keep).Select(r => r.Id));
-                    _history = keep;
+                    previousIds = _history.Select(r => r.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
                     json = JsonSerializer.Serialize(keep, ScriptJson.Options);
                 }
 
                 var tmp = HistoryPath + "." + Environment.ProcessId + ".tmp";
                 File.WriteAllText(tmp, json);
                 File.Move(tmp, HistoryPath, overwrite: true);
+
+                lock (_lock)
+                {
+                    var addedWhileWriting = _history.Where(r => !previousIds.Contains(r.Id)).ToList();
+                    _history = keep.Concat(addedWhileWriting).OrderByDescending(r => r.StartedAt).ToList();
+                }
+                _historyState = HistoryLoadState.Loaded;
+                _loadError = null;
+                persisted = true;
             }
         }
         catch (Exception ex)
         {
+            lock (_historyFileLock)
+            {
+                _historyState = HistoryLoadState.Error;
+                _loadError = $"'{HistoryPath}' konnte nicht geschrieben werden: {ex.Message} Das Original wurde nicht ersetzt.";
+            }
             _logger.LogWarning(ex, "Could not write script run history {Path}", HistoryPath);
         }
 
+        if (!persisted) return;
         foreach (var id in deleteLogs)
         {
             try { File.Delete(LogPath(id)); } catch { /* best effort */ }
@@ -440,24 +581,25 @@ public sealed class ScriptRunService : IDisposable
         static DateTime Stamp(ScriptRun r) => r.UpdatedAt ?? r.FinishedAt ?? r.StartedAt;
     }
 
-    /// <summary>Cross-process lock for history.json (best effort: after ~3 s it proceeds without).</summary>
+    /// <summary>Cross-process lock for history.json; after the bounded retries the write is blocked.</summary>
     private IDisposable? AcquireFileLock()
     {
         var path = HistoryPath + ".lock";
-        for (var attempt = 0; attempt < 30; attempt++)
+        for (var attempt = 0; attempt < Math.Max(1, LockAttempts); attempt++)
         {
             try
             {
                 return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Thread.Sleep(100);
+                if (attempt + 1 < Math.Max(1, LockAttempts)) Thread.Sleep(IoRetryDelay);
             }
         }
-        _logger.LogWarning("Could not lock {Path}; writing history without lock", path);
         return null;
     }
+
+    private sealed record HistoryReadResult(HistoryLoadState State, List<ScriptRun> Runs, Exception? Error = null);
 
     // ── log file ───────────────────────────────────────────────────────────
 
@@ -656,4 +798,11 @@ public sealed class ScriptRunService : IDisposable
             }
         }
     }
+}
+
+internal enum HistoryLoadState
+{
+    Missing,
+    Loaded,
+    Error
 }

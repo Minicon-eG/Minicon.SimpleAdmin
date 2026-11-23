@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// Settings for the central HTML generator that aggregates status from multiple servers
 /// </summary>
-public class CentralGeneratorSettings
+public class CentralGeneratorSettings : ConfigModel
 {
     /// <summary>
     /// Gets or sets whether this instance acts as the central HTML generator.

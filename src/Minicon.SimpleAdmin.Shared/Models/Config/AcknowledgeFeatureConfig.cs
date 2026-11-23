@@ -3,7 +3,7 @@
 /// <summary>
 /// Problem acknowledgement feature configuration
 /// </summary>
-public class AcknowledgeFeatureConfig
+public class AcknowledgeFeatureConfig : ConfigModel
 {
     /// <summary>
     /// Whether the feature is enabled globally (default: true)
@@ -72,7 +72,7 @@ public class AcknowledgeFeatureConfig
 /// <summary>
 /// Duration option for acknowledge dialog
 /// </summary>
-public class AcknowledgeDurationOption
+public class AcknowledgeDurationOption : ConfigModel
 {
     /// <summary>
     /// Display label (e.g., "1 Stunde")
@@ -88,7 +88,7 @@ public class AcknowledgeDurationOption
 /// <summary>
 /// Configuration for acknowledge timeout behavior
 /// </summary>
-public class AcknowledgeTimeoutBehavior
+public class AcknowledgeTimeoutBehavior : ConfigModel
 {
     /// <summary>
     /// Whether to re-alert when acknowledge times out and problem still exists (default: true)

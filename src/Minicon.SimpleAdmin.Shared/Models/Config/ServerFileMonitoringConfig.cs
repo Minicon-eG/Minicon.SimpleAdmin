@@ -4,7 +4,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// Per-server file-share / log monitoring configuration. Typically used by a central worker that
 /// reaches file shares over UNC paths (e.g. <c>\\srv\d$\Daten\schnittstelle\kasse</c>).
 /// </summary>
-public class ServerFileMonitoringConfig
+public class ServerFileMonitoringConfig : ConfigModel
 {
     /// <summary>Whether file monitoring is enabled for this server (default: false).</summary>
     public bool Enabled { get; set; } = false;
@@ -23,7 +23,7 @@ public class ServerFileMonitoringConfig
 }
 
 /// <summary>A single directory watched for files that stay too long ("stuck files").</summary>
-public class WatchedDirectory
+public class WatchedDirectory : ConfigModel
 {
     /// <summary>Display label (e.g. "Eingang"). Used in messages and the dashboard.</summary>
     public string Name { get; set; } = string.Empty;
@@ -63,7 +63,7 @@ public class WatchedDirectory
 }
 
 /// <summary>A log file (or glob) scanned for one or more error signatures.</summary>
-public class LogScanConfig
+public class LogScanConfig : ConfigModel
 {
     /// <summary>Display label (e.g. "Schnittstellen-Log").</summary>
     public string Name { get; set; } = string.Empty;
@@ -88,7 +88,7 @@ public class LogScanConfig
 }
 
 /// <summary>A single regex error signature within a log scan.</summary>
-public class LogPatternConfig
+public class LogPatternConfig : ConfigModel
 {
     /// <summary>Display name of the signature (e.g. "Hängengebliebene Nachricht").</summary>
     public string Name { get; set; } = string.Empty;

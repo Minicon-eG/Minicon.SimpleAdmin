@@ -3,7 +3,7 @@
 /// <summary>
 /// General application settings
 /// </summary>
-public class GeneralSettings
+public class GeneralSettings : ConfigModel
 {
     /// <summary>
     /// Check interval in seconds (default: 60)

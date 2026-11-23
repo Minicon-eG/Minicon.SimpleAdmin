@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// Global SQL query checks feature configuration
 /// </summary>
-public class SqlQueryFeatureConfig
+public class SqlQueryFeatureConfig : ConfigModel
 {
     /// <summary>
     /// Whether the feature is enabled globally (default: false - opt-in)
@@ -19,7 +19,7 @@ public class SqlQueryFeatureConfig
 /// <summary>
 /// Per-server SQL query checks container
 /// </summary>
-public class ServerSqlQueriesConfig
+public class ServerSqlQueriesConfig : ConfigModel
 {
     /// <summary>
     /// Whether SQL query checks are enabled for this server
@@ -35,7 +35,7 @@ public class ServerSqlQueriesConfig
 /// <summary>
 /// A single SQL query check group — one connection string with one or more queries
 /// </summary>
-public class SqlQueryCheckConfig
+public class SqlQueryCheckConfig : ConfigModel
 {
     /// <summary>
     /// Unique slug identifier within this server (e.g., "biztalkdb-jobs")
@@ -66,7 +66,7 @@ public class SqlQueryCheckConfig
 /// <summary>
 /// A single SQL query with optional row-count and column-value assertions
 /// </summary>
-public class SqlQueryConfig
+public class SqlQueryConfig : ConfigModel
 {
     /// <summary>
     /// Display name for this query
@@ -92,7 +92,7 @@ public class SqlQueryConfig
 /// <summary>
 /// Asserts the number of rows returned by a query
 /// </summary>
-public class SqlRowCountAssertion
+public class SqlRowCountAssertion : ConfigModel
 {
     /// <summary>
     /// Expected number of rows
@@ -109,7 +109,7 @@ public class SqlRowCountAssertion
 /// Asserts the value of a column across all rows in the query result set.
 /// The check passes only when every row satisfies the condition.
 /// </summary>
-public class SqlColumnAssertion
+public class SqlColumnAssertion : ConfigModel
 {
     /// <summary>
     /// Display name for this assertion

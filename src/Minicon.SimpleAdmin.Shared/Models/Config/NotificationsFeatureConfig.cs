@@ -9,7 +9,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// (claim-first, no shared lock). All HTTP URLs are derived from the configured servers' BaseUrls;
 /// the URL fields below are optional overrides only.
 /// </summary>
-public class NotificationsFeatureConfig
+public class NotificationsFeatureConfig : ConfigModel
 {
     /// <summary>Master toggle (default: false - opt-in).</summary>
     public bool Enabled { get; set; } = false;
@@ -99,7 +99,7 @@ public class NotificationsFeatureConfig
 }
 
 /// <summary>Configuration of the scheduled status report mail (see <see cref="NotificationsFeatureConfig.StatusReport"/>).</summary>
-public class StatusReportConfig
+public class StatusReportConfig : ConfigModel
 {
     /// <summary>Master toggle for the scheduled report (default: false - opt-in).</summary>
     public bool Enabled { get; set; } = false;

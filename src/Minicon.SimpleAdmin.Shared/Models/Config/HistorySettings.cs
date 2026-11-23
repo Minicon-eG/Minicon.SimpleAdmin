@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// History settings for configuring how many historical data points to keep
 /// </summary>
-public class HistorySettings
+public class HistorySettings : ConfigModel
 {
     /// <summary>
     /// Maximum number of historical entries to keep (Default: 500)

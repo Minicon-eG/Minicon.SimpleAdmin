@@ -47,6 +47,51 @@ public static class SimpleAdminWebUIExtensions
         return Path.GetFullPath(string.IsNullOrWhiteSpace(configPath) ? AppContext.BaseDirectory : configPath);
     }
 
+    internal static string? GetApplicationDataDirectoryWarning(IConfiguration configuration, string contentRootPath)
+    {
+        var configuredConfigPath = configuration.GetValue<string>("ConfigPath");
+        var configPathIsRelative = !string.IsNullOrWhiteSpace(configuredConfigPath)
+                                   && !Path.IsPathRooted(configuredConfigPath);
+        var configDirectory = ResolveConfigDirectory(configuration);
+        var scripts = ScriptRunnerOptions.Resolve(configuration, IsAuthenticationEnabled(configuration));
+        var scheduledTasks = ScheduledTaskControlOptions.Resolve(configuration, IsAuthenticationEnabled(configuration));
+        var bizTalk = BizTalkOptions.Resolve(configuration, IsAuthenticationEnabled(configuration));
+        var directories = new (string Name, string Path, bool IsRelative)[]
+        {
+            ("ConfigPath", configDirectory, configPathIsRelative),
+            ("ScriptRunner:RunLogDirectory", Path.GetFullPath(string.IsNullOrWhiteSpace(scripts.RunLogDirectory)
+                ? Path.Combine(configDirectory, "script-runs") : scripts.RunLogDirectory), false),
+            ("ScriptRunner:UploadDirectory", Path.GetFullPath(string.IsNullOrWhiteSpace(scripts.UploadDirectory)
+                ? Path.Combine(configDirectory, "scripts") : scripts.UploadDirectory), false),
+            ("ScheduledTasks:AuditLogDirectory", Path.GetFullPath(string.IsNullOrWhiteSpace(scheduledTasks.AuditLogDirectory)
+                ? configDirectory : scheduledTasks.AuditLogDirectory), false),
+            ("BizTalk:AuditLogDirectory", Path.GetFullPath(string.IsNullOrWhiteSpace(bizTalk.AuditLogDirectory)
+                ? configDirectory : bizTalk.AuditLogDirectory), false)
+        };
+        var applicationDirectories = new[] { AppContext.BaseDirectory, contentRootPath }
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct()
+            .ToList();
+        var risky = directories
+            .Where(directory => directory.IsRelative
+                                || applicationDirectories.Any(app => ScriptPathPolicy.IsUnder(directory.Path, app)))
+            .Select(directory => $"{directory.Name} ({directory.Path}{(directory.IsRelative ? ", relativer Pfad" : "")})")
+            .ToList();
+        if (risky.Count == 0) return null;
+
+        return "Datenverlustgefahr bei Deployments: Die folgenden Datenverzeichnisse sind relativ oder liegen innerhalb des Anwendungsordners (AppContext.BaseDirectory oder ContentRootPath): "
+               + string.Join(", ", risky) + ". "
+               + "Setzen Sie ConfigPath in der appsettings.json auf einen stabilen Datenordner außerhalb der Anwendung, z. B. C:\\ProgramData\\SimpleAdmin, und kopieren Sie config.json, scripts.json, scripts/, script-runs/ und die Audit-Dateien vorher dorthin. "
+               + "Abweichende ScriptRunner- und Audit-Verzeichnisse müssen ebenfalls absolute Pfade außerhalb des Anwendungsordners erhalten.";
+    }
+
+    internal static void WarnAboutApplicationDataDirectories(IConfiguration configuration, string contentRootPath, ILogger logger)
+    {
+        var warning = GetApplicationDataDirectoryWarning(configuration, contentRootPath);
+        if (warning != null) logger.LogWarning("{DataDirectoryWarning}", warning);
+    }
+
     /// <summary>
     /// Registers MVC, the embedded SimpleAdmin controllers/views and all backing
     /// services (configuration management, status reading, acknowledges).
@@ -230,6 +275,8 @@ public static class SimpleAdminWebUIExtensions
     /// </summary>
     public static WebApplication UseSimpleAdminWebUI(this WebApplication app)
     {
+        WarnAboutApplicationDataDirectories(app.Configuration, app.Environment.ContentRootPath, app.Logger);
+
         // Auto-load config.json from the configured directory
         var startupConfigService = app.Services.GetRequiredService<ConfigurationService>();
         var configPath = ResolveConfigDirectory(app.Configuration);

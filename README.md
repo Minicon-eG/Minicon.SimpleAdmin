@@ -112,6 +112,82 @@ The host's `appsettings.json` supplies deployment specifics:
 }
 ```
 
+## Betrieb: Datenordner, Sicherungen und Wiederherstellung
+
+**Legen Sie den Datenordner außerhalb des WebUI-Anwendungsordners fest.** Bei leerem
+`ConfigPath` liegen `config.json`, `scripts.json`, Uploads, Skriptverlauf und standardmäßig
+auch die Audit-Dateien im Anwendungsordner und können durch ein Deployment gefährdet sein.
+Empfohlen ist beispielsweise:
+
+```json
+{
+  "ConfigPath": "C:\\ProgramData\\SimpleAdmin"
+}
+```
+
+Die WebUI warnt beim Start und auf der Einstellungsseite, wenn ConfigPath-, RunLog-,
+Upload- oder Audit-Verzeichnisse innerhalb von `AppContext.BaseDirectory` oder
+`ContentRootPath` liegen. Ein relativer `ConfigPath` gilt unabhängig vom aufgelösten Pfad
+ebenfalls als unsicher. Individuell gesetzte `ScriptRunner:RunLogDirectory`,
+`ScriptRunner:UploadDirectory`, `ScheduledTasks:AuditLogDirectory` und
+`BizTalk:AuditLogDirectory` müssen ebenfalls auf stabile absolute Pfade außerhalb der
+Anwendung zeigen. Das Dienstkonto der WebUI benötigt dort Lese- und Schreibrechte.
+
+**Vor der Umstellung kopieren Sie die vorhandenen Daten selbst**; es gibt keine automatische
+Migration. Beenden Sie dafür die WebUI und kopieren Sie mindestens `config.json`,
+`scripts.json`, `scripts/`, `script-runs/`, `metadata/` sowie vorhandene
+`*-actions*.json`-Auditdateien und `schtask-groups-since.json` in den neuen Datenordner.
+Erst danach ändern Sie `appsettings.json` und starten die WebUI wieder. Prüfen Sie Domains,
+Skriptdefinitionen, Verlauf und offene Audit-Vorgänge. Ein Deployment-Paket darf diese
+Laufzeitdaten nicht enthalten.
+
+### Automatische Sicherungen
+
+- Vor jedem Speichern wird eine vorhandene `config.json` nach
+  `<ConfigPath>/backup/config.json.<UTC-Zeitstempel>` kopiert. Entsprechend entsteht für
+  Skriptdefinitionen `<ConfigPath>/backup/scripts.json.<UTC-Zeitstempel>`.
+- Pro Datei bleiben die letzten 20 Sicherungen erhalten. Namenskollisionen innerhalb eines
+  Zeitstempels erhalten einen numerischen Zusatz.
+- Ein Fehler beim Sichern oder Rotieren wird als Warning protokolliert und verhindert das
+  Speichern **nicht**. Diese Kopien ersetzen keine unabhängige, externe Datensicherung.
+- Eine unlesbare `script-runs/history.json` wird einmalig je Dateiversion als
+  `script-runs/history.json.unreadable-<UTC-Zeitstempel>` kopiert. Das Original bleibt
+  unverändert. Unbekannte Statuswerte werden als `Unknown` angezeigt und blockieren das
+  Speichern nicht. Lese-, Deserialisierungs- und Sperrfehler blockieren das Überschreiben
+  und werden auf der Skriptseite gemeldet. Logdateien werden bei einem Persistenzfehler
+  nicht gelöscht.
+
+**Konfigurieren Sie `Encryption:ConnectionStringKey` verbindlich**, sobald Verbindungszeichenfolgen
+oder SMTP-/IMAP-Kennwörter verwendet werden. Ohne Schlüssel stehen diese Werte in `config.json`
+und dadurch auch in bis zu 20 Sicherungen im Klartext. Das Backup-Verzeichnis erbt die Rechte
+des Datenordners; beschränken Sie dessen Zugriff entsprechend und beziehen Sie es in die externe,
+verschlüsselte Datensicherung ein.
+
+Unbekannte Felder in `config.json` bleiben beim Laden und Speichern durch die WebUI im Root
+und in den verschachtelten Config-Modellen erhalten. Auch die CRUD-/Settings-Setter übernehmen
+diese Felder aus dem geladenen Objekt und dessen verschachtelten Config-Modellen, bevor sie es
+ersetzen. Dictionaries werden per Schlüssel abgeglichen. Server, ServiceTypes und Domains in
+Listen werden anhand ihrer eindeutigen Namen beziehungsweise Typen abgeglichen; nur Listen ohne
+solchen Schlüssel verwenden bei unveränderter Elementanzahl die Position. Dadurch wandern
+unbekannte Felder nach Einfügen, Löschen oder Umsortieren nicht zu einem anderen Eintrag.
+`ServiceConfigReader` liest die Datei im Worker nur und schreibt sie nicht zurück.
+
+### Wiederherstellung
+
+1. WebUI beenden und die aktuellen Dateien einschließlich `history.json` und allen
+   `.unreadable-*`-Dateien zusätzlich zur Seite kopieren.
+2. Eine fachlich passende Sicherung auswählen und deren JSON prüfen; die neueste Sicherung ist
+   nicht automatisch die letzte fehlerfreie. Für den Skriptverlauf kann auch die
+   `.unreadable-*`-Kopie die einzige vollständige Quelle sein.
+3. `config.json` beziehungsweise `scripts.json` aus der gewählten Backup-Datei in den
+   ConfigPath-Ordner zurückkopieren. Eine beschädigte History nur durch eine geprüfte Kopie als
+   `script-runs/history.json` wiederherstellen; bei einer bloßen Sperre stattdessen den
+   blockierenden Prozess oder die Zugriffsrechte beheben und die Originaldatei behalten.
+4. Rechte für das WebUI-Dienstkonto prüfen, WebUI starten und Domains, Einstellungen,
+   Skriptdefinitionen und Verlauf kontrollieren. Vorhandene `.log`-Dateien nicht löschen: Sie
+   können die Ausgabe auch dann noch enthalten, wenn ein History-Eintrag rekonstruiert werden
+   muss.
+
 ### Securing the admin UI
 
 The admin UI protects **every** controller and REST endpoint with a global

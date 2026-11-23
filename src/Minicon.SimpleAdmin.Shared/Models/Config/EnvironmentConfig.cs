@@ -7,7 +7,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// Environment configuration defining which servers belong to each service type
 /// </summary>
-public class EnvironmentConfig
+public class EnvironmentConfig : ConfigModel
 {
     /// <summary>
     /// Gets or sets the list of transfer server names in this environment

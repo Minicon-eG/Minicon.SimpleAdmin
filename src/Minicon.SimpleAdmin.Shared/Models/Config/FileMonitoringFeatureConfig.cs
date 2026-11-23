@@ -4,7 +4,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// Global file-share / log monitoring feature configuration (opt-in). The actual watched directories
 /// and log scans are configured per server in <see cref="ServerFileMonitoringConfig"/>.
 /// </summary>
-public class FileMonitoringFeatureConfig
+public class FileMonitoringFeatureConfig : ConfigModel
 {
     /// <summary>Whether the feature is enabled globally (default: false - opt-in).</summary>
     public bool Enabled { get; set; } = false;
@@ -17,7 +17,7 @@ public class FileMonitoringFeatureConfig
 }
 
 /// <summary>Default thresholds applied when a watched directory does not override them.</summary>
-public class FileMonitoringDefaults
+public class FileMonitoringDefaults : ConfigModel
 {
     /// <summary>File age in minutes at/above which a Warning is raised (default 60).</summary>
     public int StuckFileAgeMinutesWarning { get; set; } = 60;

@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// NetScaler load balancer configuration
 /// </summary>
-public class NetScalerConfig
+public class NetScalerConfig : ConfigModel
 {
     /// <summary>
     /// Gets or sets whether NetScaler health checks are enabled

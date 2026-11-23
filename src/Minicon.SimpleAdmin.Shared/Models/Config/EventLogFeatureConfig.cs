@@ -5,7 +5,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// Windows Event Log feature configuration
 /// </summary>
-public class EventLogFeatureConfig
+public class EventLogFeatureConfig : ConfigModel
 {
     /// <summary>
     /// Whether the feature is enabled globally (default: false - opt-in)
@@ -36,7 +36,7 @@ public class EventLogFeatureConfig
 /// set criteria match (source, event IDs, message substring, log name) AND the rule
 /// applies to the checking server AND the rule has not expired.
 /// </summary>
-public class EventLogIgnoreRule
+public class EventLogIgnoreRule : ConfigModel
 {
     /// <summary>
     /// Event source / provider name to match (wildcard * supported, case-insensitive).
@@ -111,7 +111,7 @@ public class EventLogIgnoreRule
 /// <summary>
 /// Default settings for Event Log monitoring
 /// </summary>
-public class EventLogDefaults
+public class EventLogDefaults : ConfigModel
 {
     /// <summary>
     /// Time window in minutes to look back for events (default: 60)
@@ -137,7 +137,7 @@ public class EventLogDefaults
 /// <summary>
 /// Server-specific Event Log checks configuration
 /// </summary>
-public class EventLogChecksConfig
+public class EventLogChecksConfig : ConfigModel
 {
     /// <summary>
     /// Whether Event Log checks are enabled for this server (default: false)
@@ -153,7 +153,7 @@ public class EventLogChecksConfig
 /// <summary>
 /// Configuration for a specific Event Log to monitor
 /// </summary>
-public class EventLogConfig
+public class EventLogConfig : ConfigModel
 {
     /// <summary>
     /// The Event Log name (e.g., "Application", "System")

@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// Root configuration object
 /// </summary>
-public class Config
+public class Config : ConfigModel
 {
     /// <summary>
     /// Gets or sets the general settings

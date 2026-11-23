@@ -16,6 +16,14 @@
     </div>
 }
 
+@if (Model.HistoryError != null)
+{
+    <div class="alert alert-danger">
+        <i class="bi bi-exclamation-octagon me-2"></i><strong>Skriptverlauf nicht lesbar oder nicht schreibbar:</strong> @Model.HistoryError
+        <div class="small mt-1">Eine unlesbare Datei wird als <code>history.json.unreadable-&lt;UTC-Zeitstempel&gt;</code> gesichert, sobald sie kopiert werden kann. Neue Läufe bleiben im Speicher und in ihren Logdateien sichtbar; der Verlauf wird erst nach erfolgreichem Lesen und Sperren wieder geschrieben.</div>
+    </div>
+}
+
 <p class="text-muted">
     PowerShell-Skripte, die direkt aus der WebUI gestartet werden können. Sie laufen auf diesem Rechner unter dem Konto der WebUI;
     jeder Lauf wird mit Benutzer, Parametern und Ausgabe protokolliert.

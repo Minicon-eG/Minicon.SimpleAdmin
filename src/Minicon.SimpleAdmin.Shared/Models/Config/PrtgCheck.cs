@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// PRTG check definition
 /// </summary>
-public class PrtgCheck
+public class PrtgCheck : ConfigModel
 {
     public string Metric { get; set; } = string.Empty;
     public string? DisplayName { get; set; }

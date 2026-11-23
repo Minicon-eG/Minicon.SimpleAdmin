@@ -6,7 +6,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// Global Windows Scheduled Task monitoring feature configuration (opt-in). The watched tasks are
 /// configured per server in <see cref="ServerScheduledTasksConfig"/>.
 /// </summary>
-public class ScheduledTaskFeatureConfig
+public class ScheduledTaskFeatureConfig : ConfigModel
 {
     /// <summary>Whether the feature is enabled globally (default: false - opt-in).</summary>
     public bool Enabled { get; set; } = false;
@@ -28,7 +28,7 @@ public class ScheduledTaskFeatureConfig
 }
 
 /// <summary>Default thresholds for Scheduled Task monitoring.</summary>
-public class ScheduledTaskDefaults
+public class ScheduledTaskDefaults : ConfigModel
 {
     /// <summary>A running task exceeding this runtime raises a Warning (minutes, 0 = off, default 120).</summary>
     public int MaxRuntimeMinutes { get; set; } = 120;
@@ -60,7 +60,7 @@ public class ScheduledTaskDefaults
 /// One long-term ignore rule for Task Scheduler events. An event is ignored when ALL set criteria
 /// match (task path, event IDs, message substring) AND the rule applies to the server AND it has not expired.
 /// </summary>
-public class ScheduledTaskIgnoreRule
+public class ScheduledTaskIgnoreRule : ConfigModel
 {
     /// <summary>Task path to match, e.g. "\Minicon\Export" (wildcard * supported, case-insensitive). Empty = any task.</summary>
     public string? TaskPath { get; set; }
@@ -110,7 +110,7 @@ public class ScheduledTaskIgnoreRule
 }
 
 /// <summary>Per-server Scheduled Task checks (<c>server.checks.scheduledTasks</c>).</summary>
-public class ServerScheduledTasksConfig
+public class ServerScheduledTasksConfig : ConfigModel
 {
     /// <summary>Whether Scheduled Task checks are enabled for this server (default: false).</summary>
     public bool Enabled { get; set; } = false;
@@ -130,7 +130,7 @@ public class ServerScheduledTasksConfig
 /// Selects tasks by full path pattern (e.g. "\Minicon\*", "\Export*") and defines how they are monitored.
 /// Tasks below "\Microsoft\" are only selected when the include pattern itself starts with "\Microsoft\".
 /// </summary>
-public class ScheduledTaskWatchConfig
+public class ScheduledTaskWatchConfig : ConfigModel
 {
     /// <summary>Include pattern on the full task path (folder + name), wildcard * and ?, case-insensitive.</summary>
     public string Pattern { get; set; } = string.Empty;

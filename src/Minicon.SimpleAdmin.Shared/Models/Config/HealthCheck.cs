@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// Health check definition for NetScaler
 /// </summary>
-public class HealthCheck
+public class HealthCheck : ConfigModel
 {
     /// <summary>
     /// Gets or sets the name of the health check

@@ -129,6 +129,7 @@ public sealed class ScriptDefinitionStore
         var dir = Path.GetDirectoryName(_filePath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var json = JsonSerializer.Serialize(new ScriptsFile { Scripts = list }, ScriptJson.Options);
+        JsonFileBackup.TryCreate(_filePath, _logger);
         var tmp = _filePath + ".tmp";
         File.WriteAllText(tmp, json);
         File.Move(tmp, _filePath, overwrite: true);

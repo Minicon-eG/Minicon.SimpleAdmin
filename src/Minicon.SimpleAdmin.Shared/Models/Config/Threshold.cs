@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// Threshold definition for metrics
 /// </summary>
-public class Threshold
+public class Threshold : ConfigModel
 {
     /// <summary>
     /// Gets or sets the warning threshold value

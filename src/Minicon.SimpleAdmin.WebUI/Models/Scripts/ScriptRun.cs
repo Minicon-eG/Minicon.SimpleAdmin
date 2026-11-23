@@ -1,8 +1,9 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Minicon.SimpleAdmin.WebUI.Models.Scripts;
 
-[JsonConverter(typeof(JsonStringEnumConverter<ScriptRunStatus>))]
+[JsonConverter(typeof(ScriptRunStatusConverter))]
 public enum ScriptRunStatus
 {
     Running,
@@ -11,7 +12,29 @@ public enum ScriptRunStatus
     Cancelled,
     TimedOut,
     /// <summary>The WebUI process ended while the run was active (e.g. IIS recycle).</summary>
-    Interrupted
+    Interrupted,
+    Unknown
+}
+
+public sealed class ScriptRunStatusConverter : JsonConverter<ScriptRunStatus>
+{
+    public override ScriptRunStatus Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String
+            && Enum.TryParse<ScriptRunStatus>(reader.GetString(), ignoreCase: true, out var textStatus)
+            && Enum.IsDefined(textStatus))
+            return textStatus;
+
+        if (reader.TokenType == JsonTokenType.Number
+            && reader.TryGetInt32(out var numericStatus)
+            && Enum.IsDefined((ScriptRunStatus)numericStatus))
+            return (ScriptRunStatus)numericStatus;
+
+        return ScriptRunStatus.Unknown;
+    }
+
+    public override void Write(Utf8JsonWriter writer, ScriptRunStatus value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.ToString());
 }
 
 /// <summary>

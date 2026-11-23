@@ -432,6 +432,14 @@
                     <li><strong>AppPool-Status:</strong> Status der IIS Application Pools (Started/Stopped)</li>
                     <li><strong>Aktive Probleme:</strong> Anzahl und Schweregrad offener Probleme (inkl. E-Mail-Monitoring-Probleme)</li>
                 </ul>
+                <p>
+                    Die Badge-Leiste zeigt jede für den Server wirksam aktivierte Überwachung: AppPools, Windows-Dienste,
+                    Event Log, SQL, E-Mail-Probes und -Zustellung, Zertifikate, BizTalk, Datei-/Protokollüberwachung sowie
+                    geplante Tasks. Jedes Badge verlinkt auf seinen Abschnitt in der Detail-Ansicht; aktivierte Überwachungen
+                    ohne ersten Worker-Stand erscheinen ebenso wie unbekannte Prüfungsergebnisse neutral, fehlende Daten mit dem
+                    Hinweis <strong>„noch keine Daten“</strong> in <code>title</code> und <code>aria-label</code>.
+                    Das Zahnrad neben dem Gesamtstatus öffnet direkt die Server-Checks in der Serverkonfiguration.
+                </p>
 
                 <h4>Detail-Ansicht</h4>
                 <p>

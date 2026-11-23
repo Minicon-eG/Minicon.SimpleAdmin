@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
@@ -16,11 +17,13 @@ public class ConfigurationService
     private string? _originalFilePath;
     private bool _isLoaded;
     private readonly string _masterKey;
+    private readonly ILogger<ConfigurationService> _logger;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
-    public ConfigurationService(IConfiguration configuration)
+    public ConfigurationService(IConfiguration configuration, ILogger<ConfigurationService>? logger = null)
     {
         _masterKey = configuration["Encryption:ConnectionStringKey"] ?? "";
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ConfigurationService>.Instance;
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -206,6 +209,7 @@ public class ConfigurationService
             json = JsonSerializer.Serialize(configCopy, JsonOptions);
         }
 
+        JsonFileBackup.TryCreate(_originalFilePath, _logger);
         var tmp = _originalFilePath + ".tmp";
         await File.WriteAllTextAsync(tmp, json);
         File.Move(tmp, _originalFilePath, overwrite: true);
@@ -231,6 +235,64 @@ public class ConfigurationService
     {
         return JsonSerializer.Serialize(_config, JsonOptions);
     }
+
+    private static void PreserveUnknownFields(ConfigModel replacement, ConfigModel? original)
+    {
+        if (original == null) return;
+
+        foreach (var item in original.ExtensionData)
+            replacement.ExtensionData.TryAdd(item.Key, item.Value.Clone());
+
+        foreach (var property in original.GetType().GetProperties())
+        {
+            if (property.Name == nameof(ConfigModel.ExtensionData) || property.GetIndexParameters().Length > 0) continue;
+            PreserveUnknownValues(property.GetValue(replacement), property.GetValue(original));
+        }
+    }
+
+    private static void PreserveUnknownValues(object? replacement, object? original)
+    {
+        if (replacement is ConfigModel replacementModel && original is ConfigModel originalModel)
+        {
+            PreserveUnknownFields(replacementModel, originalModel);
+            return;
+        }
+
+        if (replacement is IDictionary replacementDictionary && original is IDictionary originalDictionary)
+        {
+            foreach (var key in originalDictionary.Keys)
+                if (replacementDictionary.Contains(key))
+                    PreserveUnknownValues(replacementDictionary[key], originalDictionary[key]);
+            return;
+        }
+
+        if (replacement is not IList replacementList || original is not IList originalList) return;
+
+        var replacementKeys = replacementList.Cast<object?>().Select(StableListKey).ToList();
+        var originalKeys = originalList.Cast<object?>().Select(StableListKey).ToList();
+        for (var i = 0; i < replacementList.Count; i++)
+        {
+            var key = replacementKeys[i];
+            if (key == null)
+            {
+                if (replacementList.Count == originalList.Count && originalKeys[i] == null)
+                    PreserveUnknownValues(replacementList[i], originalList[i]);
+                continue;
+            }
+
+            bool Matches(string? candidate) => string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase);
+            if (replacementKeys.Count(Matches) != 1 || originalKeys.Count(Matches) != 1) continue;
+            PreserveUnknownValues(replacementList[i], originalList[originalKeys.FindIndex(Matches)]);
+        }
+    }
+
+    private static string? StableListKey(object? value) => value switch
+    {
+        Server server when !string.IsNullOrWhiteSpace(server.Name) => nameof(Server) + ":" + server.Name,
+        ServiceType serviceType when !string.IsNullOrWhiteSpace(serviceType.Type) => nameof(ServiceType) + ":" + serviceType.Type,
+        Domain domain when !string.IsNullOrWhiteSpace(domain.Name) => nameof(Domain) + ":" + domain.Name,
+        _ => null
+    };
 
     internal void CreateNew()
     {
@@ -308,6 +370,7 @@ public class ConfigurationService
             throw new InvalidOperationException($"Server '{server.Name}' already exists");
         }
 
+        PreserveUnknownFields(server, _config.Servers[index]);
         _config.Servers[index] = server;
 
         // Update environment references if name changed
@@ -471,6 +534,7 @@ public class ConfigurationService
             throw new InvalidOperationException($"Domain '{domain.Name}' already exists");
         }
 
+        PreserveUnknownFields(domain, domains[index]);
         domains[index] = domain;
     }
 
@@ -544,6 +608,7 @@ public class ConfigurationService
     /// </summary>
     public void UpdateHistorySettings(HistorySettings settings)
     {
+        PreserveUnknownFields(settings, _config.History);
         _config.History = settings;
     }
 
@@ -586,6 +651,7 @@ public class ConfigurationService
     /// </summary>
     public void UpdateOutputSettings(OutputSettings settings)
     {
+        PreserveUnknownFields(settings, _config.Output);
         _config.Output = settings;
     }
 
@@ -603,6 +669,7 @@ public class ConfigurationService
     /// </summary>
     public void UpdateFeatures(FeaturesConfig features)
     {
+        PreserveUnknownFields(features, _config.Features);
         _config.Features = features;
     }
 
@@ -620,6 +687,7 @@ public class ConfigurationService
     /// </summary>
     public void UpdateTimeProfiles(TimeProfilesConfig timeProfiles)
     {
+        PreserveUnknownFields(timeProfiles, _config.TimeProfiles);
         _config.TimeProfiles = timeProfiles;
     }
 
@@ -644,6 +712,7 @@ public class ConfigurationService
         var server = GetServer(serverName);
         if (server != null)
         {
+            PreserveUnknownFields(checks, server.Checks);
             server.Checks = checks;
         }
     }
@@ -666,6 +735,7 @@ public class ConfigurationService
         if (server != null)
         {
             server.Checks ??= new ServerChecksConfig();
+            PreserveUnknownFields(appPoolChecks, server.Checks.AppPools);
             server.Checks.AppPools = appPoolChecks;
         }
     }

@@ -3,7 +3,7 @@ namespace Minicon.SimpleAdmin.Models.Config;
 /// <summary>
 /// Output settings for generated HTML pages
 /// </summary>
-public class OutputSettings
+public class OutputSettings : ConfigModel
 {
     /// <summary>
     /// Gets or sets the OK marker text that is included in healthy status pages

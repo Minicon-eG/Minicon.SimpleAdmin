@@ -1,7 +1,9 @@
+using System.Text.Json;
 using FluentAssertions;
 using Minicon.SimpleAdmin.Models.Config;
 using Minicon.SimpleAdmin.WebUI.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Minicon.SimpleAdmin.Tests.Services;
 
@@ -637,5 +639,260 @@ public class ConfigurationServiceTests
         svc.UpdateApplicationTitle(new string('x', 100));
 
         svc.GetApplicationTitle().Should().HaveLength(ConfigurationService.MaxApplicationTitleLength);
+    }
+}
+
+public sealed class ConfigurationServiceDataProtectionTests : IDisposable
+{
+    private readonly string _directory = Path.Combine(Path.GetTempPath(), "sa-config-f4-" + Guid.NewGuid().ToString("N"));
+
+    public ConfigurationServiceDataProtectionTests() => Directory.CreateDirectory(_directory);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_directory, recursive: true); } catch { /* ignore */ }
+    }
+
+    private string ConfigPath => Path.Combine(_directory, "config.json");
+
+    private ConfigurationService CreateService(ILogger<ConfigurationService>? logger = null)
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        return new ConfigurationService(configuration, logger);
+    }
+
+    [Fact]
+    public async Task LoadAndSave_PreservesDomainsAndUnknownFieldsOnEveryModelLevel()
+    {
+        const string json = """
+            {
+              "general": { "title": "Alt", "futureGeneral": { "enabled": true } },
+              "features": {
+                "futureFeature": [1, 2, 3],
+                "notifications": { "futureNotification": { "mode": "new" } }
+              },
+              "output": {
+                "futureOutput": "keep",
+                "centralGenerator": { "futureCentral": 42 }
+              },
+              "servers": [
+                {
+                  "name": "srv01",
+                  "active": true,
+                  "futureServer": { "nested": "value" },
+                  "checks": {
+                    "futureChecks": true,
+                    "services": { "enabled": true, "futureServices": ["a", "b"] }
+                  }
+                }
+              ],
+              "domains": [
+                {
+                  "name": "app-prod",
+                  "environment": "production",
+                  "servers": ["srv01"],
+                  "netScalerVServer": "vs-app",
+                  "healthCheck": "https",
+                  "description": "Domain",
+                  "allowNameMismatch": true,
+                  "futureDomain": { "tls": "new" }
+                }
+              ],
+              "futureFeature": { "complex": [true, null, { "value": 7 }] }
+            }
+            """;
+        await File.WriteAllTextAsync(ConfigPath, json);
+        var service = CreateService();
+        service.LoadFromFile(json, ConfigPath);
+        service.UpdateApplicationTitle("Neu");
+
+        await service.SaveToFileAsync();
+
+        using var original = JsonDocument.Parse(json);
+        using var saved = JsonDocument.Parse(await File.ReadAllTextAsync(ConfigPath));
+        SameJson(original.RootElement.GetProperty("futureFeature"), saved.RootElement.GetProperty("futureFeature"));
+        SameJson(original.RootElement.GetProperty("domains"), saved.RootElement.GetProperty("domains"));
+        SameJson(original.RootElement.GetProperty("general").GetProperty("futureGeneral"), saved.RootElement.GetProperty("general").GetProperty("futureGeneral"));
+        SameJson(original.RootElement.GetProperty("features").GetProperty("futureFeature"), saved.RootElement.GetProperty("features").GetProperty("futureFeature"));
+        SameJson(original.RootElement.GetProperty("features").GetProperty("notifications").GetProperty("futureNotification"), saved.RootElement.GetProperty("features").GetProperty("notifications").GetProperty("futureNotification"));
+        SameJson(original.RootElement.GetProperty("output").GetProperty("futureOutput"), saved.RootElement.GetProperty("output").GetProperty("futureOutput"));
+        SameJson(original.RootElement.GetProperty("output").GetProperty("centralGenerator").GetProperty("futureCentral"), saved.RootElement.GetProperty("output").GetProperty("centralGenerator").GetProperty("futureCentral"));
+        SameJson(original.RootElement.GetProperty("servers")[0].GetProperty("futureServer"), saved.RootElement.GetProperty("servers")[0].GetProperty("futureServer"));
+        SameJson(original.RootElement.GetProperty("servers")[0].GetProperty("checks").GetProperty("futureChecks"), saved.RootElement.GetProperty("servers")[0].GetProperty("checks").GetProperty("futureChecks"));
+        SameJson(original.RootElement.GetProperty("servers")[0].GetProperty("checks").GetProperty("services").GetProperty("futureServices"), saved.RootElement.GetProperty("servers")[0].GetProperty("checks").GetProperty("services").GetProperty("futureServices"));
+        service.GetDomains().Single().Name.Should().Be("app-prod");
+    }
+
+    [Fact]
+    public async Task ReplacementUpdates_PreserveUnknownFieldsFromLoadedModels()
+    {
+        const string json = """
+            {
+              "features": { "futureFeature": 1, "notifications": { "futureNotification": 2 } },
+              "output": { "futureOutput": 3, "centralGenerator": { "futureCentral": 4 } },
+              "servers": [{
+                "name": "srv",
+                "futureServer": 5,
+                "serviceTypes": [{ "type": "erreichbarkeit", "futureServiceType": 9 }],
+                "checks": { "futureChecks": 6, "appPools": { "futurePools": 7 } }
+              }],
+              "domains": [{ "name": "app", "environment": "production", "futureDomain": 8 }]
+            }
+            """;
+        await File.WriteAllTextAsync(ConfigPath, json);
+        var service = CreateService();
+        service.LoadFromFile(json, ConfigPath);
+
+        service.UpdateFeatures(new FeaturesConfig { Notifications = new NotificationsFeatureConfig() });
+        service.UpdateOutputSettings(new OutputSettings { CentralGenerator = new CentralGeneratorSettings() });
+        service.UpdateServer("srv", new Server
+        {
+            Name = "srv",
+            ServiceTypes = [new ServiceType { Type = "erreichbarkeit" }],
+            Checks = new ServerChecksConfig { AppPools = new AppPoolChecksConfig() }
+        });
+        service.UpdateDomain("app", new Domain { Name = "app", Environment = "production" });
+        await service.SaveToFileAsync();
+
+        using var saved = JsonDocument.Parse(await File.ReadAllTextAsync(ConfigPath));
+        saved.RootElement.GetProperty("features").GetProperty("futureFeature").GetInt32().Should().Be(1);
+        saved.RootElement.GetProperty("features").GetProperty("notifications").GetProperty("futureNotification").GetInt32().Should().Be(2);
+        saved.RootElement.GetProperty("output").GetProperty("futureOutput").GetInt32().Should().Be(3);
+        saved.RootElement.GetProperty("output").GetProperty("centralGenerator").GetProperty("futureCentral").GetInt32().Should().Be(4);
+        saved.RootElement.GetProperty("servers")[0].GetProperty("futureServer").GetInt32().Should().Be(5);
+        saved.RootElement.GetProperty("servers")[0].GetProperty("checks").GetProperty("futureChecks").GetInt32().Should().Be(6);
+        saved.RootElement.GetProperty("servers")[0].GetProperty("checks").GetProperty("appPools").GetProperty("futurePools").GetInt32().Should().Be(7);
+        saved.RootElement.GetProperty("domains")[0].GetProperty("futureDomain").GetInt32().Should().Be(8);
+        saved.RootElement.GetProperty("servers")[0].GetProperty("serviceTypes")[0].GetProperty("futureServiceType").GetInt32().Should().Be(9);
+    }
+
+    [Fact]
+    public async Task ReplacementUpdates_MatchListItemsByStableKeyAfterInsertDeleteAndReorder()
+    {
+        const string json = """
+            {
+              "servers": [{
+                "name": "srv",
+                "serviceTypes": [
+                  { "type": "alpha", "futureServiceType": 1 },
+                  { "type": "beta", "futureServiceType": 2 },
+                  { "type": "gamma", "futureServiceType": 3 }
+                ]
+              }]
+            }
+            """;
+        await File.WriteAllTextAsync(ConfigPath, json);
+        var service = CreateService();
+        service.LoadFromFile(json, ConfigPath);
+
+        service.UpdateServer("srv", new Server
+        {
+            Name = "srv",
+            ServiceTypes = [new ServiceType { Type = "beta" }, new ServiceType { Type = "alpha" }]
+        });
+        service.UpdateServer("srv", new Server
+        {
+            Name = "srv",
+            ServiceTypes = [new ServiceType { Type = "alpha" }, new ServiceType { Type = "beta" }]
+        });
+        service.UpdateServer("srv", new Server
+        {
+            Name = "srv",
+            ServiceTypes =
+            [
+                new ServiceType { Type = "beta" },
+                new ServiceType { Type = "delta" },
+                new ServiceType { Type = "alpha" }
+            ]
+        });
+        await service.SaveToFileAsync();
+
+        using var saved = JsonDocument.Parse(await File.ReadAllTextAsync(ConfigPath));
+        var types = saved.RootElement.GetProperty("servers")[0].GetProperty("serviceTypes");
+        types[0].GetProperty("type").GetString().Should().Be("beta");
+        types[0].GetProperty("futureServiceType").GetInt32().Should().Be(2);
+        types[1].GetProperty("type").GetString().Should().Be("delta");
+        types[1].TryGetProperty("futureServiceType", out _).Should().BeFalse();
+        types[2].GetProperty("type").GetString().Should().Be("alpha");
+        types[2].GetProperty("futureServiceType").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task EverySave_CreatesUniqueBackupAndKeepsOnlyTheNewestTwenty()
+    {
+        await File.WriteAllTextAsync(ConfigPath, "{}");
+        var service = CreateService();
+        service.LoadFromFile("{}", ConfigPath);
+        for (var i = 0; i < 23; i++)
+        {
+            service.UpdateApplicationTitle("T" + i);
+            await service.SaveToFileAsync();
+        }
+
+        var backups = Directory.GetFiles(Path.Combine(_directory, "backup"), "config.json.*");
+        backups.Should().HaveCount(20);
+        backups.Select(Path.GetFileName).Should().OnlyHaveUniqueItems();
+        var newest = backups.OrderByDescending(path => Path.GetFileName(path), StringComparer.Ordinal).First();
+        File.ReadAllText(newest).Should().Contain("T21");
+    }
+
+    [Fact]
+    public async Task BackupRotation_UsesCreationTimeWhenFilenameOrderDisagrees()
+    {
+        await File.WriteAllTextAsync(ConfigPath, "{}");
+        var backupDirectory = Path.Combine(_directory, "backup");
+        Directory.CreateDirectory(backupDirectory);
+        var creationBase = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var existing = new List<string>();
+        for (var i = 0; i < 20; i++)
+        {
+            var path = Path.Combine(backupDirectory, $"config.json.20200101T000000.0000000Z-{i:000}");
+            await File.WriteAllTextAsync(path, "backup-" + i);
+            File.SetCreationTimeUtc(path, creationBase.AddSeconds(20 - i));
+            existing.Add(path);
+        }
+        File.GetCreationTimeUtc(existing[0]).Should().Be(creationBase.AddSeconds(20));
+        var service = CreateService();
+        service.LoadFromFile("{}", ConfigPath);
+        service.UpdateApplicationTitle("Aktuell");
+
+        await service.SaveToFileAsync();
+
+        Directory.GetFiles(backupDirectory, "config.json.*").Should().HaveCount(20);
+        File.Exists(existing[0]).Should().BeTrue("it is the newest of the pre-existing backups by creation time");
+        File.Exists(existing[^1]).Should().BeFalse("it is the oldest backup by creation time despite its largest name suffix");
+    }
+
+    [Fact]
+    public async Task BackupFailure_IsLoggedAndDoesNotBlockSaving()
+    {
+        await File.WriteAllTextAsync(ConfigPath, "{}");
+        await File.WriteAllTextAsync(Path.Combine(_directory, "backup"), "not a directory");
+        var logger = new CaptureLogger<ConfigurationService>();
+        var service = CreateService(logger);
+        service.LoadFromFile("{}", ConfigPath);
+        service.UpdateApplicationTitle("Gespeichert");
+
+        var act = () => service.SaveToFileAsync();
+
+        await act.Should().NotThrowAsync();
+        File.ReadAllText(ConfigPath).Should().Contain("Gespeichert");
+        logger.Messages.Should().Contain(message => message.Contains("Backup"));
+    }
+
+    private static void SameJson(JsonElement expected, JsonElement actual) =>
+        JsonSerializer.Serialize(expected).Should().Be(JsonSerializer.Serialize(actual));
+
+    private sealed class CaptureLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = new();
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning) Messages.Add(formatter(state, exception));
+        }
     }
 }
