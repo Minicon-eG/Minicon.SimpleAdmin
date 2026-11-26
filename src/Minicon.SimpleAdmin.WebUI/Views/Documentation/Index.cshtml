@@ -119,6 +119,7 @@
                             <li><a href="#problems-page">Probleme-Seite</a></li>
                         </ul>
                     </li>
+                    <li><a href="#backup">Sicherung</a></li>
                     <li>
                         <a href="#configuration">Konfiguration</a>
                         <ul>
@@ -498,6 +499,92 @@
                         </tr>
                     </tbody>
                 </table>
+            </section>
+
+            <!-- Settings backup -->
+            <section id="backup" class="doc-section">
+                <h2><i class="bi bi-safe2 me-2"></i>Sicherung</h2>
+                <p>
+                    Unter <a asp-controller="SettingsBackup" asp-action="Index">Einstellungen → Sicherung</a> laden Sie die
+                    Einstellungen als ZIP-Datei herunter und spielen sie später nach einer Prüfung wieder ein.
+                    Der Dateiname lautet <code>simpleadmin-einstellungen-&lt;Hostname&gt;-&lt;yyyyMMdd-HHmmss&gt;.zip</code>.
+                </p>
+
+                <h3>Inhalt und Manifest</h3>
+                <ul>
+                    <li><code>config.json</code> einschließlich Domains, Umgebungen und Ignorier-Regeln</li>
+                    <li><code>scripts.json</code> mit den Skriptdefinitionen</li>
+                    <li>hochgeladene <code>.ps1</code>-, <code>.psm1</code>-, <code>.psd1</code>- und <code>.txt</code>-Dateien unter <code>scripts/</code></li>
+                    <li><code>manifest.json</code> mit Format-Version 1, SimpleAdmin-Version, Erstellzeit UTC, Hostname, Benutzer sowie Größe und SHA-256 jeder Payload-Datei</li>
+                </ul>
+                <div class="doc-card info">
+                    <strong>Bewusst nicht enthalten:</strong> Statusdaten, Verläufe, Skriptläufe, Quittierungen und Audits.
+                    Es gibt keine automatischen Exporte an fremde Orte und kein Worker-seitiges Backup.
+                </div>
+
+                <h3>Vorschau und Einspielen</h3>
+                <ol>
+                    <li>Wählen Sie eine ZIP-Datei bis 50 MB. Die Vorschau ändert noch nichts.</li>
+                    <li>Prüfen Sie Manifest, Unterschiede bei Servern, Umgebungen, Domains, Skripten und Skriptdateien. Eine neuere SimpleAdmin-Version der Sicherung wird ausdrücklich gemeldet. Nicht enthaltene Upload-Skripte werden namentlich aufgelistet.</li>
+                    <li>Bestätigen Sie erst danach <strong>Jetzt einspielen</strong>. Vorher sichert die WebUI den aktuellen Stand vollständig unter <code>&lt;ConfigPath&gt;/backup/</code>. Kann diese Sicherung nicht geschrieben werden, bleibt alles unverändert.</li>
+                    <li>Nicht enthaltene Upload-Skripte bleiben standardmäßig erhalten. Nur wenn Sie deren Löschung per Kontrollkästchen ausdrücklich bestätigen, werden die in dieser Vorschau aufgelisteten Dateien entfernt. Nach der Vorschau neu hinzugekommene Dateien bleiben erhalten.</li>
+                    <li>Nach dem Einspielen erscheinen Ergebnis und <strong>Vorherigen Stand herunterladen</strong>. Konfiguration, Skriptdefinitionen und Statuscache werden neu geladen.</li>
+                </ol>
+                <p>
+                    Bei einer vollständigen Sicherung werden die enthaltenen hochgeladenen Skriptdateien ersetzt. Andere Pfade
+                    und Dateien bleiben unberührt. Bei einem Schreibfehler versucht die WebUI, den vorher gesicherten Stand
+                    erneut herzustellen, und meldet, falls auch das nicht gelingt.
+                </p>
+
+                <h3>Verschlüsselte Werte</h3>
+                <div class="doc-card warning">
+                    <code>enc:v1</code>-Werte bleiben in der Sicherung verschlüsselt. Die Vorschau prüft jeden solchen Wert mit dem
+                    aktuellen <code>Encryption:ConnectionStringKey</code> und warnt bei nicht entschlüsselbaren Werten.
+                    Für Worker und WebUI wird später derselbe Schlüssel benötigt. Der Schlüssel selbst ist nicht Bestandteil der Sicherung.
+                    Behandeln Sie ZIP-Dateien und Backup-Ordner trotzdem als vertraulich, besonders bei bisher unverschlüsselten Werten.
+                </div>
+
+                <h3>Automatische Sicherungen</h3>
+                <p>
+                    Die Seite listet die vorhandenen F4-Sicherungen <code>config.json.&lt;UTC&gt;</code> und
+                    <code>scripts.json.&lt;UTC&gt;</code> sowie die vollständigen Sicherungen vor einem Restore.
+                    Beim Download einer F4-Einzeldatei erzeugt die WebUI ein ZIP mit Manifest; die Wiederherstellung ersetzt dann nur
+                    diese eine JSON-Datei. Pro JSON-Datei behält F4 die letzten 20 Einzelsicherungen.
+                </p>
+
+                <h3>Sicherheit und Host-Schalter</h3>
+                <p>
+                    Uploads werden auf erlaubte Einträge, flache Skriptdateinamen, Endungen, reservierte Windows-Gerätenamen,
+                    Steuer-/Bidi-Zeichen, führende/abschließende Leerzeichen/Punkte, Eintragsanzahl, entpackte Größen,
+                    Manifest und SHA-256 geprüft. Zip-Slip, absolute Pfade und ungültige JSON-Dateien werden ohne Änderung abgelehnt.
+                    Die <code>config.json</code> muss dieselbe Validierung wie beim Worker bestehen. Downloads, Vorschau und Restore
+                    sind POSTs mit Antiforgery-Token; der Benutzername stammt aus der Anmeldung. Vorschau-Tokens sind an den
+                    hochladenden Benutzer gebunden und werden durch fremde oder gesperrte Versuche nicht verbraucht.
+                </p>
+                <p>
+                    Vorschau-ZIPs enthalten die vollständige Konfiguration und werden nach 15 Minuten abgelaufen minütlich
+                    aufgeräumt; verwaiste ZIPs werden beim WebUI-Start entfernt. Schützen Sie <code>&lt;ConfigPath&gt;/backup/.preview</code>
+                    trotzdem durch restriktive Dateisystemrechte.
+                </p>
+<pre><code>{
+  "Backup": {
+    "RestoreEnabled": true,
+    "AllowWithoutAuthentication": false
+  }
+}</code></pre>
+                <p>
+                    <code>RestoreEnabled</code> ist standardmäßig aktiv. Bei <code>Authentication:Enabled=false</code> ist Restore
+                    standardmäßig gesperrt. <code>AllowWithoutAuthentication=true</code> ist ausschließlich für isolierte Hosts vorgesehen.
+                    Jeder angemeldete Benutzer innerhalb der globalen WebUI-Rolle darf einspielen; eine zusätzliche Backup-Rolle gibt es nicht.
+                </p>
+
+                <h3>Audit</h3>
+                <p>
+                    Downloads und Restore-Ergebnisse stehen mit Benutzer, UTC-Zeit, Dateiname, Manifest-Hash und Ergebnis in
+                    <code>&lt;ConfigPath&gt;/settings-backup-actions.json</code>. Unter Windows werden zusätzlich nicht blockierende
+                    Application-Ereignisse über denselben Kanal wie bei BizTalk geschrieben (IDs 3200/3201/3202).
+                    Das Datei-Audit bleibt maßgeblich; ein Fehler des Windows-Ereignisprotokolls verhindert keinen Download oder Restore.
+                </p>
             </section>
 
             <!-- Configuration -->

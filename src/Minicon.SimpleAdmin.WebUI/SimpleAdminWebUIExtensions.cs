@@ -1,4 +1,5 @@
 using Minicon.SimpleAdmin.WebUI.Services.Control;
+using Minicon.SimpleAdmin.WebUI.Services.Backup;
 using Minicon.SimpleAdmin.WebUI.Services.BizTalk;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
@@ -148,11 +149,15 @@ public static class SimpleAdminWebUIExtensions
         AddScriptRunner(services, configuration, ResolveConfigDirectory(configuration));
         AddScheduledTaskControl(services, configuration, ResolveConfigDirectory(configuration));
         services.AddSingleton(BizTalkOptions.Resolve(configuration, IsAuthenticationEnabled(configuration)));
+        services.AddSingleton(SettingsBackupOptions.Resolve(configuration, IsAuthenticationEnabled(configuration)));
+        services.AddSingleton<ISettingsBackupAuditLog>(sp => new SettingsBackupAuditLog(
+            ResolveConfigDirectory(configuration), sp.GetRequiredService<ILogger<SettingsBackupAuditLog>>()));
         // Preserve the ASP.NET Core default explicitly as the Razor/JavaScript header contract.
         services.AddAntiforgery(o => o.HeaderName = "RequestVerificationToken");
         services.AddSingleton<IWindowsEventSink, WindowsEventSink>();
         services.AddSingleton<WindowsActionEventAudit>();
         services.AddSingleton<IActionEventAudit>(sp => sp.GetRequiredService<WindowsActionEventAudit>());
+        services.AddSingleton<ISettingsBackupEventAudit>(sp => sp.GetRequiredService<WindowsActionEventAudit>());
         services.AddHostedService(sp => sp.GetRequiredService<WindowsActionEventAudit>());
         services.AddSingleton<IBizTalkAuditLog>(sp =>
         {
@@ -162,6 +167,18 @@ public static class SimpleAdminWebUIExtensions
         });
         services.AddSingleton<IBizTalkInstanceControl, BizTalkInstanceControl>();
         services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddSingleton(sp => new SettingsBackupService(
+            sp.GetRequiredService<ConfigurationService>(),
+            sp.GetRequiredService<ScriptDefinitionStore>(),
+            sp.GetRequiredService<ScriptPathPolicy>(),
+            sp.GetRequiredService<StatusReaderService>(),
+            sp.GetRequiredService<SettingsBackupOptions>(),
+            sp.GetRequiredService<ISettingsBackupAuditLog>(),
+            sp.GetRequiredService<ISettingsBackupEventAudit>(),
+            sp.GetRequiredService<ILogger<SettingsBackupService>>(),
+            sp.GetRequiredService<TimeProvider>(),
+            ResolveConfigDirectory(configuration)));
+        services.AddHostedService(sp => sp.GetRequiredService<SettingsBackupService>());
         services.AddHttpClient(RestBizTalkInstanceProvider.ClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
             .ConfigurePrimaryHttpMessageHandler(RestBizTalkInstanceProvider.CreateHandler);
         services.AddTransient<IBizTalkInstanceProvider>(sp => new RestBizTalkInstanceProvider(
@@ -396,6 +413,12 @@ public static class SimpleAdminWebUIExtensions
             app.Logger.LogInformation(
                 "SimpleAdmin WebUI: scheduled task control is ENABLED — every authenticated user may enable, disable, start and stop scheduled tasks on the monitored servers (executed as {Account}, audit log: {File}).",
                 $"{Environment.UserDomainName}\\{Environment.UserName}", ScheduledTaskControlOptions.AuditFileName);
+
+        var backup = app.Services.GetRequiredService<SettingsBackupOptions>();
+        app.Logger.LogInformation("SimpleAdmin WebUI: settings restore enabled={Enabled}, reason={Reason}",
+            backup.RestoreEnabled, backup.DisabledReason);
+        if (backup.RestoreEnabled && !IsAuthenticationEnabled(app.Configuration))
+            app.Logger.LogWarning("SimpleAdmin WebUI: settings restore is enabled while authentication is DISABLED (Backup:AllowWithoutAuthentication) — anyone reaching the WebUI can replace the settings.");
 
         app.MapControllerRoute(
             name: "default",

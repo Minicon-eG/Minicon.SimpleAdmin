@@ -240,3 +240,31 @@ a.dashboard-config-item:hover { background: var(--bs-secondary-bg); color: inher
     .st-table td { display: block; border: 0; padding: .1rem 0 !important; }
     .st-table td::before { content: attr(data-label) ": "; font-weight: 600; color: var(--bs-secondary-color); }
 }
+
+
+/* Settings backup */
+.settings-backup,
+.settings-backup .card,
+.settings-backup .card-body { min-width: 0; }
+.settings-backup .page-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+.settings-backup .page-head h1 { margin-bottom: .25rem; }
+.settings-backup input[type="file"] { min-width: 0; }
+.backup-manifest dd { overflow-wrap: anywhere; }
+.backup-diff-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .75rem; }
+.backup-diff-card { display: flex; flex-direction: column; gap: .25rem; padding: .75rem; border: 1px solid var(--bs-border-color-translucent); border-radius: .75rem; background: var(--bs-tertiary-bg); }
+.backup-diff-card > span { font-size: 1.2rem; font-weight: 600; }
+.backup-diff-card > small { color: var(--bs-secondary-color); overflow-wrap: anywhere; }
+.backup-file-list { display: grid; gap: .5rem; }
+.backup-file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem 1rem; padding: .65rem; border: 1px solid var(--bs-border-color-translucent); border-radius: .6rem; }
+.backup-file-row > :last-child { grid-column: 1 / -1; }
+.automatic-backup-list { display: grid; gap: .6rem; }
+.automatic-backup-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 1rem; padding: .75rem; border: 1px solid var(--bs-border-color-translucent); border-radius: .75rem; background: var(--bs-tertiary-bg); }
+.automatic-backup-name { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
+.automatic-backup-name code { overflow-wrap: anywhere; }
+.automatic-backup-meta { display: flex; flex-direction: column; color: var(--bs-secondary-color); font-size: .85rem; white-space: nowrap; }
+.automatic-backup-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.automatic-backup-actions form { margin: 0; }
+@media (max-width: 991.98px) {
+    .automatic-backup-row { grid-template-columns: minmax(0, 1fr); gap: .65rem; }
+    .automatic-backup-meta { flex-direction: row; flex-wrap: wrap; gap: .75rem; white-space: normal; }
+}

@@ -33,6 +33,13 @@ public class ConfigurationService
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
+    private static readonly JsonSerializerOptions RestoreJsonOptions = new(JsonOptions)
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
+
     /// <summary>
     /// Gets the current configuration
     /// </summary>
@@ -53,14 +60,66 @@ public class ConfigurationService
     /// </summary>
     public string? FilePath => _originalFilePath;
 
+    internal bool HasConnectionStringKey => !string.IsNullOrEmpty(_masterKey);
+
+    internal async Task<byte[]> ReadCurrentFileAsync()
+    {
+        await _writeLock.WaitAsync();
+        try
+        {
+            if (string.IsNullOrEmpty(_originalFilePath))
+                throw new InvalidOperationException("No original file path set. Use LoadFromFile() first.");
+            return await File.ReadAllBytesAsync(_originalFilePath);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    internal async Task ReplaceFileAsync(byte[] contents)
+    {
+        await _writeLock.WaitAsync();
+        try
+        {
+            if (string.IsNullOrEmpty(_originalFilePath))
+                throw new InvalidOperationException("No original file path set. Use LoadFromFile() first.");
+            var json = Backup.SettingsBackupArchive.DecodeUtf8(contents);
+            ServiceConfigValidator.DeserializeAndValidate(json);
+            JsonFileBackup.TryCreate(_originalFilePath, _logger);
+            var tmp = _originalFilePath + ".restore-" + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                await File.WriteAllBytesAsync(tmp, contents);
+                File.Move(tmp, _originalFilePath, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(tmp)) File.Delete(tmp);
+            }
+            LoadCore(json, RestoreJsonOptions);
+        }
+        catch
+        {
+            await ReloadCoreAsync(RestoreJsonOptions);
+            throw;
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
     /// <summary>
     /// Gets whether the configuration has unsaved changes
     /// </summary>
     public bool HasChanges => _isLoaded && ExportToJson() != _originalJson;
 
-    internal void LoadFromJson(string json)
+    internal void LoadFromJson(string json) => LoadCore(json, JsonOptions);
+
+    private void LoadCore(string json, JsonSerializerOptions readOptions)
     {
-        var config = JsonSerializer.Deserialize<Config>(json, JsonOptions);
+        var config = JsonSerializer.Deserialize<Config>(json, readOptions);
         if (config == null)
         {
             throw new InvalidOperationException("Failed to parse configuration JSON");
@@ -194,6 +253,19 @@ public class ConfigurationService
         }
     }
 
+    internal async Task ReloadRestoredFileAsync()
+    {
+        await _writeLock.WaitAsync();
+        try
+        {
+            await ReloadCoreAsync(RestoreJsonOptions);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
     private async Task SaveCoreAsync()
     {
         if (string.IsNullOrEmpty(_originalFilePath))
@@ -216,11 +288,11 @@ public class ConfigurationService
         MarkAsSaved();
     }
 
-    private async Task ReloadCoreAsync()
+    private async Task ReloadCoreAsync(JsonSerializerOptions? readOptions = null)
     {
         if (string.IsNullOrEmpty(_originalFilePath)) return;
         var json = await File.ReadAllTextAsync(_originalFilePath);
-        LoadFromJson(json);
+        LoadCore(json, readOptions ?? JsonOptions);
     }
 
     private void EncryptConnectionStrings()

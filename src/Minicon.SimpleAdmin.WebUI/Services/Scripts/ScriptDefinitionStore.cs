@@ -7,7 +7,7 @@ namespace Minicon.SimpleAdmin.WebUI.Services.Scripts;
 /// Persists the script definitions in <c>scripts.json</c> next to config.json (atomic write:
 /// temp file + move). The file is re-read when it changes on disk, so manual edits are picked
 /// up instead of being overwritten by the next save. An unreadable file is reported via
-/// <see cref="LoadError"/> and never overwritten.
+/// <see cref="LoadError"/> and never overwritten by ordinary saves.
 /// </summary>
 public sealed class ScriptDefinitionStore
 {
@@ -17,6 +17,7 @@ public sealed class ScriptDefinitionStore
     private List<ScriptDefinition> _cache = new();
     private DateTime? _cacheStamp;
     private bool _loaded;
+    private string? _loadError;
 
     public ScriptDefinitionStore(string filePath, ILogger<ScriptDefinitionStore> logger)
     {
@@ -26,7 +27,6 @@ public sealed class ScriptDefinitionStore
 
     public string FilePath => _filePath;
 
-    /// <summary>German error when scripts.json could not be read; saving is blocked meanwhile.</summary>
     public string? LoadError
     {
         get
@@ -38,8 +38,6 @@ public sealed class ScriptDefinitionStore
             }
         }
     }
-
-    private string? _loadError;
 
     public IReadOnlyList<ScriptDefinition> GetAll()
     {
@@ -60,7 +58,6 @@ public sealed class ScriptDefinitionStore
         }
     }
 
-    /// <summary>Inserts or replaces a definition (by <see cref="ScriptDefinition.Id"/>).</summary>
     public void Save(ScriptDefinition definition)
     {
         lock (_lock)
@@ -88,13 +85,56 @@ public sealed class ScriptDefinitionStore
         }
     }
 
+    internal byte[] ReadCurrentFile()
+    {
+        lock (_lock)
+        {
+            return File.Exists(_filePath)
+                ? File.ReadAllBytes(_filePath)
+                : JsonSerializer.SerializeToUtf8Bytes(new ScriptsFile(), ScriptJson.Options);
+        }
+    }
+
+    internal void ReplaceFile(byte[] contents)
+    {
+        lock (_lock)
+        {
+            var definitions = ParseJson(Decode(contents));
+            JsonFileBackup.TryCreate(_filePath, _logger);
+            var tmp = _filePath + ".restore-" + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllBytes(tmp, contents);
+                File.Move(tmp, _filePath, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(tmp)) File.Delete(tmp);
+            }
+            _cache = definitions;
+            _cacheStamp = File.GetLastWriteTimeUtc(_filePath);
+            _loaded = true;
+            _loadError = null;
+        }
+    }
+
+    internal void Reload()
+    {
+        lock (_lock)
+        {
+            _loaded = false;
+            Refresh();
+        }
+    }
+
+    internal static void ValidateJson(string json) => _ = ParseJson(json);
+
     private void EnsureWritable()
     {
         if (_loadError != null)
             throw new InvalidOperationException(_loadError + " Bitte die Datei korrigieren — sie wird nicht überschrieben.");
     }
 
-    /// <summary>Reloads the cache when the file's write time changed (a cheap stat per call).</summary>
     private void Refresh()
     {
         DateTime? stamp = File.Exists(_filePath) ? File.GetLastWriteTimeUtc(_filePath) : null;
@@ -111,10 +151,7 @@ public sealed class ScriptDefinitionStore
 
         try
         {
-            var json = File.ReadAllText(_filePath);
-            _cache = string.IsNullOrWhiteSpace(json)
-                ? new List<ScriptDefinition>()
-                : JsonSerializer.Deserialize<ScriptsFile>(json, ScriptJson.Options)?.Scripts ?? new List<ScriptDefinition>();
+            _cache = ParseJson(File.ReadAllText(_filePath));
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
@@ -122,6 +159,16 @@ public sealed class ScriptDefinitionStore
             _loadError = $"'{_filePath}' konnte nicht gelesen werden: {ex.Message}";
             _logger.LogError(ex, "Script definitions {Path} could not be read", _filePath);
         }
+    }
+
+    private static List<ScriptDefinition> ParseJson(string json) => string.IsNullOrWhiteSpace(json)
+        ? new List<ScriptDefinition>()
+        : JsonSerializer.Deserialize<ScriptsFile>(json, ScriptJson.Options)?.Scripts ?? new List<ScriptDefinition>();
+
+    private static string Decode(byte[] contents)
+    {
+        using var reader = new StreamReader(new MemoryStream(contents, writable: false), detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 
     private void Write(List<ScriptDefinition> list)

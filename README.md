@@ -141,15 +141,24 @@ Erst danach ändern Sie `appsettings.json` und starten die WebUI wieder. Prüfen
 Skriptdefinitionen, Verlauf und offene Audit-Vorgänge. Ein Deployment-Paket darf diese
 Laufzeitdaten nicht enthalten.
 
-### Automatische Sicherungen
+### Automatische Sicherungen und Download über die WebUI
 
 - Vor jedem Speichern wird eine vorhandene `config.json` nach
   `<ConfigPath>/backup/config.json.<UTC-Zeitstempel>` kopiert. Entsprechend entsteht für
   Skriptdefinitionen `<ConfigPath>/backup/scripts.json.<UTC-Zeitstempel>`.
-- Pro Datei bleiben die letzten 20 Sicherungen erhalten. Namenskollisionen innerhalb eines
-  Zeitstempels erhalten einen numerischen Zusatz.
-- Ein Fehler beim Sichern oder Rotieren wird als Warning protokolliert und verhindert das
-  Speichern **nicht**. Diese Kopien ersetzen keine unabhängige, externe Datensicherung.
+- Pro JSON-Datei bleiben die letzten 20 F4-Sicherungen erhalten. Namenskollisionen innerhalb eines
+  Zeitstempels erhalten einen numerischen Zusatz. Ein Fehler beim Sichern oder Rotieren wird als
+  Warning protokolliert und verhindert das normale Speichern **nicht**.
+- Unter **Einstellungen → Sicherung** lädt jeder angemeldete Benutzer eine ZIP-Datei
+  `simpleadmin-einstellungen-<Hostname>-<yyyyMMdd-HHmmss>.zip` herunter. Sie enthält nur
+  `config.json`, `scripts.json`, die Dateien des `ScriptRunner:UploadDirectory` unter `scripts/`
+  und `manifest.json`. Das Manifest (Format-Version 1) enthält SimpleAdmin-Version, UTC-Erstellzeit,
+  Hostname, Identitätsnamen sowie Größe und SHA-256 jeder Payload-Datei.
+- **Nicht enthalten** sind Status, Verläufe, Skriptläufe, Quittierungen und Auditdateien. Es gibt
+  keine zeitgesteuerten Exporte an fremde Orte und kein Worker-Backup.
+- Die Seite listet die F4-Einzelsicherungen und die vollständigen Sicherungen vor einem Restore.
+  F4-Einzelsicherungen werden beim Download mit einem Manifest als ZIP verpackt und stellen nur
+  ihre jeweilige JSON-Datei wieder her.
 - Eine unlesbare `script-runs/history.json` wird einmalig je Dateiversion als
   `script-runs/history.json.unreadable-<UTC-Zeitstempel>` kopiert. Das Original bleibt
   unverändert. Unbekannte Statuswerte werden als `Unknown` angezeigt und blockieren das
@@ -159,9 +168,9 @@ Laufzeitdaten nicht enthalten.
 
 **Konfigurieren Sie `Encryption:ConnectionStringKey` verbindlich**, sobald Verbindungszeichenfolgen
 oder SMTP-/IMAP-Kennwörter verwendet werden. Ohne Schlüssel stehen diese Werte in `config.json`
-und dadurch auch in bis zu 20 Sicherungen im Klartext. Das Backup-Verzeichnis erbt die Rechte
-des Datenordners; beschränken Sie dessen Zugriff entsprechend und beziehen Sie es in die externe,
-verschlüsselte Datensicherung ein.
+und dadurch auch in bis zu 20 F4-Sicherungen im Klartext. Auch eine ZIP-Sicherung kann solche
+Klartextwerte enthalten. Backup-Verzeichnis und Downloads sind zu schützen; beziehen Sie den
+Datenordner zusätzlich in eine unabhängige externe Datensicherung ein.
 
 Unbekannte Felder in `config.json` bleiben beim Laden und Speichern durch die WebUI im Root
 und in den verschachtelten Config-Modellen erhalten. Auch die CRUD-/Settings-Setter übernehmen
@@ -170,9 +179,69 @@ ersetzen. Dictionaries werden per Schlüssel abgeglichen. Server, ServiceTypes u
 Listen werden anhand ihrer eindeutigen Namen beziehungsweise Typen abgeglichen; nur Listen ohne
 solchen Schlüssel verwenden bei unveränderter Elementanzahl die Position. Dadurch wandern
 unbekannte Felder nach Einfügen, Löschen oder Umsortieren nicht zu einem anderen Eintrag.
-`ServiceConfigReader` liest die Datei im Worker nur und schreibt sie nicht zurück.
+`ServiceConfigReader` liest die Datei im Worker nur und schreibt sie nicht zurück. Worker und
+WebUI-Restore verwenden dieselbe `ServiceConfigValidator`-Prüfung.
 
-### Wiederherstellung
+### Wiederherstellung über die WebUI
+
+1. Unter **Einstellungen → Sicherung** die ZIP-Datei (max. 50 MB) oder eine automatische
+   Sicherung auswählen. Die Vorschau ändert keine Einstellungen. Sie zeigt Manifest,
+   Versionswarnung, Unterschiede bei Servern, Umgebungen, Domains, Skriptdefinitionen und
+   Skriptdateien, die Namen nicht enthaltener Upload-Skripte sowie das Ergebnis der
+   Entschlüsselungsprüfung.
+2. Warnungen prüfen. Eine Sicherung mit `enc:v1`-Werten ist später nur mit demselben
+   `Encryption:ConnectionStringKey` lesbar. Nicht entschlüsselbare Werte werden angezeigt,
+   blockieren das Einspielen aber nicht. Der Schlüssel steht weder im ZIP noch im Manifest.
+3. **Jetzt einspielen** bestätigen. Vorher muss eine vollständige ZIP-Sicherung des aktuellen
+   Stands unter `<ConfigPath>/backup/` erstellt werden; schlägt dies fehl, bleibt alles unverändert.
+   Danach ersetzen die vorhandenen Stores die enthaltenen JSON-Dateien jeweils atomar und lesen
+   sie erneut ein. Der Statuscache wird verworfen. Bei einer Vollsicherung werden enthaltene
+   Uploads ersetzt. Nicht enthaltene `.ps1`-, `.psm1`-, `.psd1`- und `.txt`-Dateien bleiben
+   standardmäßig erhalten; nur die in der Vorschau namentlich aufgeführten Dateien werden nach
+   ausdrücklicher Bestätigung per Kontrollkästchen entfernt. Andere Pfade und Dateien werden
+   nicht angerührt.
+4. Ergebnis und Link **Vorherigen Stand herunterladen** kontrollieren. Nach einem Schreibfehler
+   versucht die WebUI, den vorher gesicherten Stand erneut herzustellen; dies ist keine
+   verteilte Transaktion über mehrere Dateien oder Prozesse. Das Ergebnis meldet ausdrücklich,
+   falls auch diese Rücknahme fehlschlägt.
+
+Vor dem Restore werden Pfad-Traversal/Zip-Slip, absolute und unbekannte Einträge, doppelte
+Einträge, nicht flache oder unerlaubte Skriptdateien, reservierte Windows-Gerätenamen,
+Steuer-/Bidi-Zeichen, führende/abschließende Leerzeichen/Punkte, Größen-/Anzahlgrenzen,
+Manifest und alle SHA-256-Werte geprüft. `config.json` muss deserialisierbar sein und die
+Worker-Validierung bestehen; `scripts.json` muss zum Store-Schema passen. Ungültige Uploads
+verändern nichts. Die Entpackgrenzen sind 1.024 ZIP-Einträge, 100 MB insgesamt und 16 MB je
+JSON-/Skriptdatei. Downloads, Vorschau und Restore verlangen POST mit Antiforgery-Token.
+Der Benutzername kommt aus der Identität, niemals aus einem Formularfeld. Vorschau-Tokens
+sind an den hochladenden Benutzer gebunden; fremde oder gesperrte Versuche verbrauchen sie nicht.
+
+Vorschau-ZIPs enthalten die vollständige Konfiguration und bleiben höchstens 15 Minuten unter
+`<ConfigPath>/backup/.preview`. Abgelaufene Dateien werden minütlich, verwaiste Dateien beim
+WebUI-Start gelöscht. Das Verzeichnis benötigt trotzdem restriktive Dateisystemrechte.
+
+Host-Einstellungen ausschließlich in `appsettings.json`:
+
+```json
+{
+  "Backup": {
+    "RestoreEnabled": true,
+    "AllowWithoutAuthentication": false
+  }
+}
+```
+
+`RestoreEnabled` ist standardmäßig `true`. Bei `Authentication:Enabled=false` ist Restore dennoch
+gesperrt; `AllowWithoutAuthentication=true` gibt es nur für isolierte Hosts frei. Jeder
+angemeldete Benutzer innerhalb der globalen WebUI-Rolle darf wiederherstellen. Downloads bleiben
+auch bei deaktiviertem Restore möglich.
+
+Downloads und Restore-Ergebnisse werden mit UTC, Identität, Dateiname, Manifest-SHA-256 und
+Ergebnis in `<ConfigPath>/settings-backup-actions.json` gespeichert. Zusätzlich verwendet die
+WebUI unter Windows denselben begrenzten, nicht blockierenden Application-Event-Kanal wie
+BizTalk (IDs 3200 Information, 3201 Warning, 3202 Error; Quellen `Minicon.SimpleAdmin.WebUI`
+oder vorhandene `SimpleAdmin`). Datei-Audit ist maßgeblich; Eventfehler blockieren nichts.
+
+### Manuelle Wiederherstellung im Notfall
 
 1. WebUI beenden und die aktuellen Dateien einschließlich `history.json` und allen
    `.unreadable-*`-Dateien zusätzlich zur Seite kopieren.

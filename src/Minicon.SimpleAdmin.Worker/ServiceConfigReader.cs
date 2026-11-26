@@ -76,53 +76,7 @@ public class ServiceConfigReader : IServiceConfigReader
     private void ValidateConfig(Config config)
     {
         _logger.LogDebug("Validating configuration");
-
-        if (config.Servers == null || config.Servers.Count == 0)
-        {
-            _logger.LogError("Configuration validation failed: no servers defined");
-            throw new InvalidOperationException("Configuration must contain at least one server");
-        }
-
-        foreach (var server in config.Servers)
-        {
-            if (string.IsNullOrWhiteSpace(server.Name))
-            {
-                _logger.LogError("Configuration validation failed: server name is empty");
-                throw new InvalidOperationException("Server name cannot be empty");
-            }
-
-            if (server.ServiceTypes == null || server.ServiceTypes.Count == 0)
-            {
-                _logger.LogError("Configuration validation failed: server '{ServerName}' has no service types", server.Name);
-                throw new InvalidOperationException($"Server '{server.Name}' must have at least one service type");
-            }
-
-            foreach (var serviceType in server.ServiceTypes)
-            {
-                if (string.IsNullOrWhiteSpace(serviceType.Type))
-                {
-                    _logger.LogError("Configuration validation failed: empty service type for server '{ServerName}'", server.Name);
-                    throw new InvalidOperationException($"Service type cannot be empty for server '{server.Name}'");
-                }
-            }
-        }
-
-        // Validate history settings
-        if (config.History != null)
-        {
-            if (config.History.MaxEntries < 0)
-            {
-                _logger.LogError("Configuration validation failed: MaxEntries is negative ({MaxEntries})", config.History.MaxEntries);
-                throw new InvalidOperationException("MaxEntries cannot be negative");
-            }
-
-            if (config.History.MaxEntries > 10000)
-            {
-                _logger.LogError("Configuration validation failed: MaxEntries exceeds limit ({MaxEntries})", config.History.MaxEntries);
-                throw new InvalidOperationException("MaxEntries cannot exceed 10000");
-            }
-        }
-
+        ServiceConfigValidator.Validate(config);
         _logger.LogDebug("Configuration validation successful");
     }
 

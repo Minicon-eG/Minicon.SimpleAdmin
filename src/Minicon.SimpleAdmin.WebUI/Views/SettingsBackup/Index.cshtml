@@ -1,0 +1,238 @@
+@using Minicon.SimpleAdmin.WebUI.Helpers
+@using Minicon.SimpleAdmin.WebUI.Models.Backup
+@model Minicon.SimpleAdmin.WebUI.Models.Backup.SettingsBackupPageViewModel
+@{
+    ViewData["Title"] = "Sicherung";
+    string Size(long bytes) => bytes >= 1024 * 1024 ? $"{bytes / 1024d / 1024d:0.0} MB" : $"{Math.Max(1, bytes / 1024d):0} KB";
+}
+
+<div class="container-fluid settings-backup">
+    <div class="page-head">
+        <div>
+            <h1><i class="bi bi-safe2 me-2"></i>Sicherung</h1>
+            <p class="text-body-secondary mb-0">Einstellungen herunterladen, prüfen und wiederherstellen</p>
+        </div>
+        <a asp-controller="Documentation" asp-action="Index" asp-fragment="backup" class="btn btn-glass btn-sm">
+            <i class="bi bi-book me-1"></i>Hilfe
+        </a>
+    </div>
+
+    @if (Model.Result != null)
+    {
+        <div class="alert @(Model.Result.Success ? "alert-success" : "alert-danger")" role="status">
+            <i class="bi @(Model.Result.Success ? "bi-check-circle" : "bi-exclamation-triangle") me-2"></i>@Model.Result.Message
+            @if (!string.IsNullOrEmpty(Model.Result.PreviousBackupFileName))
+            {
+                <div class="mt-2">
+                    <form asp-action="AutomaticDownload" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="fileName" value="@Model.Result.PreviousBackupFileName" />
+                        <button type="submit" class="btn btn-glass btn-sm">
+                            <i class="bi bi-download me-1"></i>Vorherigen Stand herunterladen
+                        </button>
+                    </form>
+                </div>
+            }
+        </div>
+    }
+
+    @if (!Model.RestoreEnabled)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-shield-lock me-2"></i>@Model.RestoreDisabledReason
+            Downloads und die Liste automatischer Sicherungen bleiben verfügbar.
+        </div>
+    }
+
+    <div class="row g-4 mb-4">
+        <div class="col-xl-5">
+            <section class="card h-100">
+                <div class="card-header"><i class="bi bi-cloud-download me-2"></i>Aktuellen Stand sichern</div>
+                <div class="card-body d-flex flex-column">
+                    <p>Die ZIP-Datei enthält ausschließlich <code>config.json</code>, <code>scripts.json</code>, hochgeladene Skripte unter <code>scripts/</code> und ein Manifest mit SHA-256-Prüfsummen.</p>
+                    <p class="text-body-secondary small">Keine Verläufe, Audits, Quittierungen oder Statusdaten. Verschlüsselte Werte bleiben verschlüsselt; schützen Sie die heruntergeladene Datei trotzdem.</p>
+                    <form asp-action="Download" method="post" class="mt-auto align-self-start">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-download me-1"></i>Sicherung herunterladen
+                        </button>
+                    </form>
+                </div>
+            </section>
+        </div>
+        <div class="col-xl-7">
+            <section class="card h-100">
+                <div class="card-header"><i class="bi bi-cloud-upload me-2"></i>Sicherung einspielen</div>
+                <div class="card-body">
+                    <form asp-action="Preview" method="post" enctype="multipart/form-data">
+                        @Html.AntiForgeryToken()
+                        <label for="backupFile" class="form-label">ZIP-Sicherung auswählen (max. @(Model.MaxUploadBytes / 1024 / 1024) MB)</label>
+                        <div class="d-flex flex-column flex-md-row gap-2 align-items-stretch align-items-md-center">
+                            <input id="backupFile" name="file" type="file" class="form-control" accept=".zip,application/zip" required disabled="@(!Model.RestoreEnabled)" />
+                            <button type="submit" class="btn btn-glass text-nowrap" disabled="@(!Model.RestoreEnabled)">
+                                <i class="bi bi-search me-1"></i>Vorschau prüfen
+                            </button>
+                        </div>
+                        <div class="form-text">Die Vorschau verändert keine Einstellungen. Erst nach Ihrer ausdrücklichen Bestätigung wird eingespielt.</div>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    @if (Model.Preview is { } preview)
+    {
+        <section class="card mb-4" id="preview">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <span><i class="bi bi-clipboard2-check me-2"></i>Vorschau: @preview.SourceFileName</span>
+                <span class="pill pill-info pill-soft">Format-Version @preview.Manifest.FormatVersion</span>
+            </div>
+            <div class="card-body">
+                @if (preview.NewerVersion)
+                {
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>Die Sicherung stammt von der neueren SimpleAdmin-Version <strong>@preview.Manifest.SimpleAdminVersion</strong>. Installiert ist <strong>@preview.InstalledVersion</strong>. Prüfen Sie insbesondere unbekannte neuere Felder, bevor Sie einspielen.
+                    </div>
+                }
+                @if (preview.EncryptedValues > 0)
+                {
+                    <div class="alert @(preview.UndecryptableValues > 0 ? "alert-warning" : "alert-info")">
+                        <i class="bi bi-key me-2"></i>@preview.EncryptedValues verschlüsselte Werte (<code>enc:v1</code>) gefunden.
+                        @if (preview.UndecryptableValues > 0)
+                        {
+                            <strong>@preview.UndecryptableValues davon sind mit dem aktuellen Encryption:ConnectionStringKey nicht entschlüsselbar.</strong>
+                            <text> Ohne denselben Schlüssel können Worker und WebUI diese Werte nicht lesen.</text>
+                        }
+                        else
+                        {
+                            <text>Alle sind mit dem aktuellen Schlüssel entschlüsselbar. Zum späteren Lesen wird derselbe Encryption:ConnectionStringKey benötigt.</text>
+                        }
+                    </div>
+                }
+
+                <div class="row g-3 mb-4">
+                    <div class="col-lg-6">
+                        <h2 class="h6">Manifest</h2>
+                        <dl class="row backup-manifest mb-0">
+                            <dt class="col-sm-5">SimpleAdmin-Version</dt><dd class="col-sm-7">@preview.Manifest.SimpleAdminVersion (installiert: @preview.InstalledVersion)</dd>
+                            <dt class="col-sm-5">Erstellt UTC</dt><dd class="col-sm-7"><time datetime="@preview.Manifest.CreatedAtUtc.ToString("O")">@Display.LocalTimeSeconds(preview.Manifest.CreatedAtUtc.UtcDateTime)</time></dd>
+                            <dt class="col-sm-5">Hostname</dt><dd class="col-sm-7 text-wrap-anywhere">@preview.Manifest.HostName</dd>
+                            <dt class="col-sm-5">Benutzer</dt><dd class="col-sm-7 text-wrap-anywhere">@preview.Manifest.User</dd>
+                            <dt class="col-sm-5">Sicherungstyp</dt><dd class="col-sm-7">@preview.Manifest.BackupKind</dd>
+                            <dt class="col-sm-5">Manifest SHA-256</dt><dd class="col-sm-7"><code class="text-wrap-anywhere">@preview.ManifestHash</code></dd>
+                        </dl>
+                    </div>
+                    <div class="col-lg-6">
+                        <h2 class="h6">Unterschiede in Kurzform</h2>
+                        <div class="backup-diff-grid">
+                            @DiffCard("Server", preview.Servers)
+                            @DiffCard("Umgebungen", preview.Environments)
+                            @DiffCard("Domains", preview.Domains)
+                            @DiffCard("Skripte", preview.Scripts)
+                            @DiffCard("Skriptdateien", preview.ScriptFiles)
+                        </div>
+                    </div>
+                </div>
+
+                <details class="mb-4">
+                    <summary>Dateien und SHA-256-Prüfsummen anzeigen (@preview.Manifest.Files.Count)</summary>
+                    <div class="backup-file-list mt-3">
+                        @foreach (var file in preview.Manifest.Files)
+                        {
+                            <div class="backup-file-row">
+                                <code class="text-wrap-anywhere">@file.Path</code>
+                                <span class="text-body-secondary text-nowrap">@Size(file.Size)</span>
+                                <code class="text-wrap-anywhere">@file.Sha256</code>
+                            </div>
+                        }
+                    </div>
+                </details>
+
+                <div class="alert alert-warning">
+                    <strong>Vor dem Einspielen:</strong> Der aktuelle Stand wird automatisch vollständig im Backup-Ordner gesichert. Anschließend werden die enthaltenen Einstellungen ersetzt. Nicht in einer vollständigen Sicherung enthaltene Upload-Skripte bleiben standardmäßig erhalten.
+                </div>
+                @if (preview.ScriptFilesToRemove.Count > 0)
+                {
+                    <div class="alert alert-danger">
+                        <strong>Nicht in der Sicherung enthaltene Upload-Skripte (@preview.ScriptFilesToRemove.Count)</strong>
+                        <p class="mb-2">Diese Dateien werden nur entfernt, wenn Sie das Löschen unten ausdrücklich bestätigen. Ohne Bestätigung bleiben sie erhalten.</p>
+                        <details>
+                            <summary>Dateinamen anzeigen</summary>
+                            <ul class="mb-0 mt-2">
+                                @foreach (var fileName in preview.ScriptFilesToRemove)
+                                {
+                                    <li><code>@fileName</code></li>
+                                }
+                            </ul>
+                        </details>
+                    </div>
+                }
+                <form asp-action="Restore" method="post" onsubmit="return confirm('Die geprüfte Sicherung jetzt einspielen? Der aktuelle Stand wird vorher gesichert. Skripte werden nur bei ausdrücklich gesetztem Häkchen gelöscht.');" class="d-flex flex-wrap gap-2">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="token" value="@preview.Token" />
+                    @if (preview.ScriptFilesToRemove.Count > 0)
+                    {
+                        <div class="form-check w-100 mb-2">
+                            <input class="form-check-input" type="checkbox" id="removeUnlistedScripts" name="removeUnlistedScripts" value="true" />
+                            <label class="form-check-label" for="removeUnlistedScripts">
+                                Ich bestätige ausdrücklich, dass die oben aufgeführten @preview.ScriptFilesToRemove.Count nicht enthaltenen Upload-Skripte entfernt werden. Ohne dieses Häkchen bleiben alle erhalten.
+                            </label>
+                        </div>
+                    }
+                    <button type="submit" class="btn btn-danger"><i class="bi bi-arrow-counterclockwise me-1"></i>Jetzt einspielen</button>
+                    <a asp-action="Index" class="btn btn-outline-secondary">Vorschau verwerfen</a>
+                </form>
+            </div>
+        </section>
+    }
+
+    <section class="card">
+        <div class="card-header"><i class="bi bi-archive me-2"></i>Automatische Sicherungen</div>
+        <div class="card-body">
+            <p class="text-body-secondary small">F4-Einzelsicherungen von <code>config.json</code> und <code>scripts.json</code> sowie vollständige Sicherungen vor dem Einspielen. F4-Einzelsicherungen werden beim Download in ein geprüftes ZIP mit Manifest verpackt und ersetzen nur ihre jeweilige Datei.</p>
+            @if (Model.AutomaticBackups.Count == 0)
+            {
+                <p class="text-body-secondary mb-0">Noch keine automatischen Sicherungen vorhanden.</p>
+            }
+            else
+            {
+                <div class="automatic-backup-list">
+                    @foreach (var backup in Model.AutomaticBackups)
+                    {
+                        <div class="automatic-backup-row">
+                            <div class="automatic-backup-name">
+                                <code>@backup.FileName</code>
+                                <span class="pill pill-muted pill-soft">@backup.Kind</span>
+                            </div>
+                            <div class="automatic-backup-meta">
+                                <time datetime="@backup.CreatedAtUtc.ToString("O")">@Display.LocalTimeSeconds(backup.CreatedAtUtc)</time>
+                                <span>@Size(backup.Size)</span>
+                            </div>
+                            <div class="automatic-backup-actions">
+                                <form asp-action="AutomaticDownload" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="fileName" value="@backup.FileName" />
+                                    <button type="submit" class="btn btn-glass btn-sm" title="Sicherung herunterladen">
+                                        <i class="bi bi-download me-1"></i>Download
+                                    </button>
+                                </form>
+                                <form asp-action="AutomaticPreview" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="fileName" value="@backup.FileName" />
+                                    <button type="submit" class="btn btn-outline-primary btn-sm" disabled="@(!Model.RestoreEnabled)">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>Einspielen
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+</div>
+
+@functions {
+    private static Microsoft.AspNetCore.Html.IHtmlContent DiffCard(string title, SettingsBackupDiff diff) =>
+        new Microsoft.AspNetCore.Html.HtmlString($"<div class=\"backup-diff-card\"><strong>{System.Net.WebUtility.HtmlEncode(title)}</strong><span>{diff.Current} → {diff.Backup}</span><small>{diff.Added} neu · {diff.Removed} entfernt · {diff.Changed} geändert</small></div>");
+}
