@@ -9,6 +9,37 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
+## [2.40.0] – 2026-11-26 – Protokollüberwachung erkennt offene und fehlende Läufe
+
+**Die Protokollüberwachung erkennt jetzt auch Läufe, die hängen geblieben sind, und meldet, wenn ein erwarteter Lauf ganz ausgefallen ist.**
+
+### Neu
+- **Hängende Läufe werden erkannt.** Legen Sie für einen Protokollscan fest, was ein Lauf beginnt und was ihn erfolgreich beendet. Beginnt ein Lauf, ohne dass das Ende dazu auftaucht, meldet SimpleAdmin den Vorgang – je nachdem, ob der Lauf noch läuft oder schon zu lange hängt. Startet ein neuer Lauf, während der vorige noch offen ist, wird der vorige als abgebrochen gemeldet.
+- **Fehlende Läufe werden gemeldet.** Sie können festlegen, an welchen Wochentagen ein Lauf zu einer bestimmten Uhrzeit stattfinden soll. Bleibt der erwartete Lauf aus, erhalten Sie eine Meldung mit dem fälligen Termin und dem Datum des letzten nachgewiesenen Laufs. Feiertage tragen Sie in einer Liste ein; sie werden bei der Terminberechnung berücksichtigt. Ist der Termin noch nicht vorbei oder ist noch keine Karenzzeit abgelaufen, bleibt es ruhig.
+- **Log-Scans für weitere Behörden kopieren.** Viele Behörden verarbeiten ihre Daten nach demselben Muster. Mit **„Für weitere Behörde kopieren“** duplizieren Sie einen fertigen Log-Scan vollständig – inklusive aller Regeln, Schwellen, Anleitungslinks und Hinweistexten. Der Name der Kopie wird automatisch angepasst, sodass die Meldung später sagt, welche Behörde betroffen ist. Überwachte Verzeichnisse lassen sich genauso verdoppeln.
+- **Der Assistent unterstützt die neuen Regeln.** Er schlägt Start und Ende eines Laufs aus einem eingefügten Beispieltext vor und zeigt im Trockenlauf offene und abgebrochene Läufe. Die fertige Regelvorlage **„Lauf muss abgeschlossen sein“** können Sie übernehmen und anpassen. Eine Vorlage für die neuen Regeln liegt dem Assistenten bei.
+- Die neuen Befunde erscheinen in den Serverdetails, in der Problemliste und in den Benachrichtigungen und lassen sich wie gewohnt quittieren.
+
+### Hinweise
+- **Geprüft wird je Regel nur die neueste passende Logdatei.** Legt ein Job am Wochenende eine neue Datei an, kann am Montag eine Fehlmeldung entstehen, weil der Termin vom Freitag in der neuen Datei nicht mehr enthalten ist. Bei einem fortlaufend geschriebenen Einzeldatei-Log ist das unkritisch. Prüfen Sie in diesem Fall die betroffene Datei, bevor Sie den Lauf als fehlend einstufen.
+- Der Trockenlauf des Assistenten prüft **keine** erwarteten Läufe – das wird dort deutlich angezeigt. Offene Läufe werden im Trockenlauf dagegen gegen dieselbe Datei geprüft wie im laufenden Betrieb.
+
+### Entwickler
+- Neue Config-Modelle in `config.json` je Log-Scan: `pendingRules[]` (`LogPendingRule`: `name`, `startRegex`, `endRegex`, `abortRegex`, `maxMinutes`, `severity`, `reportAbandoned`, `timestampRegex`, `timestampFormat`, `wikiUrl`, `remediationSteps`) und `expectedRuns[]` (`ExpectedRunRule`: `name`, `matchRegex`, `schedule`, `expectedTime`, `graceMinutes`, `severity`, `holidays`, `wikiUrl`, `remediationSteps`). Beide erben `ConfigModel`; `holidays` ist die einzige Quelle für Feiertage, es erfolgt keine automatische Feiertagsberechnung.
+- Neue Problem-IDs über die bestehende Pipeline: `log_<scan>_<rule>_pending`, `log_<scan>_<rule>_abandoned`, `log_<scan>_<rule>_missing` (`ActiveProblem.LogRunPending`/`LogRunAbandoned`/`LogRunMissing`). Die Zustände liegen in `FileMonitoringState.PendingRuns`/`RunningLogRuns`/`AbandonedRuns`/`MissingRuns` und werden über `StaticHtmlGenerator.WithoutHistory` auch im HTTP-Status-JSON ausgeliefert.
+- Reine, unit-getestete Auswertung in den Checkers: `LogPendingRunEvaluator.Evaluate` (Checkers, `internal static`, injizierte Uhr, 500-ms-Regex-Timeout, CRLF/Leerzeilen/Fortsetzungszeilen toleriert) und `ExpectedRunEvaluator.Evaluate` (Checkers, `internal static`, injizierte Uhr). Der fällige Termin ist der letzte planmäßige Tag mit `expectedTime + graceMinutes` ≤ jetzt (Montag 08:00 → Freitag, Samstag → Freitag); ein Feiertag weicht auf den vorherigen planmäßigen Werktag zurück. Das Belegfenster reicht von `expectedTime − 12 h` (`ExpectedRunEvaluator.EvidenceWindowStart`) bis `expectedTime + grace`; `LastRun` wird unabhängig bis jetzt bestimmt, auch für einen verspäteten Lauf. Ein Regex-Timeout erzeugt einen sichtbaren `EvaluationError` in `FileMonitoringState.EvaluationErrors` und **keinen** Missing-Befund.
+- Der gekürzte Umfang (P7) wertet je Regel **genau eine** Datei aus: bei einem Glob die neueste passende Datei nach `LastWriteTime`. Rotationsketten, dateiübergreifendes Schließen von Läufen, Evidenzdatei-Ketten und Nummernlücken (`sequenceRegex`, `LogSequenceGapEvaluator`) sind in Code, UI, Doku und Tests entfernt.
+- Bestehende Signatur-Scans behalten ihr Verhalten je Datei: `maxFileAgeMinutes`, exakt `maxLines` (`0` = ganze Datei) und der eigene Tail-Teilmenge des gemeinsam gelesenen Snapshots. `FileSystemAccess.ReadTail` liest vorwärts mit `StreamReader` (BOM-Erkennung, `\r`/`\n`/`\r\n`) in einen begrenzten Ringpuffer; das Ergebnis entspricht `File.ReadAllLines(path).TakeLast(maxLines)` inklusive Leerzeilen und UTF-8/UTF-16-BOM.
+- `abortRegex` beendet einen Lauf stillschweigend – es entsteht weder ein Pending- noch ein Abandoned-Befund. Das Verhalten ist in der XML-Beschreibung der Eigenschaft dokumentiert.
+- `ConfigurationService` und `ServerViewModel` erhalten unbekannte Felder verlustfrei auch bei reinen Umbenennungen: Verzeichnisse und Log-Scans werden über exakte Name+Pfad-Schlüssel sowie über einen eindeutigen Rename-Fallback über unveränderten Pfad oder Namen identifiziert, Regeln über Name plus eindeutigen Fingerabdruck aller bekannten Regelfelder. Mehrdeutige Fälle erben nichts.
+- Der Assistent (`FileMonitoringPreviewService`) trennt die Zeilenmengen für Signaturvorschläge und Pending-Regeln; die Pending-Auswertung erhält Pfad und Dateizeit derselben neuesten Datei wie der Worker. Die Log-Vorschau listet wieder absteigend nach `LastWriteTime` die 20 neuesten Dateien, und `PreviewFile.Included` beschreibt die Altersgrenze statt des tatsächlichen Lesezugriffs.
+- Keine neuen REST-Endpunkte, kein neues `appsettings.json`-Flag und keine Änderung an der Paketstruktur; die neuen Regeln sind rein `config.json`-konfiguriert.
+
+### Intern
+- Entfernt wurden die Rotations-, Verkettungs- und Sequenzlogik samt zugehöriger Config- und Zustandsmodelle, Problemfactory, Badge-Zählung, Detailtabellen, statischem HTML, Regelformat, Dokumentation und Tests.
+- Regressionstests decken ab: Auswertung ausschließlich der neuesten Datei (`PendingRules_UseOnlyTheNewestMatchingFile`, `ExpectedRules_UseOnlyTheNewestFileWithoutAnEvidenceCountError`), unverändertes Tail-Verhalten der Signaturen (`SignatureScan_UsesOnlyTheConfiguredTail`, `SignatureScan_WithZeroMaxLines_ReadsTheWholeFile`), Vorschau gegen dieselbe Datei wie der Worker (`Preview_PendingRulesMatchTheWorkersSingleFileSelection`), Erhalt unbekannter Felder bei Umbenennungen, die Vorschau-Liste der neuesten Dateien, den Mitternachtsfall, einen späten Lauf sowie die Prüfung jedes fälligen Kandidaten.
+- `FileMonitoringFindingCounter` zählt die Befunde der Dateiüberwachung zentral; die Badge-Zählung der Serverkarten und die Detailtabellen verwenden ihn gemeinsam.
+
 ## [2.39.0] – 2026-11-26 – Einstellungen sichern und Überwachung im Blick behalten
 
 **Einstellungen lassen sich jetzt sichern und wiederherstellen, Serverkarten zeigen alle aktiven Überwachungen, und wichtige Daten sind besser vor Verlust geschützt.**
@@ -423,6 +454,7 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.40.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.39.0...v2.40.0
 [2.39.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.38.1...v2.39.0
 [2.38.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.38.0...v2.38.1
 [2.38.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.1...v2.38.0
