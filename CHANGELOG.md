@@ -9,6 +9,33 @@ unter „Neuigkeiten“ und beschreiben nur, was Anwender bemerken. Technisches 
 (Pakete, Host-Projekte, REST-API, Abhängigkeiten, Tests, Build) steht unter *Entwickler* bzw. *Intern* und wird
 in der WebUI nicht angezeigt.
 
+## [2.39.0] – 2026-11-26 – Einstellungen sichern und Überwachung im Blick behalten
+
+**Einstellungen lassen sich jetzt sichern und wiederherstellen, Serverkarten zeigen alle aktiven Überwachungen, und wichtige Daten sind besser vor Verlust geschützt.**
+
+### Neu
+- Unter **Einstellungen → Sicherung** laden Sie Einstellungen, Skriptdefinitionen und hochgeladene Skripte als ZIP-Datei herunter. Vor dem Wiedereinspielen zeigt eine Vorschau alle Unterschiede, ohne etwas zu ändern. Erst nach Ihrer Bestätigung wird eingespielt; der vorherige Stand wird automatisch gesichert und kann heruntergeladen werden. Vorhandene Einzelsicherungen lassen sich dort ebenfalls herunterladen und wiederherstellen.
+- Die Serverkarten zeigen für jede aktive Überwachung ein Badge mit Anzahl und Zustand. Ein Klick auf ein Badge öffnet den passenden Abschnitt in den Serverdetails; fehlende Messdaten werden neutral als „noch keine Daten“ angezeigt. Über das **Zahnrad** neben dem Gesamtstatus gelangen Sie direkt zur Konfiguration der Überwachungen. Dieselbe Badge-Leiste steht auch oben in den Serverdetails.
+
+### Behoben
+- Der **Assistent für die Datei-/Protokollüberwachung** erscheint wieder im Vordergrund und lässt sich bedienen. Dialoge werden nicht mehr von einer Glas-Karte oder ihrer Abdunklung verdeckt.
+- Ein beschädigter oder vorübergehend nicht lesbarer **Skriptverlauf** wird nicht mehr als leer behandelt und überschrieben. Die bisherige Datei bleibt erhalten, wird zusätzlich gesichert und eine Warnung erscheint. Neue Läufe und ihre Protokolle bleiben erhalten.
+- **Einstellungen und Skriptdefinitionen** werden vor jedem Speichern automatisch gesichert. Auch Angaben aus neueren Versionen, die diese Version nicht kennt, bleiben beim Bearbeiten erhalten, statt verloren zu gehen.
+
+### Hinweise
+- Legen Sie den **Datenordner außerhalb des Programmordners** an, damit Einstellungen, Skripte und Verlauf bei einem Update nicht mit den Programmdateien ersetzt werden. SimpleAdmin warnt beim Start und in den Einstellungen, wenn Daten im Programmordner liegen. Kopieren Sie vorhandene Daten vor einem Umzug; sie werden nicht automatisch verschoben.
+- Sicherungen können vertrauliche Zugangsdaten enthalten und müssen geschützt aufbewahrt werden. Der Schlüssel für verschlüsselte Werte ist nicht Teil der Sicherung und wird zum späteren Verwenden dieser Werte benötigt.
+
+### Entwickler
+- Für produktive WebUI-Hosts wird `ConfigPath` außerhalb des Anwendungsverzeichnisses empfohlen, beispielsweise `C:\ProgramData\SimpleAdmin`; vorhandene Dateien sind vor der Umstellung manuell zu kopieren. Die Startwarnung prüft auch `ScriptRunner:RunLogDirectory`, `ScriptRunner:UploadDirectory` sowie die Audit-Verzeichnisse für `ScheduledTasks` und `BizTalk`. Relative Datenpfade und Pfade unter `AppContext.BaseDirectory` oder `ContentRootPath` gelten als unsicher.
+- Alle Config-Modelle erben `ConfigModel` mit `[JsonExtensionData]`; Replacement-Updates übernehmen unbekannte Felder rekursiv und gleichen listenbasierte Modelle über stabile Schlüssel ab. Vor dem atomaren Ersetzen entstehen bis zu 20 rotierende Einzelsicherungen unter `<ConfigPath>/backup/config.json.<UTC>` beziehungsweise `<ConfigPath>/backup/scripts.json.<UTC>`. Ein nicht lesbarer Skriptverlauf bleibt unverändert und wird als `script-runs/history.json.unreadable-<UTC>` kopiert; Schreibvorgänge erfolgen nur nach erfolgreichem Lesen und Sperren.
+- Die Sicherungsseite `/Settings/Backup` exportiert `config.json`, `scripts.json`, erlaubte flache Upload-Dateien und ein Manifest mit SHA-256-Prüfsummen. Vorschau und Restore validieren Archive und Inhalte erneut; vor jedem Restore ist eine vollständige ZIP-Sicherung des aktuellen Stands unter `<ConfigPath>/backup/` Pflicht. Die Host-Schalter `Backup:RestoreEnabled` (Standard `true`) und `Backup:AllowWithoutAuthentication` (Standard `false`) stehen ausschließlich in `appsettings.json`. Datei-Audit erfolgt in `settings-backup-actions.json`, zusätzliche nicht blockierende Windows-Ereignisse verwenden die IDs 3200–3202.
+- `ServiceConfigValidator` kapselt die Worker-Validierung gemeinsam für Worker und Restore. Restore ersetzt die validierten Originalbytes atomar, lädt Konfiguration und Skriptdefinitionen neu und invalidiert den Statuscache; unbekannte Felder und JSON-Kommentare bleiben dabei erhalten.
+
+### Intern
+- Die Badge-Ermittlung ist in `MonitoringBadges` zentralisiert; Übersicht und Detailkopf verwenden gemeinsam `_MonitoringBadges.cshtml`. `site.js` hebt betroffene Modale beim Öffnen aus Containing-Blocks in den `body` und stellt ihre ursprüngliche DOM-Position beim Schließen wieder her.
+- Regressionstests decken Badge-Gates und -Zustände, Config-Roundtrips, Sicherungsrotation, unlesbaren und gesperrten Skriptverlauf, Datenordner-Warnungen sowie Backup-Export, -Vorschau, -Validierung, -Restore und -Audit ab. Die Entwicklungsberichte enthalten zusätzlich Browsernachweise für Serverkarten, Dialoge und Sicherungsabläufe in mehreren Breiten und beiden Farbschemata.
+
 ## [2.38.1] – 2026-11-19 – Technische Korrekturen
 
 ### Entwickler
@@ -396,6 +423,7 @@ in der WebUI nicht angezeigt.
 - Die Versionshistorie bis 2.25.2 ist in den GitHub-Releases dieses Repos nicht enthalten; die Pakete bleiben auf nuget.org verfügbar.
 
 
+[2.39.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.38.1...v2.39.0
 [2.38.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.38.0...v2.38.1
 [2.38.0]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.1...v2.38.0
 [2.37.1]: https://github.com/Minicon-eG/Minicon.SimpleAdmin/compare/v2.37.0...v2.37.1

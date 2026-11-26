@@ -539,6 +539,8 @@
                         <li><a href="#scheduled-tasks-rights" class="toc-level-2">20.5 Voraussetzungen &amp; Rechte</a></li>
                     </ul>
                 </li>
+                <li><a href="#monitoring-badges" class="toc-level-1">21. Serverkarten &amp; Monitoring-Badges</a></li>
+                <li><a href="#settings-backup" class="toc-level-1">22. Sicherung &amp; Datenordner</a></li>
             </ul>
         </aside>
 
@@ -3319,6 +3321,60 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     <li><strong>Aufgabenverlauf</strong> muss auf den Servern aktiviert sein (Aufgabenplanung → „Verlauf aller Aufgaben aktivieren").</li>
                     <li><strong>WebUI-Dienstkonto:</strong> steuert direkt per PowerShell/CIM über DCOM (kein WinRM). Auf den Zielservern werden RPC/DCOM (Firewall-Regelgruppen „Remoteverwaltung geplanter Aufgaben" und „Windows-Verwaltungsinstrumentation (WMI)") sowie lokale Administratorrechte benötigt.</li>
                 </ul>
+            </section>
+
+            <section id="monitoring-badges">
+                <h2>21. Serverkarten &amp; Monitoring-Badges</h2>
+                <p>In der WebUI-Statusübersicht zeigt jede Serverkarte für alle aktiven Überwachungen ein Badge: AppPools,
+                    Windows-Dienste, Event Log, SQL, E-Mail-Probes und -Zustellung, Zertifikate, BizTalk,
+                    Datei-/Protokollüberwachung und geplante Tasks. Farbe und Anzahl fassen den Zustand zusammen.
+                    Aktivierte Überwachungen ohne ersten Status erscheinen neutral mit dem Hinweis „noch keine Daten“.</p>
+                <p>Jedes Badge öffnet den passenden Abschnitt der Serverdetails; dieselbe Leiste steht auch oben in der
+                    Detailansicht. Das <strong>Zahnrad</strong> neben dem Gesamtstatus auf der Serverkarte öffnet direkt
+                    die Server-Checks in der Serverkonfiguration.</p>
+            </section>
+
+            <section id="settings-backup">
+                <h2>22. Sicherung &amp; Datenordner</h2>
+                <h3>Einstellungen sichern und wiederherstellen</h3>
+                <p>Unter <strong>Einstellungen → Sicherung</strong> lädt die WebUI <code>config.json</code>,
+                    <code>scripts.json</code> und erlaubte hochgeladene Skriptdateien zusammen mit einem Manifest als
+                    ZIP-Datei herunter. Status-, Verlaufs-, Quittierungs- und Auditdaten sind nicht enthalten.</p>
+                <ul>
+                    <li>Eine ZIP-Datei bis 50 MB kann zunächst in einer <strong>Vorschau</strong> geprüft werden. Diese zeigt Unterschiede und Prüfsummen, ohne Dateien zu ändern.</li>
+                    <li>Erst die Bestätigung von <strong>Jetzt einspielen</strong> verändert die Einstellungen. Vorher muss die WebUI eine vollständige Sicherung des aktuellen Stands unter <code>&lt;ConfigPath&gt;/backup/</code> schreiben.</li>
+                    <li>Nicht im Archiv enthaltene Upload-Skripte bleiben standardmäßig erhalten. Ihre Löschung erfordert eine ausdrückliche zusätzliche Bestätigung. Nach dem Einspielen kann der vorherige Stand heruntergeladen werden.</li>
+                </ul>
+                <p>Die Wiederherstellung ist standardmäßig aktiv. Ohne Anmeldung ist sie standardmäßig gesperrt und darf nur
+                    auf einem ausdrücklich dafür freigegebenen isolierten Host erlaubt werden. Beide Schalter stehen
+                    ausschließlich in <code>appsettings.json</code>:</p>
+                <pre><code>"Backup": {
+  "RestoreEnabled": true,
+  "AllowWithoutAuthentication": false
+}</code></pre>
+                <div class="warning-box">Sicherungen und Backup-Ordner können vertrauliche Zugangsdaten enthalten und
+                    müssen durch Dateisystemrechte geschützt werden. Der Schlüssel für verschlüsselte Werte ist nicht
+                    Bestandteil der Sicherung und wird auf dem Zielsystem benötigt.</div>
+
+                <h3>Automatische Sicherungen und Skriptverlauf</h3>
+                <p>Vor jedem Speichern von <code>config.json</code> und <code>scripts.json</code> legt die WebUI eine
+                    Kopie des bisherigen Stands unter <code>&lt;ConfigPath&gt;/backup/</code> an; die letzten 20 Kopien
+                    pro Datei bleiben erhalten. Die Sicherungsseite listet sie zum Herunterladen und Wiederherstellen auf.</p>
+                <p>Ist <code>script-runs/history.json</code> nicht lesbar, wird sie nicht durch einen leeren Verlauf
+                    ersetzt. Das Original bleibt unverändert, eine Kopie mit Namenszusatz
+                    <code>history.json.unreadable-&lt;UTC&gt;</code> wird angelegt und die Skriptseite zeigt eine Warnung.
+                    Neue Läufe und ihre Logdateien bleiben erhalten; das Speichern des Verlaufs wird erst nach
+                    erfolgreichem Lesen und Sperren fortgesetzt.</p>
+
+                <h3>Datenordner außerhalb des Programmordners</h3>
+                <div class="warning-box">Setzen Sie <code>ConfigPath</code> produktiv auf ein Verzeichnis außerhalb des
+                    WebUI-Programmordners, beispielsweise <code>C:\ProgramData\SimpleAdmin</code>. Kopieren Sie die
+                    vorhandenen Daten vor der Umstellung selbst; eine automatische Migration findet nicht statt.
+                    Auch abweichende Verzeichnisse für Skriptläufe, Uploads und Audit-Protokolle müssen außerhalb des
+                    Programmordners liegen.</div>
+                <p>Liegt einer dieser Datenpfade im Programmordner oder ist <code>ConfigPath</code> relativ, schreibt die
+                    WebUI beim Start eine Warnung und zeigt denselben Hinweis in den Einstellungen. So bleiben Daten bei
+                    einem Update getrennt von den ersetzten Programmdateien.</p>
             </section>
 
             <a href="./" class="back-link">← Zurück zur Übersicht</a>
