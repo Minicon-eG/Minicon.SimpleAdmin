@@ -1,8 +1,8 @@
 namespace Minicon.SimpleAdmin.Models.State;
 
 /// <summary>
-/// Snapshot of file-share / log monitoring for one server. Stores only the problematic findings
-/// (stuck files + matched log lines) plus small totals to keep the payload compact — this object is
+/// Snapshot of file-share / log monitoring for one server. Stores problematic findings, running
+/// runs and evaluation errors plus small totals to keep the payload compact — this object is
 /// serialized into the per-server status JSON that the central notifier pulls over HTTP.
 /// </summary>
 public class FileMonitoringState
@@ -27,6 +27,137 @@ public class FileMonitoringState
 
     /// <summary>Aggregated log-pattern matches (one entry per pattern per log, with a hit count + sample).</summary>
     public List<LogMatch> LogMatches { get; set; } = new();
+
+    /// <summary>
+    /// Runs that were started in a log but never finished ("offene Läufe"). An entry is reported
+    /// when the run is older than the configured <c>maxMinutes</c>; younger runs are listed in
+    /// <see cref="RunningLogRuns"/> instead (they are still running — no problem).
+    /// </summary>
+    public List<LogPendingRun> PendingRuns { get; set; } = new();
+
+    /// <summary>Runs that are still within their expected duration ("läuft noch") — shown, but no problem.</summary>
+    public List<LogPendingRun> RunningLogRuns { get; set; } = new();
+
+    /// <summary>
+    /// Runs that were superseded by a newer start without an end in between ("abgebrochene Läufe"),
+    /// aggregated per rule with a count and the last occurrence.
+    /// </summary>
+    public List<LogAbandonedRun> AbandonedRuns { get; set; } = new();
+
+    /// <summary>
+    /// Expected runs that are missing from the log ("erwartete Läufe") — a run that should have
+    /// happened on a certain day (e.g. every working day at 22:00) but has no matching line.
+    /// </summary>
+    public List<LogMissingRun> MissingRuns { get; set; } = new();
+
+    /// <summary>
+    /// Evaluation errors of this cycle (e.g. a regular expression that hit its time limit). The
+    /// affected rule is then <em>not</em> evaluated — no finding is derived from incomplete
+    /// evidence, but the error stays visible.
+    /// </summary>
+    public List<string> EvaluationErrors { get; set; } = new();
+}
+
+/// <summary>
+/// A run that was expected to happen but is missing from the log.
+/// </summary>
+public class LogMissingRun
+{
+    /// <summary>Label of the log scan (e.g. "Schnittstellen-Log").</summary>
+    public string LogScan { get; set; } = string.Empty;
+
+    /// <summary>Path of the log file the run was expected in.</summary>
+    public string LogPath { get; set; } = string.Empty;
+
+    /// <summary>Name of the configured expected-run rule.</summary>
+    public string Rule { get; set; } = string.Empty;
+
+    /// <summary>When the run was expected (local time of the server writing the log).</summary>
+    public DateTime ExpectedAt { get; set; }
+
+    /// <summary>
+    /// Timestamp of the last run that was found in the log (null = no run at all was found). It is
+    /// the same for every rule of a log scan and only informational (shown in the message).
+    /// </summary>
+    public DateTime? LastRunAt { get; set; }
+
+    /// <summary>The regular expression that proves the run happened (for the detail view).</summary>
+    public string MatchRegex { get; set; } = string.Empty;
+
+    /// <summary>Whether this finding is Critical (otherwise Warning).</summary>
+    public bool IsCritical { get; set; }
+
+    /// <summary>Optional wiki / remediation link configured on the rule or the log scan.</summary>
+    public string? WikiUrl { get; set; }
+
+    /// <summary>Optional step-by-step remediation hints configured on the rule or the log scan.</summary>
+    public List<string> RemediationSteps { get; set; } = new();
+}
+
+/// <summary>
+/// A run that was started in a log file but never finished (no matching end marker).
+/// </summary>
+public class LogPendingRun
+{
+    /// <summary>Label of the log scan (e.g. "Schnittstellen-Log").</summary>
+    public string LogScan { get; set; } = string.Empty;
+
+    /// <summary>Path of the log file the run was found in.</summary>
+    public string LogPath { get; set; } = string.Empty;
+
+    /// <summary>Name of the configured pending rule.</summary>
+    public string Rule { get; set; } = string.Empty;
+
+    /// <summary>Timestamp of the start line (local time of the server writing the log).</summary>
+    public DateTime? StartedAt { get; set; }
+
+    /// <summary>How long the run has been open (in minutes) at detection time.</summary>
+    public double AgeMinutes { get; set; }
+
+    /// <summary>The start line (trimmed, shortened) — helps to identify the run.</summary>
+    public string SampleLine { get; set; } = string.Empty;
+
+    /// <summary>Whether this finding is Critical (otherwise Warning).</summary>
+    public bool IsCritical { get; set; }
+
+    /// <summary>Optional wiki / remediation link configured on the rule or the log scan.</summary>
+    public string? WikiUrl { get; set; }
+
+    /// <summary>Optional step-by-step remediation hints configured on the rule or the log scan.</summary>
+    public List<string> RemediationSteps { get; set; } = new();
+}
+
+/// <summary>
+/// Runs that were abandoned — a newer run started before the previous one produced a result.
+/// </summary>
+public class LogAbandonedRun
+{
+    /// <summary>Label of the log scan (e.g. "Schnittstellen-Log").</summary>
+    public string LogScan { get; set; } = string.Empty;
+
+    /// <summary>Path of the log file the runs were found in.</summary>
+    public string LogPath { get; set; } = string.Empty;
+
+    /// <summary>Name of the configured pending rule.</summary>
+    public string Rule { get; set; } = string.Empty;
+
+    /// <summary>Number of abandoned runs (aggregated).</summary>
+    public int Count { get; set; }
+
+    /// <summary>Timestamp of the last abandoned run (local time of the server writing the log).</summary>
+    public DateTime? LastSeenAt { get; set; }
+
+    /// <summary>The start line of the last abandoned run (trimmed, shortened).</summary>
+    public string SampleLine { get; set; } = string.Empty;
+
+    /// <summary>Whether this finding is Critical (otherwise Warning).</summary>
+    public bool IsCritical { get; set; }
+
+    /// <summary>Optional wiki / remediation link configured on the rule or the log scan.</summary>
+    public string? WikiUrl { get; set; }
+
+    /// <summary>Optional step-by-step remediation hints configured on the rule or the log scan.</summary>
+    public List<string> RemediationSteps { get; set; } = new();
 }
 
 /// <summary>A file that has been sitting in a watched directory beyond its allowed age / cutoff.</summary>

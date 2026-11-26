@@ -3112,7 +3112,114 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                     Treffer werden je Signatur gezählt. In der WebUI eine Signatur pro Zeile:
                     <code>Anzeigename :: Severity :: Regex</code>.
                 </p>
-                <h3 id="filemonitoring-config">16.3 Konfiguration</h3>
+                <p>
+                    <strong>Mehrere Dateien im selben Glob:</strong> Bestehende Signatur-Scans prüfen jede
+                    altersgemäß einbezogene Datei weiterhin mit genau <code>maxLines</code> Zeilen
+                    (<code>0</code> = ganze Datei). Jede Regel für offene oder erwartete Läufe wertet
+                    <strong>genau eine</strong> Datei aus: die neueste passende Datei nach Änderungsdatum.
+                    Dateien werden für Laufregeln nicht miteinander verbunden; ältere Dateien liefern
+                    auch keine zusätzlichen Belege für erwartete Läufe.
+                </p>
+                <p>
+                    <strong>Wie gelesen wird:</strong> Jede benötigte Datei wird nur <strong>einmal</strong> gelesen.
+                    Signaturen verwenden aus dem gemeinsamen Snapshot wieder genau ihre eigenen
+                    <code>maxLines</code> Zeilen; Laufregeln nutzen einen davon abgeleiteten, begrenzten Tail
+                    (höchstens 200.000 Zeilen). Ein <code>StreamReader</code> liest vorwärts in einen Ringpuffer,
+                    sodass der Speicher nicht mit der Dateigröße wächst. Leerzeilen, <code>\r</code>,
+                    <code>\n</code>, <code>\r\n</code> sowie UTF-8-/UTF-16-BOMs werden korrekt behandelt.
+                    Der Assistent verwendet für offene Läufe ebenfalls nur die neueste Datei.
+                </p>
+                <h3 id="filemonitoring-runs">16.3 Offene und erwartete Läufe</h3>
+                <h4>Offene Läufe (<code>pendingRules</code>)</h4>
+                <p>
+                    Je Log-Scan eine Regel pro Zeile im benannten Format <code>Feld=Wert</code>, getrennt durch <code>::</code>:
+                    <code>name=… :: start=… :: end=… :: max=… :: severity=…</code>.
+                    Pflicht sind <code>start</code> und <code>end</code>; weiterhin möglich: <code>abort</code>,
+                    <code>tsRegex</code>/<code>tsFormat</code>, <code>reportAbandoned</code>,
+                    <code>wiki</code>, <code>steps</code>. Das ältere Positionsformat
+                    (<code>Anzeigename :: StartRegex :: EndRegex :: MaxMinuten :: Severity :: AbbruchRegex :: ZeitstempelRegex :: ZeitstempelFormat</code>)
+                    wird weiterhin gelesen. Backslash, <code>::</code> und <code>|</code> innerhalb eines Werts
+                    werden mit einem Backslash maskiert; Schritte werden durch ein nicht maskiertes <code>|</code>
+                    getrennt und bleiben so auch mit Trennzeichen im Text erhalten.
+                </p>
+                <ul>
+                    <li><strong>Hängender Lauf:</strong> Start ohne Ende bis zum Dateiende, älter als <code>maxMinutes</code>
+                        (Standard 30) → Problem. Jüngere Läufe erscheinen nur als Hinweis „läuft seit X min“.</li>
+                    <li><strong>Abgebrochener Lauf:</strong> Ein neuer Start folgt, ohne dass der vorige endete → je Regel
+                        zusammengefasst (Anzahl + letzter Zeitpunkt), nur für die letzten 24 Stunden; abschaltbar mit
+                        <code>reportAbandoned=false</code>.</li>
+                    <li><strong>Zeitstempel:</strong> Standard <code>yyyy-MM-dd HH:mm:ss.fff</code> am Zeilenanfang (lokale Zeit
+                        des schreibenden Servers); <code>timestampRegex</code> nutzt die erste Klammergruppe, sonst gilt das
+                        Änderungsdatum der Datei. CRLF, Leerzeilen und Fortsetzungszeilen („Laufzeit: …“) stören nicht.</li>
+                </ul>
+                <h4>Erwartete Läufe (<code>expectedRuns</code>)</h4>
+                <p>
+                    Erwartet einen Lauf an bestimmten Tagen zu einer festen Uhrzeit und meldet ihn, wenn das Log keine
+                    passende Zeile enthält. Je Regel pro Zeile im benannten Format:
+                    <code>name=… :: match=… :: schedule=… :: time=… :: grace=…</code>
+                    (weiterhin möglich: <code>severity</code>, <code>holidays</code>, <code>wiki</code>, <code>steps</code>).
+                </p>
+                <ul>
+                    <li>Fällig ist der letzte Termin laut <code>Schedule</code> (Tages-Syntax wie <code>Mon-Fri</code>), dessen
+                        Uhrzeit plus <code>GraceMinutes</code> (Standard 120) vor jetzt liegt: Montag 08:00 → Freitag,
+                        Samstag → Freitag.</li>
+                    <li>Gemeldet wird erst nach Ablauf der Schonfrist; die Meldung nennt den letzten gefundenen Lauf —
+                        unabhängig vom Belegfenster, damit auch bei einem fehlenden Lauf sichtbar ist, seit wann er
+                        ausbleibt.</li>
+                    <li><code>Feiertage</code> (Liste von Datumsangaben) spart einzelne Tage aus — es wird <strong>keine</strong>
+                        Feiertagsberechnung durchgeführt. Fällt der Termin auf einen Feiertag, gilt der vorherige Werktag.</li>
+                    <li>Das Belegfenster reicht von <em>12 Stunden vor der Sollzeit</em> bis zum Ende der Schonfrist.
+                        Bei <code>grace=120</code> und Sollzeit 22:00 zählt ein Lauf ab 10:00 — ein Lauf um 23:30 ist
+                        spät, aber innerhalb der Schonfrist und damit ein gültiger Beweis. Ein Lauf vom Vortag zählt
+                        nie.</li>
+                    <li>Überschreitet ein regulärer Ausdruck das Zeitlimit, entsteht <strong>keine</strong> Meldung
+                        „fehlt“ — der Auswertungsfehler wird im Zustand und im Protokoll ausgewiesen.</li>
+                </ul>
+                <div class="alert alert-warning">
+                    <strong>Wichtig: „Erwarteter Lauf“ wertet nur die neueste passende Datei aus.</strong>
+                    Legt ein Job am Wochenende eine neue Datei an, kann am Montag ein Fehlalarm entstehen, weil ein
+                    gültiger Beleg in der Freitagsdatei nicht mehr gelesen wird. Für fortlaufend geschriebene Logs
+                    (eine Datei) ist dies unkritisch.
+                </div>
+                <h4>Konfigurationsbeispiel</h4>
+                <pre><code>"logScans": [
+  {
+    "name": "Behörde A",
+    "path": "\\\\\\\\srv01\\\\d$\\\\Daten\\\\BehoerdeA\\\\log\\\\*.log",
+    "maxFileAgeMinutes": 2880,
+    "patterns": [
+      { "name": "Hängende Nachricht", "severity": "Critical", "regex": "Nachricht.*haengt|stuck" }
+    ],
+    "pendingRules": [
+      {
+        "name": "Lauf muss abgeschlossen sein",
+        "startRegex": "waiting for Result",
+        "endRegex": "Verarbeitungsergebnis:",
+        "maxMinutes": 30,
+        "severity": "Critical",
+        "reportAbandoned": true
+      }
+    ],
+    "expectedRuns": [
+      {
+        "name": "Abendlauf Kassen/JUKOS",
+        "matchRegex": "Verarbeitungsergebnis:",
+        "schedule": "Mon-Fri",
+        "expectedTime": "22:00",
+        "graceMinutes": 120,
+        "severity": "Critical",
+        "holidays": [ "2026-12-24", "2026-12-31" ]
+      }
+    ]
+  }
+]</code></pre>
+                <p>
+                    Viele gleich aufgebaute Scans (z.B. je Behörde) legt man am schnellsten mit der Schaltfläche
+                    <strong>„Für weitere Behörde kopieren“</strong> in der Edit-Karte an — sie übernimmt den Scan inklusive
+                    aller Regeln und ergänzt „ (Kopie)“ im Namen. Überwachte Verzeichnisse lassen sich über
+                    <strong>„Kopieren“</strong> ebenso verdoppeln.
+                </p>
+                <h3 id="filemonitoring-config">16.4 Konfiguration</h3>
                 <p>
                     In der WebUI geht das am schnellsten über den <strong>Einrichtungs-Assistenten</strong>
                     (Server → Bearbeiten → Datei-/Protokollüberwachung → „Assistent"): Vorlagen für Übergabe-, Eingangs- und
@@ -3159,6 +3266,9 @@ Sender C (Segment 3) ──[SA-Probe] seg3──►         │
                         <tr><td>Hängende Datei (Alter)</td><td>älter als Warning-/Critical-Schwelle</td><td>Warning / Critical</td></tr>
                         <tr><td>Hängende Datei (Cutoff)</td><td>nach Cutoff-Zeit noch vorhanden</td><td>konfigurierbar (Standard Critical)</td></tr>
                         <tr><td>Log-Fehler</td><td>Signatur trifft zu</td><td>je Signatur Warning / Critical</td></tr>
+                        <tr><td>Offener Lauf</td><td>Start ohne Ende, älter als <code>maxMinutes</code></td><td>je Regel Warning / Critical</td></tr>
+                        <tr><td>Abgebrochener Lauf</td><td>neuer Start vor Ende des vorigen (letzte 24 h)</td><td>je Regel Warning / Critical</td></tr>
+                        <tr><td>Erwarteter Lauf fehlt</td><td>Termin + Schonfrist abgelaufen, keine passende Logzeile</td><td>je Regel Warning / Critical</td></tr>
                         <tr><td>Verzeichnis/Log</td><td>nicht erreichbar</td><td>Critical</td></tr>
                     </tbody>
                 </table>

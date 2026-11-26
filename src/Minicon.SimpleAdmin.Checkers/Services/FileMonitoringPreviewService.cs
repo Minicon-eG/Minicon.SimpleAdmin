@@ -42,6 +42,14 @@ public sealed class LogScanPreview
     public List<PatternPreview> Patterns { get; set; } = new();
     /// <summary>Built-in signature templates with their hit count in the read lines.</summary>
     public List<PatternPreview> Suggestions { get; set; } = new();
+    /// <summary>Open runs ("offene Läufe") that exceed their allowed duration → would be reported.</summary>
+    public List<LogPendingRun> PendingRuns { get; set; } = new();
+    /// <summary>Open runs that are still within their allowed duration → visible, but no problem.</summary>
+    public List<LogPendingRun> RunningLogRuns { get; set; } = new();
+    /// <summary>Runs that were abandoned (a newer run started without a result).</summary>
+    public List<LogAbandonedRun> AbandonedRuns { get; set; } = new();
+    /// <summary>Rules whose start/end expression could not be read (invalid regex) — the rule is skipped.</summary>
+    public List<string> PendingRuleErrors { get; set; } = new();
 }
 
 public sealed record ExtensionCount(string Extension, int Count);
@@ -154,6 +162,7 @@ public sealed class FileMonitoringPreviewService(IFileSystemAccess fileSystem)
     /// <summary>
     /// Tests the signatures of <paramref name="scan"/> against the real log files — or, when
     /// <paramref name="sampleText"/> is set, against the pasted lines without touching the file system.
+    /// Expected-run rules are not evaluated in this dry run.
     /// </summary>
     public async Task<LogScanPreview> PreviewLogScanAsync(
         LogScanConfig scan, string? sampleText, CancellationToken cancellationToken = default)
@@ -163,6 +172,7 @@ public sealed class FileMonitoringPreviewService(IFileSystemAccess fileSystem)
             var sampleLines = sampleText.Replace("\r\n", "\n").Split('\n').ToList();
             var preview = new LogScanPreview { Reachable = true, FromSample = true };
             FillMatches(preview, sampleLines, scan.Patterns);
+            FillPendingRuns(preview, sampleLines, scan, DateTime.Now);
             return preview;
         }
 
@@ -176,7 +186,7 @@ public sealed class FileMonitoringPreviewService(IFileSystemAccess fileSystem)
         try
         {
             var now = DateTime.Now;
-            var (files, lines, tail) = await RunWithTimeout(() => ReadLogs(scan, now), cancellationToken);
+            var (files, lines, runLines, runLogPath, tail, lastWrite) = await RunWithTimeout(() => ReadLogs(scan, now), cancellationToken);
             result.Reachable = true;
             result.Files = files;
             result.FilesScanned = files.Count(f => f.Included);
@@ -188,6 +198,7 @@ public sealed class FileMonitoringPreviewService(IFileSystemAccess fileSystem)
             }
 
             FillMatches(result, lines, scan.Patterns);
+            FillPendingRuns(result, runLines, scan, lastWrite, runLogPath);
         }
         catch (TimeoutException)
         {
@@ -202,39 +213,99 @@ public sealed class FileMonitoringPreviewService(IFileSystemAccess fileSystem)
         return result;
     }
 
-    private (List<PreviewFile> Files, List<string> Lines, List<string> Tail) ReadLogs(LogScanConfig scan, DateTime now)
+    private (List<PreviewFile> Files, List<string> Lines, IReadOnlyList<string> RunLines, string RunLogPath, List<string> Tail, DateTime LastWrite) ReadLogs(
+        LogScanConfig scan, DateTime now)
     {
         var resolved = fileSystem.ResolveLogFiles(scan.Path.Trim())
             .OrderByDescending(f => f.LastWriteTime)
             .ToList();
-        var files = new List<PreviewFile>();
-        var lines = new List<string>();
-        var tail = new List<string>();
+        var runFile = scan.PendingRules.Count > 0 ? FileShareChecker.NewestFile(resolved) : null;
+        var signatureFiles = resolved.Where(file =>
+        {
+            var age = (now - file.LastWriteTime).TotalMinutes;
+            return scan.MaxFileAgeMinutes is not (int maxAge and > 0) || age <= maxAge;
+        }).ToList();
 
-        foreach (var file in resolved)
+        var filesToRead = signatureFiles.ToList();
+        if (runFile != null && filesToRead.All(f => f.FullPath != runFile.FullPath))
+        {
+            filesToRead.Add(runFile);
+        }
+
+        var tails = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        foreach (var file in filesToRead)
+        {
+            var isRunFile = runFile != null && file.FullPath == runFile.FullPath;
+            var isSignatureFile = signatureFiles.Any(f => f.FullPath == file.FullPath);
+            var maxLines = scan.MaxLines <= 0 && isSignatureFile
+                ? 0
+                : isRunFile ? FileShareChecker.PendingRuleLineBudget(scan) : scan.MaxLines;
+            tails[file.FullPath] = fileSystem.ReadLines(file.FullPath, maxLines);
+        }
+
+        var files = resolved.Take(MaxListedFiles).Select(file =>
         {
             var age = (now - file.LastWriteTime).TotalMinutes;
             var included = scan.MaxFileAgeMinutes is not (int maxAge and > 0) || age <= maxAge;
-            if (files.Count < MaxListedFiles)
-            {
-                files.Add(new PreviewFile(file.FullPath, file.LastWriteTime, Math.Round(age, 1), included));
-            }
+            return new PreviewFile(file.FullPath, file.LastWriteTime, Math.Round(age, 1), included);
+        }).ToList();
 
-            if (!included)
+        var lines = new List<string>();
+        foreach (var file in signatureFiles)
+        {
+            var fileLines = tails[file.FullPath];
+            lines.AddRange(scan.MaxLines > 0 ? fileLines.TakeLast(scan.MaxLines) : fileLines);
+        }
+
+        var newestRead = FileShareChecker.NewestFile(filesToRead);
+        var tail = newestRead == null
+            ? new List<string>()
+            : tails[newestRead.FullPath].TakeLast(MaxTailLines).Select(Shorten).ToList();
+        var runLines = runFile == null ? Array.Empty<string>() : tails[runFile.FullPath];
+        return (files, lines, runLines, runFile?.FullPath ?? scan.Path, tail, runFile?.LastWriteTime ?? now);
+    }
+
+    /// <summary>
+    /// Evaluates the "offene Läufe" rules of the scan against the read lines and fills the preview.
+    /// The same evaluation as the worker uses (<see cref="LogPendingRunEvaluator"/>), so the dry run
+    /// shows exactly what would be reported.
+    /// </summary>
+    internal static void FillPendingRuns(
+        LogScanPreview preview,
+        IReadOnlyList<string> lines,
+        LogScanConfig scan,
+        DateTime fileLastWrite,
+        string? logPath = null)
+    {
+        if (scan.PendingRules.Count == 0)
+        {
+            return;
+        }
+
+        var now = DateTime.Now;
+        foreach (var rule in scan.PendingRules)
+        {
+            if (string.IsNullOrWhiteSpace(rule.StartRegex))
             {
+                preview.PendingRuleErrors.Add($"Regel '{rule.Name}': kein Start-Ausdruck angegeben.");
                 continue;
             }
 
-            var fileLines = fileSystem.ReadLines(file.FullPath, scan.MaxLines);
-            if (tail.Count == 0)
+            try
             {
-                tail = fileLines.Skip(Math.Max(0, fileLines.Count - MaxTailLines)).Select(Shorten).ToList();
+                var result = LogPendingRunEvaluator.Evaluate(
+                    scan.Name, logPath ?? scan.Path, lines, rule, now, fileLastWrite,
+                    scan.WikiUrl, scan.RemediationSteps, LogPendingRunEvaluator.DefaultAbandonedWindowHours, null);
+
+                preview.PendingRuns.AddRange(result.Pending);
+                preview.RunningLogRuns.AddRange(result.Running);
+                preview.AbandonedRuns.AddRange(result.Abandoned);
             }
-
-            lines.AddRange(fileLines);
+            catch (ArgumentException ex)
+            {
+                preview.PendingRuleErrors.Add($"Regel '{rule.Name}': {ex.Message}");
+            }
         }
-
-        return (files, lines, tail);
     }
 
     internal static void FillMatches(LogScanPreview preview, IReadOnlyList<string> lines, IEnumerable<LogPatternConfig> patterns)

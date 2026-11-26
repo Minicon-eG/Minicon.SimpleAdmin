@@ -1728,6 +1728,160 @@ $.version != deprecated</code></pre>
                     <code>Anzeigename :: Severity :: Regex</code> (Severity = <code>Critical</code> oder <code>Warning</code>).
                     Treffer werden je Signatur gezählt und mit einer Beispielzeile gemeldet.
                 </p>
+                <p>
+                    <strong>Mehrere Dateien im selben Glob:</strong> Bestehende Signatur-Scans prüfen jede
+                    altersgemäß einbezogene Datei weiterhin mit genau <code>maxLines</code> Zeilen
+                    (<code>0</code> = ganze Datei). Jede Regel für offene oder erwartete Läufe wertet dagegen
+                    <strong>genau eine</strong> Datei aus: die neueste passende Datei nach Änderungsdatum.
+                    Dateien werden für Laufregeln nicht miteinander verbunden; ältere Dateien liefern
+                    auch keine zusätzlichen Belege für erwartete Läufe.
+                </p>
+                <p>
+                    <strong>Wie gelesen wird:</strong> Jede benötigte Datei wird nur <strong>einmal</strong> gelesen.
+                    Signaturen verwenden aus dem gemeinsamen Snapshot wieder genau ihre eigenen
+                    <code>maxLines</code> Zeilen; Laufregeln nutzen einen davon abgeleiteten, begrenzten Tail
+                    (höchstens 200.000 Zeilen). Ein <code>StreamReader</code> liest vorwärts in einen Ringpuffer,
+                    sodass der Speicher nicht mit der Dateigröße wächst. Leerzeilen, <code>\r</code>,
+                    <code>\n</code>, <code>\r\n</code> sowie UTF-8-/UTF-16-BOMs werden korrekt behandelt.
+                    Der Assistent verwendet für offene Läufe ebenfalls nur die neueste Datei; andere einbezogene
+                    Dateien liest er weiterhin für Signaturvorschläge.
+                </p>
+                <h4>Offene Läufe — ein Lauf, der nie fertig wurde</h4>
+                <p>
+                    Eine Signatur zählt nur Zeilen. Ein Lauf, der <strong>beginnt</strong>, aber nie mit einem Ergebnis
+                    endet, bleibt davon unberührt: Das Log endet dann z.B. mit
+                    <code>waiting for Result…</code> und ohne <code>Verarbeitungsergebnis:</code>.
+                    Dafür gibt es je Log-Scan eine eigene Regelart <strong>„Offene Läufe“</strong>.
+                </p>
+                <p>Beispiel eines solchen Logs (Kassen/JUKOS-Schnittstelle):</p>
+                <pre><code>2026-11-20 22:05:15.756 --- Starte Schnittstelle execute/schnittstelle/einlesen/KASSEN/JUKOS ---
+2026-11-20 22:05:15.756 open: http://localhost:8080/...
+2026-11-20 22:05:15.756 waiting for Result...
+2026-11-20 22:15:09.456 Schnittstelle Kassen/Jukos für Nutzer rshw verarbeitet. Verarbeitungsergebnis: OK
+2026-11-20 22:15:09.457
+Laufzeit: 00:09:53.699
+
+2026-11-25 13:40:41.040 --- Starte Schnittstelle ... ---
+2026-11-25 13:40:41.041 open: ...
+2026-11-25 13:40:41.041 waiting for Result...
+
+2026-11-25 14:14:06.933 --- Starte Schnittstelle ... ---      &lt;-- erneuter Start, der vorige endet nie
+2026-11-25 14:44:05.679 waiting for Result...                 &lt;-- Dateiende: Lauf offen</code></pre>
+                <p>
+                    Eine Regel benennt den <strong>Start</strong> und das <strong>Ende</strong> eines Laufs. In der WebUI eine
+                    Regel pro Zeile im benannten Format <code>Feld=Wert</code>, getrennt durch <code>::</code>:
+                    <code>name=… :: start=… :: end=… :: max=… :: severity=…</code>.
+                    Pflicht sind <code>start</code> und <code>end</code>. Wahlweise <code>abort</code> (beendet den Lauf),
+                    <code>tsRegex</code>/<code>tsFormat</code> (Zeitstempel), <code>reportAbandoned</code>,
+                    <code>wiki</code> und <code>steps</code> (mit <code>|</code> getrennt).
+                    Das ältere Positionsformat
+                    <code>Anzeigename :: StartRegex :: EndRegex :: MaxMinuten :: Severity :: AbbruchRegex :: ZeitstempelRegex :: ZeitstempelFormat</code>
+                    wird weiterhin gelesen. Backslash, <code>::</code> und <code>|</code> innerhalb eines Werts
+                    werden mit einem Backslash maskiert; Schritte werden durch ein nicht maskiertes <code>|</code>
+                    getrennt und bleiben so auch mit Trennzeichen im Text erhalten.
+                </p>
+                <ul>
+                    <li><strong>Hängender Lauf:</strong> Start ohne Ende bis zum Dateiende. Ist er älter als
+                        <code>maxMinutes</code> (Standard 30), wird er als Problem gemeldet („Lauf hängt seit X min“).
+                        Jüngere Läufe erscheinen nur als Hinweis „läuft seit X min“ — sie sind noch normal unterwegs.</li>
+                    <li><strong>Abgebrochener Lauf:</strong> Ein neuer Start folgt, ohne dass der vorige beendet wurde
+                        (im Beispiel der Lauf vom 25.11. 13:40). Er wird je Regel zusammengefasst (Anzahl + letzter
+                        Zeitpunkt) gemeldet — aber nur für Läufe der letzten 24 Stunden, damit alte Altlasten nicht
+                        dauerhaft alarmieren. Abschaltbar mit <code>reportAbandoned=false</code>.</li>
+                    <li><strong>Abbruch-Marker:</strong> Ein optionales <code>abortRegex</code> gilt als Ende des Laufs
+                        (z.B. „Abbruch“).</li>
+                    <li><strong>Zeitstempel:</strong> Standard ist der Zeilenanfang
+                        <code>yyyy-MM-dd HH:mm:ss.fff</code> (lokale Zeit des Servers, der das Log schreibt). Mit
+                        <code>timestampRegex</code> wird die erste Klammergruppe als Zeitstempel genommen; fehlt er
+                        ganz, gilt das Änderungsdatum der Datei. Fortsetzungszeilen wie „Laufzeit: …“ stören die
+                        Auswertung nicht.</li>
+                </ul>
+                <h4>Erwartete Läufe — ein Lauf, der ganz fehlt</h4>
+                <p>
+                    Noch wichtiger als ein hängender Lauf ist ein Lauf, der <strong>gar nicht stattgefunden</strong> hat:
+                    Am Freitagabend fehlte der ganze Lauf, das hätte spätestens am Samstag auffallen müssen.
+                    Dafür gibt es je Log-Scan die Regelart <strong>„Erwartete Läufe“</strong>: sie erwartet einen Lauf
+                    an bestimmten Tagen zu einer festen Uhrzeit und meldet ihn, wenn das Log keine passende Zeile
+                    enthält.
+                </p>
+                <p>
+                    In der WebUI eine Regel pro Zeile im benannten Format <code>Feld=Wert</code>, getrennt durch
+                    <code>::</code>:
+                    <code>name=… :: match=… :: schedule=… :: time=… :: grace=…</code>.
+                    <code>schedule</code> nutzt die bekannte Tages-Syntax (<code>Mon-Fri</code>, <code>Mon,Wed,Fri</code>,
+                    <code>Sat</code>, leer = täglich), <code>time</code> ist <code>HH:mm</code>, <code>grace</code> ist die
+                    Schonfrist nach der Uhrzeit (Standard 120). Weitere Felder: <code>severity</code>,
+                    <code>holidays</code> (Ausnahmen mit <code>,</code> getrennt), <code>wiki</code>, <code>steps</code>.
+                </p>
+                <ul>
+                    <li><strong>Welcher Termin ist fällig?</strong> Der letzte Termin laut Schedule, dessen Uhrzeit plus
+                        Schonfrist <em>vor jetzt</em> liegt. Am Montagmorgen 08:00 ist damit der <strong>Freitag</strong>
+                        fällig, am Samstag ebenfalls der Freitag.</li>
+                    <li><strong>Wann wird gemeldet?</strong> Erst wenn die Schonfrist abgelaufen ist — um 22:30 Uhr mit
+                        120 Minuten Schonfrist ist der 22:00-Lauf noch nicht fällig.</li>
+                    <li><strong>Feiertage:</strong> Über <code>Feiertage</code> (Liste von Datumsangaben, z.B.
+                        <code>2026-12-24</code>) lässt sich ein Tag aussparen. Es wird <strong>keine</strong> Feiertags-
+                        berechnung durchgeführt — die Liste ist die einzige Quelle. Fällt der Termin auf einen Feiertag,
+                        gilt der vorherige Werktag.</li>
+                    <li><strong>Ziel der Meldung:</strong> „Lauf vom &lt;Tag&gt; fehlt (letzter Lauf: &lt;Datum&gt;)“. Der letzte
+                        gefundene Lauf steht in der Meldung, damit sofort erkennbar ist, seit wann es ausbleibt. Er wird
+                        unabhängig vom Belegfenster bestimmt — auch wenn der Lauf des fälligen Termins fehlt, ist der
+                        letzte erfolgreiche Lauf sichtbar.</li>
+                    <li><strong>Welche Zeile gilt als Beweis?</strong> Das Belegfenster des fälligen Termins reicht von
+                        <em>12 Stunden vor der Sollzeit</em> bis zum Ende der Schonfrist. Bei <code>grace=120</code> und
+                        Sollzeit 22:00 zählt also ein Lauf ab 10:00 — ein Lauf um 23:30 ist spät, aber innerhalb der
+                        Schonfrist und damit ein gültiger Beweis. Ein Lauf vom Vortag zählt nie.</li>
+                    <li><strong>Wenn die Auswertung nicht gelingt:</strong> Ein regulärer Ausdruck, der das Zeitlimit
+                        überschreitet, erzeugt <strong>keine</strong> Meldung „fehlt“. Der Auswertungsfehler wird im
+                        Zustand und im Protokoll ausgewiesen, damit unvollständige Evidenz nicht zu einem falschen
+                        Alarm führt.</li>
+                </ul>
+                <div class="alert alert-warning">
+                    <strong>Wichtig: „Erwarteter Lauf“ wertet nur die neueste passende Datei aus.</strong>
+                    Legt ein Job am Wochenende eine neue Datei an, kann am Montag ein Fehlalarm entstehen, weil ein
+                    gültiger Beleg in der Freitagsdatei nicht mehr gelesen wird. Für fortlaufend geschriebene Logs
+                    (eine Datei) ist dies unkritisch.
+                </div>
+                <h4>Beispielkonfiguration</h4>
+                <pre><code>"logScans": [
+  {
+    "name": "Behörde A",
+    "path": "\\\\srv01\\d$\\Daten\\BehoerdeA\\log\\*.log",
+    "maxFileAgeMinutes": 2880,
+    "patterns": [
+      { "name": "Hängende Nachricht", "severity": "Critical", "regex": "Nachricht.*haengt|stuck" }
+    ],
+    "pendingRules": [
+      {
+        "name": "Lauf muss abgeschlossen sein",
+        "startRegex": "waiting for Result",
+        "endRegex": "Verarbeitungsergebnis:",
+        "maxMinutes": 30,
+        "severity": "Critical",
+        "reportAbandoned": true
+      }
+    ],
+    "expectedRuns": [
+      {
+        "name": "Abendlauf Kassen/JUKOS",
+        "matchRegex": "Verarbeitungsergebnis:",
+        "schedule": "Mon-Fri",
+        "expectedTime": "22:00",
+        "graceMinutes": 120,
+        "severity": "Critical",
+        "holidays": [ "2026-12-24", "2026-12-31" ]
+      }
+    ]
+  }
+]</code></pre>
+                <h4>Viele gleich aufgebaute Log-Scans anlegen</h4>
+                <p>
+                    Bekannt ist der Aufbau, jeder Scan ist für eine andere Behörde zuständig. In der Edit-Karte
+                    <em>Datei-/Protokollüberwachung</em> kopiert die Schaltfläche <strong>„Für weitere Behörde
+                    kopieren“</strong> den gewählten Log-Scan (inklusive aller Regeln, Schwellwerten, Wiki-Link und
+                    Schritten) als neue Zeile; der Name wird um „ (Kopie)“ ergänzt und muss nur noch angepasst werden.
+                    Überwachte Verzeichnisse lassen sich über die Schaltfläche <strong>„Kopieren“</strong> ebenso verdoppeln.
+                </p>
                 <h4>Was gemeldet wird</h4>
                 <table class="table table-bordered table-sm">
                     <thead class="table-light"><tr><th>Signal</th><th>Bedingung</th><th>Schweregrad</th></tr></thead>
@@ -1735,6 +1889,9 @@ $.version != deprecated</code></pre>
                         <tr><td>Hängende Datei (Alter)</td><td>älter als Warning-/Critical-Schwelle</td><td>Warning / Critical</td></tr>
                         <tr><td>Hängende Datei (Cutoff)</td><td>nach Cutoff-Zeit noch vorhanden</td><td>konfigurierbar (Standard Critical)</td></tr>
                         <tr><td>Log-Fehler</td><td>Signatur trifft zu</td><td>je Signatur Warning / Critical</td></tr>
+                        <tr><td>Offener Lauf</td><td>Start ohne Ende, älter als <code>maxMinutes</code></td><td>je Regel Warning / Critical</td></tr>
+                        <tr><td>Abgebrochener Lauf</td><td>neuer Start vor Ende des vorigen (letzte 24 h)</td><td>je Regel Warning / Critical</td></tr>
+                        <tr><td>Erwarteter Lauf fehlt</td><td>Termin + Schonfrist abgelaufen, keine passende Logzeile</td><td>je Regel Warning / Critical</td></tr>
                         <tr><td>Verzeichnis/Log</td><td>nicht erreichbar (Share offline / kein Zugriff)</td><td>Critical</td></tr>
                     </tbody>
                 </table>

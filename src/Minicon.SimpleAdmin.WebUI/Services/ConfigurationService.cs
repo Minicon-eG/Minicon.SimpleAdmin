@@ -308,7 +308,7 @@ public class ConfigurationService
         return JsonSerializer.Serialize(_config, JsonOptions);
     }
 
-    private static void PreserveUnknownFields(ConfigModel replacement, ConfigModel? original)
+    internal static void PreserveUnknownFields(ConfigModel replacement, ConfigModel? original)
     {
         if (original == null) return;
 
@@ -345,24 +345,83 @@ public class ConfigurationService
         for (var i = 0; i < replacementList.Count; i++)
         {
             var key = replacementKeys[i];
-            if (key == null)
+            var originalIndex = -1;
+            if (key != null)
             {
-                if (replacementList.Count == originalList.Count && originalKeys[i] == null)
-                    PreserveUnknownValues(replacementList[i], originalList[i]);
+                bool Matches(string? candidate) => string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase);
+                if (replacementKeys.Count(Matches) == 1 && originalKeys.Count(Matches) == 1)
+                    originalIndex = originalKeys.FindIndex(Matches);
+            }
+
+            if (originalIndex < 0)
+                originalIndex = FindUniqueRenameMatch(replacementList[i], replacementList, originalList);
+
+            if (originalIndex >= 0)
+            {
+                PreserveUnknownValues(replacementList[i], originalList[originalIndex]);
                 continue;
             }
 
-            bool Matches(string? candidate) => string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase);
-            if (replacementKeys.Count(Matches) != 1 || originalKeys.Count(Matches) != 1) continue;
-            PreserveUnknownValues(replacementList[i], originalList[originalKeys.FindIndex(Matches)]);
+            if (key == null && replacementList.Count == originalList.Count && originalKeys[i] == null)
+                PreserveUnknownValues(replacementList[i], originalList[i]);
         }
     }
+
+    private static int FindUniqueRenameMatch(object? replacement, IList replacementList, IList originalList)
+    {
+        var identity = FileMonitoringNameAndPath(replacement);
+        if (identity == null) return -1;
+
+        var type = replacement!.GetType();
+        var (name, path) = identity.Value;
+        var pathMatches = originalList.Cast<object?>()
+            .Select((item, index) => (item, index))
+            .Where(x => x.item?.GetType() == type
+                        && string.Equals(FileMonitoringNameAndPath(x.item)?.Path, path, StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.index)
+            .ToList();
+        if (pathMatches.Count == 1 && replacementList.Cast<object?>().Count(item =>
+                item?.GetType() == type
+                && string.Equals(FileMonitoringNameAndPath(item)?.Path, path, StringComparison.OrdinalIgnoreCase)) == 1)
+            return pathMatches[0];
+
+        var nameMatches = originalList.Cast<object?>()
+            .Select((item, index) => (item, index))
+            .Where(x => x.item?.GetType() == type
+                        && string.Equals(FileMonitoringNameAndPath(x.item)?.Name, name, StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.index)
+            .ToList();
+        return nameMatches.Count == 1 && replacementList.Cast<object?>().Count(item =>
+                   item?.GetType() == type
+                   && string.Equals(FileMonitoringNameAndPath(item)?.Name, name, StringComparison.OrdinalIgnoreCase)) == 1
+            ? nameMatches[0]
+            : -1;
+    }
+
+    private static (string Name, string Path)? FileMonitoringNameAndPath(object? value) => value switch
+    {
+        WatchedDirectory directory => (directory.Name, directory.Path),
+        LogScanConfig logScan => (logScan.Name, logScan.Path),
+        _ => null
+    };
 
     private static string? StableListKey(object? value) => value switch
     {
         Server server when !string.IsNullOrWhiteSpace(server.Name) => nameof(Server) + ":" + server.Name,
         ServiceType serviceType when !string.IsNullOrWhiteSpace(serviceType.Type) => nameof(ServiceType) + ":" + serviceType.Type,
         Domain domain when !string.IsNullOrWhiteSpace(domain.Name) => nameof(Domain) + ":" + domain.Name,
+        // Die überwachten Verzeichnisse und die Log-Scans haben keinen eindeutigen Namen
+        // (der Kopier-Knopf hängt " (Kopie)" an). Der Schlüssel besteht aus Name und Pfad:
+        // die Kopie hat einen anderen Namen, der Pfad bleibt gleich. Damit folgen die
+        // unbekannten Felder dem Eintrag und nicht der Position in der Liste.
+        // Mehrdeutige Schlüssel (zwei Einträge mit gleichem Name und Pfad) werden von
+        // PreserveUnknownValues verworfen — es wird dann kein Feld geerbt. Bei einer reinen
+        // Umbenennung findet FindUniqueRenameMatch den Eintrag über den unveränderten Pfad;
+        // bei einer Pfadänderung entsprechend über den unveränderten Namen.
+        WatchedDirectory directory when !string.IsNullOrWhiteSpace(directory.Name) =>
+            nameof(WatchedDirectory) + ":" + directory.Name + "|" + directory.Path,
+        LogScanConfig logScan when !string.IsNullOrWhiteSpace(logScan.Name) =>
+            nameof(LogScanConfig) + ":" + logScan.Name + "|" + logScan.Path,
         _ => null
     };
 

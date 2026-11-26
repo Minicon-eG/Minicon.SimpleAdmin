@@ -438,6 +438,46 @@ public class StaticHtmlGeneratorTests : IDisposable
         html.Should().Contain("badge-critical");
     }
 
+    [Fact]
+    public async Task GenerateAllAsync_OnlyAMissingExpectedRun_IsNotShownAsOk()
+    {
+        // The static page must use the same counter as the WebUI badge: a missing expected run
+        // alone may never be shown as "OK".
+        var generator = new StaticHtmlGenerator(_tempDirectory, _logger.Object);
+
+        var statuses = new List<RuntimeStatus>
+        {
+            new()
+            {
+                Server = "server-a",
+                Service = "api",
+                LastUpdate = DateTime.UtcNow,
+                Status = ServiceStatus.Unhealthy,
+                FileMonitoring = new FileMonitoringState
+                {
+                    MissingRuns =
+                    {
+                        new LogMissingRun
+                        {
+                            LogScan = "Kassen-Log",
+                            LogPath = "/log/kasse.log",
+                            Rule = "Abendlauf",
+                            ExpectedAt = new DateTime(2026, 11, 20, 22, 0, 0, DateTimeKind.Utc),
+                            IsCritical = true
+                        }
+                    }
+                }
+            }
+        };
+
+        await generator.GenerateAllAsync(statuses, new Config(), "server-a", new List<Acknowledge>());
+
+        var html = await File.ReadAllTextAsync(Path.Combine(_tempDirectory, "index.html"));
+        html.Should().Contain("1 Fund(e) Dateien");
+        html.Should().NotContain("📁 OK Dateien");
+        html.Should().Contain("badge-critical");
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))

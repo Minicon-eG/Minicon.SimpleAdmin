@@ -80,10 +80,126 @@ public class LogScanConfig : ConfigModel
     /// <summary>Error signatures to search for.</summary>
     public List<LogPatternConfig> Patterns { get; set; } = new();
 
+    /// <summary>
+    /// Rules for <em>offene Läufe</em> — a start marker in the log without the matching end marker
+    /// (e.g. "waiting for Result..." without a following "Verarbeitungsergebnis:").
+    /// </summary>
+    public List<LogPendingRule> PendingRules { get; set; } = new();
+
+    /// <summary>
+    /// Rules for <em>erwartete Läufe</em> — a run that should happen on certain days (e.g. every
+    /// working day at 22:00) but is missing from the log.
+    /// </summary>
+    public List<ExpectedRunRule> ExpectedRuns { get; set; } = new();
+
     /// <summary>Default wiki link for matches that do not set their own.</summary>
     public string? WikiUrl { get; set; }
 
     /// <summary>Default remediation hints for matches that do not set their own.</summary>
+    public List<string> RemediationSteps { get; set; } = new();
+}
+
+/// <summary>
+/// A rule that detects runs which were started in the log but never finished (or were abandoned).
+/// The classic case is an interface log that ends with "waiting for Result..." and no result line.
+/// </summary>
+public class LogPendingRule : ConfigModel
+{
+    /// <summary>Display name of the rule (e.g. "Lauf muss abgeschlossen sein").</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Regular expression that marks the <em>start</em> of a run (e.g. "waiting for Result").</summary>
+    public string StartRegex { get; set; } = string.Empty;
+
+    /// <summary>Regular expression that marks the <em>successful end</em> of a run (e.g. "Verarbeitungsergebnis:").</summary>
+    public string EndRegex { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional regular expression that marks an <em>aborted</em> run (e.g. "abgebrochen|Abbruch").
+    /// A matching abort marker ends the run silently: neither a pending nor an abandoned finding is reported.
+    /// </summary>
+    public string? AbortRegex { get; set; }
+
+    /// <summary>
+    /// A start without an end counts as "hanging" after this many minutes (default 30).
+    /// A younger run is shown as "läuft noch" in the state but does not raise a problem.
+    /// </summary>
+    public int MaxMinutes { get; set; } = 30;
+
+    /// <summary>Severity of the finding: "Critical" (default) or "Warning".</summary>
+    public string Severity { get; set; } = "Critical";
+
+    /// <summary>
+    /// Whether a run that was superseded by a newer start (without an end in between) is reported as
+    /// an "abgebrochener Lauf" (default true).
+    /// </summary>
+    public bool ReportAbandoned { get; set; } = true;
+
+    /// <summary>
+    /// Optional regular expression that extracts the timestamp from a line. The first capture group
+    /// is used. When empty, the timestamp is taken from the line start with <see cref="TimestampFormat"/>.
+    /// </summary>
+    public string? TimestampRegex { get; set; }
+
+    /// <summary>
+    /// Format of the timestamp at the line start (default "yyyy-MM-dd HH:mm:ss.fff", local time of
+    /// the server that writes the log).
+    /// </summary>
+    public string TimestampFormat { get; set; } = "yyyy-MM-dd HH:mm:ss.fff";
+
+    /// <summary>Optional wiki link (overrides the log scan default).</summary>
+    public string? WikiUrl { get; set; }
+
+    /// <summary>Optional remediation hints (overrides the log scan default).</summary>
+    public List<string> RemediationSteps { get; set; } = new();
+}
+
+/// <summary>
+/// A rule that expects a run to happen on certain days (e.g. every working day at 22:00) and
+/// reports it as missing when the log does not contain a matching line.
+/// </summary>
+public class ExpectedRunRule : ConfigModel
+{
+    /// <summary>Display name of the rule (e.g. "Abendlauf Kassen/Jukos").</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Regular expression that proves the run happened — a line with a successful result
+    /// (e.g. "Verarbeitungsergebnis:") or the start line of the run.
+    /// </summary>
+    public string MatchRegex { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Days on which the run is expected, in the <see cref="TimeProfile"/> schedule syntax.
+    /// Only the day part is used (e.g. "Mon-Fri" or "Mon,Wed,Fri"); an empty value means every day.
+    /// </summary>
+    public string Schedule { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Time of day the run is expected (e.g. "22:00"). The default is 22:00 — an empty value
+    /// would silently skip the evaluation of the rule.
+    /// </summary>
+    public string ExpectedTime { get; set; } = "22:00";
+
+    /// <summary>
+    /// Grace period in minutes after <see cref="ExpectedTime"/> before the run counts as missing
+    /// (default 120).
+    /// </summary>
+    public int GraceMinutes { get; set; } = 120;
+
+    /// <summary>Severity of the finding: "Critical" (default) or "Warning".</summary>
+    public string Severity { get; set; } = "Critical";
+
+    /// <summary>
+    /// Optional list of dates (ISO, e.g. "2026-12-24") on which the run is <em>not</em> expected
+    /// (holidays). No automatic holiday calculation is done — the list is the single source.
+    /// </summary>
+    public List<string> Holidays { get; set; } = new();
+
+    /// <summary>Optional wiki link (overrides the log scan default).</summary>
+    public string? WikiUrl { get; set; }
+
+    /// <summary>Optional remediation hints (overrides the log scan default).</summary>
     public List<string> RemediationSteps { get; set; } = new();
 }
 

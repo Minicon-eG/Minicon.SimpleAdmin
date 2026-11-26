@@ -8,6 +8,10 @@
         var p = $"Checks.FileMonitoring.Directories[{idx}]";
         var sev = d?.CutoffSeverity ?? "Critical";
         <div class="fm-dir-item border rounded p-2 mb-2" data-dir-index="@idx">
+            @* Die unbekannten Felder des Original-Verzeichnisses werden durch das Formular getragen,
+               damit sie beim Bearbeiten der Liste (z. B. nach einem Duplizieren) nicht verloren
+               gehen. *@
+            <input type="hidden" name="@(p).UnknownFieldsJson" value="@(d?.UnknownFieldsJson)" />
             <div class="row g-2">
                 <div class="col-md-4">
                     <label class="form-label small mb-0">Name</label>
@@ -61,6 +65,9 @@
                 </div>
             </div>
             <div class="text-end mt-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="duplicateFmDir(this)">
+                    <i class="bi bi-copy"></i> Kopieren
+                </button>
                 <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFmDir(this)">
                     <i class="bi bi-trash"></i> Verzeichnis entfernen
                 </button>
@@ -72,6 +79,9 @@
     {
         var p = $"Checks.FileMonitoring.LogScans[{idx}]";
         <div class="fm-log-item border rounded p-2 mb-2" data-log-index="@idx">
+            @* Die unbekannten Felder des Original-Scans werden durch das Formular getragen, damit sie
+               beim Bearbeiten der Liste (z. B. nach einem Duplizieren) nicht verloren gehen. *@
+            <input type="hidden" name="@(p).UnknownFieldsJson" value="@(s?.UnknownFieldsJson)" />
             <div class="row g-2">
                 <div class="col-md-4">
                     <label class="form-label small mb-0">Name</label>
@@ -98,11 +108,53 @@
                     <textarea name="@(p).Patterns" class="form-control form-control-sm font-monospace" rows="3" placeholder="Hängende Nachricht :: Critical :: Nachricht.*haengt|stuck&#10;Verbindungsfehler :: Warning :: connection (refused|timed out)">@(s?.Patterns)</textarea>
                 </div>
                 <div class="col-md-12">
+                    <label class="form-label small mb-0">
+                        Offene Läufe — eine Regel pro Zeile (Feld=Wert, getrennt durch <code>::</code>):
+                        <code>name=… :: start=… :: end=… :: max=… :: severity=…</code>
+                    </label>
+                    <textarea name="@(p).PendingRules" class="form-control form-control-sm font-monospace" rows="3"
+                              placeholder="name=Lauf muss abgeschlossen sein :: start=waiting for Result :: end=Verarbeitungsergebnis: :: max=30 :: severity=Critical">@(s?.PendingRules)</textarea>
+                    <div class="form-text">
+                        Meldet einen Lauf, der gestartet, aber nicht beendet wurde (z. B. „waiting for Result…“ ohne
+                        Ergebnis). Pflicht sind <code>start</code> und <code>end</code>; <code>max</code> (Standard 30) ist die
+                        Grenze, ab der der Lauf als hängend gilt, <code>severity</code> Standard Critical. Wahlweise
+                        <code>abort</code> (beendet den Lauf), <code>tsRegex</code> (erste Gruppe) und
+                        <code>tsFormat</code> (Standard <code>yyyy-MM-dd HH:mm:ss.fff</code> am Zeilenanfang),
+                        <code>reportAbandoned</code> (Standard true), <code>wiki</code> und <code>steps</code> (mit <code>|</code> getrennt).
+                        Backslash, <code>::</code> und <code>|</code> in Werten mit Backslash maskieren.
+                        Bei einem Glob wertet die Regel nur die neueste passende Datei aus.
+                    </div>
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label small mb-0">
+                        Erwartete Läufe — eine Regel pro Zeile (Feld=Wert, getrennt durch <code>::</code>):
+                        <code>name=… :: match=… :: schedule=… :: time=… :: grace=…</code>
+                    </label>
+                    <textarea name="@(p).ExpectedRuns" class="form-control form-control-sm font-monospace" rows="3"
+                              placeholder="name=Abendlauf :: match=Verarbeitungsergebnis: :: schedule=Mon-Fri :: time=22:00 :: grace=120 :: severity=Critical">@(s?.ExpectedRuns)</textarea>
+                    <div class="form-text">
+                        Meldet einen Lauf, der hätte stattfinden müssen, aber im Log fehlt (z. B. am
+                        Freitagabend ausgefallen). <code>match</code> ist die Zeile, die den Lauf belegt;
+                        <code>schedule</code> sind die Tage (z. B. <code>Mon-Fri</code>, leer = täglich),
+                        <code>time</code> die erwartete Uhrzeit (Standard <code>22:00</code>), <code>grace</code>
+                        die Toleranz in Minuten (Standard 120). Weitere Felder: <code>severity</code>,
+                        <code>holidays</code> (Ausnahmen mit <code>,</code> getrennt, z. B. <code>2026-12-24</code>),
+                        <code>wiki</code> und <code>steps</code>.
+                        <br />
+                        Als Beleg gilt eine Zeile von 12 Stunden vor der erwarteten Uhrzeit bis zum Ende der
+                        Schonfrist (jeweils einschließlich) — ein später Lauf innerhalb der Schonfrist zählt also.
+                        Auch diese Regel wertet bei einem Glob nur die neueste passende Datei aus.
+                    </div>
+                </div>
+                <div class="col-md-12">
                     <label class="form-label small mb-0">Nachbearbeitung (eine Zeile pro Schritt)</label>
                     <textarea name="@(p).RemediationSteps" class="form-control form-control-sm" rows="2">@(s?.RemediationSteps)</textarea>
                 </div>
             </div>
             <div class="text-end mt-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="duplicateFmLog(this)">
+                    <i class="bi bi-copy"></i> Für weitere Behörde kopieren
+                </button>
                 <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFmLog(this)">
                     <i class="bi bi-trash"></i> Log-Scan entfernen
                 </button>
@@ -136,6 +188,11 @@
                 <p class="mb-2">
                     <strong>Log-Scans</strong> durchsuchen Logdateien zeilenweise nach Fehlersignaturen (Regex). Treffer werden
                     pro Signatur aggregiert gemeldet.
+                </p>
+                <p class="mb-2">
+                    <strong>Offene Läufe</strong> (je Log-Scan) melden einen Lauf, der gestartet, aber nie beendet wurde —
+                    z. B. „waiting for Result…“ ohne nachfolgendes Ergebnis. Nach <code>MaxMinuten</code> (Standard 30)
+                    gilt der Lauf als hängend; ein Lauf, der schon länger läuft, wird nur angezeigt.
                 </p>
                 <p class="mb-0">
                     Jeder Fund kann einen <strong>Wiki-Link</strong> und <strong>Schritt-für-Schritt-Hinweise</strong> tragen,
@@ -229,6 +286,45 @@
     function removeFmLog(btn) {
         btn.closest('.fm-log-item').remove();
         reindexFm('fmLogList', '.fm-log-item', 'LogScans');
+    }
+
+    // Kopiert einen Log-Scan (alle Felder inkl. Regeln) — für viele gleich aufgebaute Scans
+    // (z. B. je Behörde einer) wird so nicht jedes Feld von Hand abgetippt.
+    function duplicateFmLog(btn) {
+        var source = btn.closest('.fm-log-item');
+        if (!source) return;
+
+        var clone = source.cloneNode(true);
+
+        // IDs of checkboxes would be duplicated — they are not needed for the copy.
+        clone.querySelectorAll('[id]').forEach(function (el) { el.removeAttribute('id'); });
+        clone.querySelectorAll('label[for]').forEach(function (el) { el.removeAttribute('for'); });
+
+        var nameInput = clone.querySelector('[name$=".Name"]');
+        if (nameInput && nameInput.value) {
+            nameInput.value = nameInput.value + ' (Kopie)';
+        }
+
+        source.parentNode.insertBefore(clone, source.nextSibling);
+        reindexFm('fmLogList', '.fm-log-item', 'LogScans');
+    }
+
+    // Kopiert ein überwachtes Verzeichnis.
+    function duplicateFmDir(btn) {
+        var source = btn.closest('.fm-dir-item');
+        if (!source) return;
+
+        var clone = source.cloneNode(true);
+        clone.querySelectorAll('[id]').forEach(function (el) { el.removeAttribute('id'); });
+        clone.querySelectorAll('label[for]').forEach(function (el) { el.removeAttribute('for'); });
+
+        var nameInput = clone.querySelector('[name$=".Name"]');
+        if (nameInput && nameInput.value) {
+            nameInput.value = nameInput.value + ' (Kopie)';
+        }
+
+        source.parentNode.insertBefore(clone, source.nextSibling);
+        reindexFm('fmDirList', '.fm-dir-item', 'Directories');
     }
 
     function reindexFm(listId, itemSel, collection) {

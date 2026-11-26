@@ -653,6 +653,128 @@ public class ActiveProblem
             Context = new Dictionary<string, object> { ["label"] = label, ["error"] = error }
         };
 
+    /// <summary>
+    /// Creates a problem for a run that was started in a log file but never finished (e.g.
+    /// "waiting for Result..." without a following result line). The ID is stable per (log scan, rule)
+    /// so that the running time can change without re-acknowledging.
+    /// </summary>
+    public static ActiveProblem LogRunPending(
+        string logScan,
+        string logPath,
+        string rule,
+        double ageMinutes,
+        DateTime? startedAt,
+        string sampleLine,
+        bool isCritical,
+        string? wikiUrl = null,
+        List<string>? remediationSteps = null)
+    {
+        var ageLabel = ageMinutes >= 120 ? $"{ageMinutes / 60.0:N1} h" : $"{ageMinutes:N0} min";
+        var started = startedAt.HasValue ? startedAt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "unbekannt";
+        var sample = string.IsNullOrWhiteSpace(sampleLine)
+            ? string.Empty
+            : $" — {(sampleLine.Length > 200 ? sampleLine[..200] + "…" : sampleLine)}";
+
+        return new ActiveProblem
+        {
+            Id = CreateId("log", $"{Slug(logScan)}_{Slug(rule)}", "pending"),
+            Type = "log",
+            Source = "FileMonitoring",
+            Severity = isCritical ? ProblemSeverity.Critical : ProblemSeverity.Warning,
+            Message = $"Log '{logScan}': Lauf '{rule}' hängt seit {ageLabel} (gestartet {started}){sample}",
+            WikiUrl = wikiUrl,
+            RemediationSteps = remediationSteps ?? new List<string>(),
+            Context = new Dictionary<string, object>
+            {
+                ["logScan"] = logScan,
+                ["logPath"] = logPath,
+                ["rule"] = rule,
+                ["ageMinutes"] = ageMinutes,
+                ["startedAt"] = startedAt?.ToString("o") ?? string.Empty
+            }
+        };
+    }
+
+    /// <summary>
+    /// Creates a problem for runs that were abandoned — a newer run started before the previous one
+    /// produced a result. The ID is stable per (log scan, rule).
+    /// </summary>
+    public static ActiveProblem LogRunAbandoned(
+        string logScan,
+        string logPath,
+        string rule,
+        int count,
+        DateTime? lastSeenAt,
+        string sampleLine,
+        bool isCritical,
+        string? wikiUrl = null,
+        List<string>? remediationSteps = null)
+    {
+        var last = lastSeenAt.HasValue ? lastSeenAt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "unbekannt";
+        var sample = string.IsNullOrWhiteSpace(sampleLine)
+            ? string.Empty
+            : $" — {(sampleLine.Length > 200 ? sampleLine[..200] + "…" : sampleLine)}";
+
+        return new ActiveProblem
+        {
+            Id = CreateId("log", $"{Slug(logScan)}_{Slug(rule)}", "abandoned"),
+            Type = "log",
+            Source = "FileMonitoring",
+            Severity = isCritical ? ProblemSeverity.Critical : ProblemSeverity.Warning,
+            Message = $"Log '{logScan}': {count} abgebrochener Lauf/Läufe '{rule}' (zuletzt {last}){sample}",
+            WikiUrl = wikiUrl,
+            RemediationSteps = remediationSteps ?? new List<string>(),
+            Context = new Dictionary<string, object>
+            {
+                ["logScan"] = logScan,
+                ["logPath"] = logPath,
+                ["rule"] = rule,
+                ["count"] = count,
+                ["lastSeenAt"] = lastSeenAt?.ToString("o") ?? string.Empty
+            }
+        };
+    }
+
+    /// <summary>
+    /// Creates a problem for an expected run that is missing from the log — a run that should have
+    /// happened on a certain day (e.g. every working day at 22:00) but has no matching line.
+    /// The ID is stable per (log scan, rule).
+    /// </summary>
+    public static ActiveProblem LogRunMissing(
+        string logScan,
+        string logPath,
+        string rule,
+        DateTime expectedAt,
+        DateTime? lastRunAt,
+        bool isCritical,
+        string? wikiUrl = null,
+        List<string>? remediationSteps = null)
+    {
+        var expected = expectedAt.ToString("ddd, dd.MM.yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        var last = lastRunAt.HasValue
+            ? lastRunAt.Value.ToString("ddd, dd.MM.yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture)
+            : "kein Lauf im Log gefunden";
+
+        return new ActiveProblem
+        {
+            Id = CreateId("log", $"{Slug(logScan)}_{Slug(rule)}", "missing"),
+            Type = "log",
+            Source = "FileMonitoring",
+            Severity = isCritical ? ProblemSeverity.Critical : ProblemSeverity.Warning,
+            Message = $"Log '{logScan}': Lauf '{rule}' fehlt (erwartet {expected}, letzter Lauf: {last})",
+            WikiUrl = wikiUrl,
+            RemediationSteps = remediationSteps ?? new List<string>(),
+            Context = new Dictionary<string, object>
+            {
+                ["logScan"] = logScan,
+                ["logPath"] = logPath,
+                ["rule"] = rule,
+                ["expectedAt"] = expectedAt.ToString("o"),
+                ["lastRunAt"] = lastRunAt?.ToString("o") ?? string.Empty
+            }
+        };
+    }
+
     /// <summary>Creates a problem for a scheduled task whose last run returned an error code.</summary>
     public static ActiveProblem ScheduledTaskFailed(
         string taskPath, int? resultCode, DateTime? lastRunTime, bool isCritical,

@@ -235,12 +235,18 @@ internal static class MonitoringBadges
                 "Datei-/Protokollüberwachung: außerhalb der Betriebszeiten");
         }
 
-        var findings = files.StuckFiles.Count + files.LogMatches.Count;
-        var critical = files.StuckFiles.Count(f => f.IsCritical) + files.LogMatches.Count(m => m.IsCritical)
-                       + (files.AnyError ? 1 : 0);
+        // The same counter as the static HTML page uses, so that a finding that only exists in one
+        // of the two representations (e.g. a missing expected run) can never be shown as "OK".
+        var findings = Minicon.SimpleAdmin.Services.FileMonitoringFindingCounter.CountFindings(files);
+        var critical = Minicon.SimpleAdmin.Services.FileMonitoringFindingCounter.CountCritical(files);
+        var errors = Minicon.SimpleAdmin.Services.FileMonitoringFindingCounter.CountErrors(files);
         var tone = critical > 0 ? "crit" : findings > 0 ? "warn" : "ok";
-        return new("files", $"{findings} Funde", tone, "bi-folder-check",
-            $"Datei-/Protokollüberwachung: {files.StuckFiles.Count} hängende Dateien, {files.LogMatches.Count} Log-Treffer");
+        var label = errors > 0
+            ? $"{findings} Funde, {errors} Fehler"
+            : $"{findings} Funde";
+        return new("files", label, tone, "bi-folder-check",
+            "Datei-/Protokollüberwachung: "
+            + Minicon.SimpleAdmin.Services.FileMonitoringFindingCounter.Describe(files));
     }
 
     private static MonitoringBadge ScheduledTasks(ServerStatusView status)

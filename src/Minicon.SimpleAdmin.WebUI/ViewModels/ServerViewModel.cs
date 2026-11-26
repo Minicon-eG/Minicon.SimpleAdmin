@@ -334,20 +334,38 @@ public class WatchedDirectoryRowViewModel
     public string? WikiUrl { get; set; }
     public string? RemediationSteps { get; set; }  // newline-separated
 
-    public WatchedDirectory ToWatchedDirectory() => new()
+    /// <summary>
+    /// The unknown fields of the original directory (JSON). They are carried through the form so
+    /// that they are not lost when the list of directories is edited (e.g. after a duplicate).
+    /// </summary>
+    public string? UnknownFieldsJson { get; set; }
+
+    public WatchedDirectory ToWatchedDirectory()
     {
-        Name = (Name ?? string.Empty).Trim(),
-        Path = (Path ?? string.Empty).Trim(),
-        IncludePatterns = FileMonitoringChecksViewModel.SplitCsv(IncludePatterns),
-        ExcludePatterns = FileMonitoringChecksViewModel.SplitCsv(ExcludePatterns),
-        Recursive = Recursive,
-        AgeMinutesWarning = AgeMinutesWarning,
-        AgeMinutesCritical = AgeMinutesCritical,
-        CutoffTime = string.IsNullOrWhiteSpace(CutoffTime) ? null : CutoffTime.Trim(),
-        CutoffSeverity = string.IsNullOrWhiteSpace(CutoffSeverity) ? "Critical" : CutoffSeverity,
-        WikiUrl = string.IsNullOrWhiteSpace(WikiUrl) ? null : WikiUrl.Trim(),
-        RemediationSteps = FileMonitoringChecksViewModel.SplitLines(RemediationSteps)
-    };
+        var directory = new WatchedDirectory
+        {
+            Name = (Name ?? string.Empty).Trim(),
+            Path = (Path ?? string.Empty).Trim(),
+            IncludePatterns = FileMonitoringChecksViewModel.SplitCsv(IncludePatterns),
+            ExcludePatterns = FileMonitoringChecksViewModel.SplitCsv(ExcludePatterns),
+            Recursive = Recursive,
+            AgeMinutesWarning = AgeMinutesWarning,
+            AgeMinutesCritical = AgeMinutesCritical,
+            CutoffTime = string.IsNullOrWhiteSpace(CutoffTime) ? null : CutoffTime.Trim(),
+            CutoffSeverity = string.IsNullOrWhiteSpace(CutoffSeverity) ? "Critical" : CutoffSeverity,
+            WikiUrl = string.IsNullOrWhiteSpace(WikiUrl) ? null : WikiUrl.Trim(),
+            RemediationSteps = FileMonitoringChecksViewModel.SplitLines(RemediationSteps)
+        };
+
+        // The unknown fields of the original directory.
+        var unknown = LogScanRowViewModel.ParseUnknownFields(UnknownFieldsJson);
+        if (unknown.Count > 0)
+        {
+            directory.ExtensionData = unknown;
+        }
+
+        return directory;
+    }
 
     public static WatchedDirectoryRowViewModel FromWatchedDirectory(WatchedDirectory d) => new()
     {
@@ -361,7 +379,8 @@ public class WatchedDirectoryRowViewModel
         CutoffTime = d.CutoffTime,
         CutoffSeverity = d.CutoffSeverity,
         WikiUrl = d.WikiUrl,
-        RemediationSteps = string.Join("\n", d.RemediationSteps)
+        RemediationSteps = string.Join("\n", d.RemediationSteps),
+        UnknownFieldsJson = LogScanRowViewModel.SerializeExtensionData(d.ExtensionData)
     };
 }
 
@@ -374,19 +393,342 @@ public class LogScanRowViewModel
 
     /// <summary>One signature per line: <c>Anzeigename :: Severity :: Regex</c> (Severity = Critical|Warning).</summary>
     public string? Patterns { get; set; }
+
+    /// <summary>
+    /// One "offener Lauf" rule per line, written as <c>key=value</c> pairs separated by "::":
+    /// <c>name=… :: start=… :: end=… :: max=… :: severity=… :: abort=… :: tsRegex=… :: tsFormat=… ::
+    /// reportAbandoned=… :: wiki=… :: steps=…</c>.
+    /// Only <c>start</c> and <c>end</c> are mandatory; the rest have defaults (30 min, Critical, no
+    /// abort regex, timestamp at the line start with "yyyy-MM-dd HH:mm:ss.fff", abandoned runs
+    /// reported, no wiki link, no remediation steps).
+    /// The older positional form (<c>Anzeigename :: StartRegex :: EndRegex :: …</c>) is still read
+    /// for hand-edited configs, but it cannot carry every field and is therefore not written back.
+    /// </summary>
+    public string? PendingRules { get; set; }
+
+    /// <summary>
+    /// One "erwarteter Lauf" rule per line, written as <c>key=value</c> pairs separated by "::":
+    /// <c>name=… :: match=… :: schedule=… :: time=… :: grace=… :: severity=… :: holidays=… :: wiki=… :: steps=…</c>.
+    /// Only <c>match</c> (the line that proves the run happened) is mandatory; the rest have
+    /// defaults (every day, 22:00, 120 min grace, Critical, no holidays).
+    /// </summary>
+    public string? ExpectedRuns { get; set; }
+
     public string? WikiUrl { get; set; }
     public string? RemediationSteps { get; set; }  // newline-separated
 
-    public LogScanConfig ToLogScanConfig() => new()
+    /// <summary>
+    /// The unknown fields of the original scan and of its rules (JSON), carried through the form.
+    /// Rules are matched by name or by a unique fingerprint of their known fields, so duplicates,
+    /// reordered rules and pure renames do not depend on list positions.
+    /// <para>
+    /// The JSON has the shape
+    /// <c>{ "scan": { … }, "patterns": [ { … } ], "pendingRules": [ { … } ], "expectedRuns": [ { … } ] }</c>.
+    /// </para>
+    /// </summary>
+    public string? UnknownFieldsJson { get; set; }
+
+    public LogScanConfig ToLogScanConfig()
     {
-        Name = (Name ?? string.Empty).Trim(),
-        Path = (Path ?? string.Empty).Trim(),
-        MaxFileAgeMinutes = MaxFileAgeMinutes,
-        MaxLines = MaxLines <= 0 ? 5000 : MaxLines,
-        WikiUrl = string.IsNullOrWhiteSpace(WikiUrl) ? null : WikiUrl.Trim(),
-        RemediationSteps = FileMonitoringChecksViewModel.SplitLines(RemediationSteps),
-        Patterns = ParsePatterns(Patterns)
-    };
+        var unknown = ParseUnknownFields(UnknownFieldsJson);
+        var scan = new LogScanConfig
+        {
+            Name = (Name ?? string.Empty).Trim(),
+            Path = (Path ?? string.Empty).Trim(),
+            MaxFileAgeMinutes = MaxFileAgeMinutes,
+            MaxLines = MaxLines <= 0 ? 5000 : MaxLines,
+            WikiUrl = string.IsNullOrWhiteSpace(WikiUrl) ? null : WikiUrl.Trim(),
+            RemediationSteps = FileMonitoringChecksViewModel.SplitLines(RemediationSteps),
+            Patterns = ParsePatterns(Patterns),
+            PendingRules = ParsePendingRules(PendingRules),
+            ExpectedRuns = ParseExpectedRuns(ExpectedRuns)
+        };
+
+        // The unknown fields of the scan itself.
+        if (unknown.TryGetValue("scan", out var scanUnknown) && scanUnknown.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            scan.ExtensionData = ToDictionary(scanUnknown);
+        }
+
+        // The unknown fields of the rules — matched by their stable identity (the rule name).
+        ApplyRuleUnknownFields(scan.Patterns, unknown, "patterns", p => p.Name);
+        ApplyRuleUnknownFields(scan.PendingRules, unknown, "pendingRules", r => r.Name);
+        ApplyRuleUnknownFields(scan.ExpectedRuns, unknown, "expectedRuns", r => r.Name);
+
+        return scan;
+    }
+
+    /// <summary>
+    /// Copies the unknown fields of the original rules onto the new ones. The rules are matched by
+    /// their stable identity (the rule name); only when no name is available the position is used
+    /// as a fallback. A reordered, inserted or deleted rule therefore never inherits the unknown
+    /// fields of another rule.
+    /// </summary>
+    private static void ApplyRuleUnknownFields<T>(List<T> rules, Dictionary<string, System.Text.Json.JsonElement> unknown, string key, Func<T, string> nameSelector)
+        where T : Minicon.SimpleAdmin.Models.Config.ConfigModel
+    {
+        if (!unknown.TryGetValue(key, out var list) || list.ValueKind != System.Text.Json.JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var original = list.EnumerateArray()
+            .Where(element => element.ValueKind == System.Text.Json.JsonValueKind.Object)
+            .ToList();
+        var byName = original
+            .Where(element => !string.IsNullOrWhiteSpace(ReadIdentity(element)))
+            .GroupBy(ReadIdentity, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var rule in rules)
+        {
+            var name = nameSelector(rule);
+            if (!string.IsNullOrWhiteSpace(name)
+                && byName.TryGetValue(name, out var named)
+                && named.Count == 1)
+            {
+                rule.ExtensionData = ToDictionaryWithoutIdentity(named[0]);
+                continue;
+            }
+
+            var fingerprint = RuleFingerprint(rule);
+            var matching = original
+                .Where(element => string.Equals(ReadMetadata(element, RuleFingerprintKey), fingerprint, StringComparison.Ordinal))
+                .ToList();
+            if (matching.Count == 1)
+            {
+                rule.ExtensionData = ToDictionaryWithoutIdentity(matching[0]);
+            }
+        }
+    }
+
+    private static string ReadIdentity(System.Text.Json.JsonElement element)
+        => ReadMetadata(element, RuleIdentityKey);
+
+    private static string ReadMetadata(System.Text.Json.JsonElement element, string key)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Name.Equals(key, StringComparison.Ordinal)
+                && property.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                return property.Value.GetString() ?? string.Empty;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static Dictionary<string, System.Text.Json.JsonElement> ToDictionaryWithoutIdentity(System.Text.Json.JsonElement element)
+    {
+        var result = new Dictionary<string, System.Text.Json.JsonElement>(StringComparer.Ordinal);
+        if (element.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return result;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Name.Equals(RuleIdentityKey, StringComparison.Ordinal)
+                || property.Name.Equals(RuleFingerprintKey, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            result[property.Name] = property.Value.Clone();
+        }
+
+        return result;
+    }
+
+    /// <summary>Converts a JSON object into a dictionary of extension data.</summary>
+    internal static Dictionary<string, System.Text.Json.JsonElement> ToDictionary(System.Text.Json.JsonElement element)
+    {
+        var result = new Dictionary<string, System.Text.Json.JsonElement>();
+        if (element.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return result;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            result[property.Name] = property.Value.Clone();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Reads the unknown fields of the original scan and its rules from their JSON representation.
+    /// Invalid or missing content yields an empty dictionary (no exception).
+    /// </summary>
+    internal static Dictionary<string, System.Text.Json.JsonElement> ParseUnknownFields(string? json)
+    {
+        var result = new Dictionary<string, System.Text.Json.JsonElement>();
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return result;
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                return result;
+            }
+
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                result[property.Name] = property.Value.Clone();
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // A malformed field must not break the save.
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Serializes the unknown fields of a scan and its rules (for the hidden form field).
+    /// <para>
+    /// The rules are stored with their name and a fingerprint of their known fields so that the
+    /// unknown fields can be matched after reordering or a pure rename — ambiguous rules never
+    /// inherit another rule's fields.
+    /// </para>
+    /// </summary>
+    internal static string? SerializeUnknownFields(LogScanConfig scan)
+    {
+        if (scan == null)
+        {
+            return null;
+        }
+
+        var payload = new Dictionary<string, object?>();
+        if (scan.ExtensionData.Count > 0)
+        {
+            payload["scan"] = scan.ExtensionData;
+        }
+
+        if (scan.Patterns.Any(p => p.ExtensionData.Count > 0))
+        {
+            payload["patterns"] = scan.Patterns.Select(p => WithIdentity(p.Name, RuleFingerprint(p), p.ExtensionData)).ToList();
+        }
+
+        if (scan.PendingRules.Any(r => r.ExtensionData.Count > 0))
+        {
+            payload["pendingRules"] = scan.PendingRules.Select(r => WithIdentity(r.Name, RuleFingerprint(r), r.ExtensionData)).ToList();
+        }
+
+        if (scan.ExpectedRuns.Any(r => r.ExtensionData.Count > 0))
+        {
+            payload["expectedRuns"] = scan.ExpectedRuns.Select(r => WithIdentity(r.Name, RuleFingerprint(r), r.ExtensionData)).ToList();
+        }
+
+        if (payload.Count == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Serialize(payload);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string RuleFingerprint<T>(T rule)
+    {
+        object payload = rule switch
+        {
+            Minicon.SimpleAdmin.Models.Config.LogPatternConfig pattern => new
+            {
+                pattern.Severity,
+                pattern.Regex,
+                pattern.WikiUrl,
+                pattern.RemediationSteps
+            },
+            Minicon.SimpleAdmin.Models.Config.LogPendingRule pending => new
+            {
+                pending.StartRegex,
+                pending.EndRegex,
+                pending.AbortRegex,
+                pending.MaxMinutes,
+                pending.Severity,
+                pending.ReportAbandoned,
+                pending.TimestampRegex,
+                pending.TimestampFormat,
+                pending.WikiUrl,
+                pending.RemediationSteps
+            },
+            Minicon.SimpleAdmin.Models.Config.ExpectedRunRule expected => new
+            {
+                expected.MatchRegex,
+                expected.Schedule,
+                expected.ExpectedTime,
+                expected.GraceMinutes,
+                expected.Severity,
+                expected.Holidays,
+                expected.WikiUrl,
+                expected.RemediationSteps
+            },
+            _ => new { }
+        };
+        return System.Text.Json.JsonSerializer.Serialize(payload);
+    }
+
+    private static Dictionary<string, System.Text.Json.JsonElement> WithIdentity(
+        string? name,
+        string fingerprint,
+        Dictionary<string, System.Text.Json.JsonElement> extensionData)
+    {
+        var result = new Dictionary<string, System.Text.Json.JsonElement>(StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            result[RuleIdentityKey] = System.Text.Json.JsonDocument
+                .Parse(System.Text.Json.JsonSerializer.Serialize(name))
+                .RootElement.Clone();
+        }
+
+        result[RuleFingerprintKey] = System.Text.Json.JsonDocument
+            .Parse(System.Text.Json.JsonSerializer.Serialize(fingerprint))
+            .RootElement.Clone();
+        foreach (var field in extensionData)
+        {
+            result[field.Key] = field.Value;
+        }
+
+        return result;
+    }
+
+    internal const string RuleIdentityKey = "$identity";
+    internal const string RuleFingerprintKey = "$fingerprint";
+
+    /// <summary>
+    /// Serializes the unknown fields of a single object (e.g. a watched directory) for the hidden
+    /// form field. Returns null when there are no unknown fields.
+    /// </summary>
+    internal static string? SerializeExtensionData(Dictionary<string, System.Text.Json.JsonElement>? extensionData)
+    {
+        if (extensionData == null || extensionData.Count == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Serialize(extensionData);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
 
     public static LogScanRowViewModel FromLogScanConfig(LogScanConfig s) => new()
     {
@@ -397,8 +739,296 @@ public class LogScanRowViewModel
         WikiUrl = s.WikiUrl,
         RemediationSteps = string.Join("\n", s.RemediationSteps),
         Patterns = string.Join("\n", s.Patterns.Select(p =>
-            $"{p.Name} :: {p.Severity} :: {p.Regex}"))
+            $"{p.Name} :: {p.Severity} :: {p.Regex}")),
+        PendingRules = string.Join("\n", s.PendingRules.Select(SerializePendingRule)),
+        ExpectedRuns = string.Join("\n", s.ExpectedRuns.Select(SerializeExpectedRun)),
+        UnknownFieldsJson = SerializeUnknownFields(s)
     };
+
+    /// <summary>
+    /// Writes a pending rule in the keyed format (<c>key=value</c> pairs separated by "::").
+    /// Every field is written explicitly so that the rule survives a save/load round trip
+    /// unchanged — in particular <c>reportAbandoned=false</c>, the wiki link and the
+    /// remediation steps, which the older positional format could not carry.
+    /// <para>
+    /// The values are escaped (see <see cref="EscapeValue"/>), so a value that contains the
+    /// separator "::" — e.g. the regular expression <c>waiting\s+::\s+Result</c> — survives the
+    /// round trip unchanged.
+    /// </para>
+    /// </summary>
+    private static string SerializePendingRule(LogPendingRule r)
+    {
+        var parts = new List<string>
+        {
+            $"name={EscapeValue(r.Name)}",
+            $"start={EscapeValue(r.StartRegex)}",
+            $"end={EscapeValue(r.EndRegex)}",
+            $"max={r.MaxMinutes}",
+            $"severity={r.Severity}",
+            $"reportAbandoned={(r.ReportAbandoned ? "true" : "false")}",
+            $"tsFormat={EscapeValue(r.TimestampFormat)}"
+        };
+        if (!string.IsNullOrWhiteSpace(r.AbortRegex))
+            parts.Add($"abort={EscapeValue(r.AbortRegex)}");
+        if (!string.IsNullOrWhiteSpace(r.TimestampRegex))
+            parts.Add($"tsRegex={EscapeValue(r.TimestampRegex)}");
+        if (!string.IsNullOrWhiteSpace(r.WikiUrl))
+            parts.Add($"wiki={EscapeValue(r.WikiUrl)}");
+        if (r.RemediationSteps.Count > 0)
+            parts.Add($"steps={SerializeSteps(r.RemediationSteps)}");
+        return string.Join(" :: ", parts);
+    }
+
+    /// <summary>
+    /// Writes an expected-run rule in the keyed format (<c>key=value</c> pairs separated by "::").
+    /// </summary>
+    private static string SerializeExpectedRun(ExpectedRunRule r)
+    {
+        var parts = new List<string>
+        {
+            $"name={EscapeValue(r.Name)}",
+            $"match={EscapeValue(r.MatchRegex)}",
+            $"schedule={EscapeValue(r.Schedule)}",
+            $"time={EscapeValue(r.ExpectedTime)}",
+            $"grace={r.GraceMinutes}",
+            $"severity={r.Severity}"
+        };
+        if (r.Holidays.Count > 0)
+            parts.Add($"holidays={EscapeValue(string.Join(",", r.Holidays))}");
+        if (!string.IsNullOrWhiteSpace(r.WikiUrl))
+            parts.Add($"wiki={EscapeValue(r.WikiUrl)}");
+        if (r.RemediationSteps.Count > 0)
+            parts.Add($"steps={SerializeSteps(r.RemediationSteps)}");
+        return string.Join(" :: ", parts);
+    }
+
+    /// <summary>
+    /// Escapes a value for the keyed rule format: the separator "::", the list separator "|" and
+    /// the escape character "\" are escaped with a backslash, so that any value (regular
+    /// expression, wiki link, remediation steps) survives the round trip unchanged.
+    /// </summary>
+    internal static string EscapeValue(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        return value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("::", "\\::", StringComparison.Ordinal)
+            .Replace("|", "\\|", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Serializes the remediation steps: every step is escaped on its own, the steps are joined with
+    /// an <em>unescaped</em> "|". A step that itself contains a "|" therefore survives the round
+    /// trip unchanged.
+    /// </summary>
+    internal static string SerializeSteps(IEnumerable<string> steps)
+        => string.Join("|", steps.Select(EscapeValue));
+
+    /// <summary>
+    /// Reads the remediation steps of a rule: the value is split at the unescaped "|" and every
+    /// step is unescaped afterwards. A step that itself contains a "|" (escaped as "\|") stays one
+    /// step.
+    /// </summary>
+    internal static List<string> ParseSteps(string rawValue)
+    {
+        var result = new List<string>();
+        foreach (var step in SplitOnUnescapedPipe(rawValue))
+        {
+            var unescaped = UnescapeValue(step.Trim());
+            if (unescaped.Length > 0)
+            {
+                result.Add(unescaped);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Splits a value at the "|" characters that are not escaped with a backslash.
+    /// </summary>
+    internal static List<string> SplitOnUnescapedPipe(string value)
+    {
+        var result = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var escaped = false;
+
+        foreach (var c in value)
+        {
+            if (escaped)
+            {
+                current.Append(c);
+                escaped = false;
+                continue;
+            }
+
+            if (c == '\\')
+            {
+                current.Append(c);
+                escaped = true;
+                continue;
+            }
+
+            if (c == '|')
+            {
+                result.Add(current.ToString());
+                current.Clear();
+                continue;
+            }
+
+            current.Append(c);
+        }
+
+        result.Add(current.ToString());
+        return result;
+    }
+
+    /// <summary>
+    /// Reverses <see cref="EscapeValue"/>.
+    /// </summary>
+    internal static string UnescapeValue(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        var result = new System.Text.StringBuilder(value.Length);
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (c == '\\' && i + 1 < value.Length)
+            {
+                var next = value[i + 1];
+                if (next == '\\' || next == ':' || next == '|')
+                {
+                    result.Append(next);
+                    i++;
+                    continue;
+                }
+            }
+
+            result.Append(c);
+        }
+
+        return result.ToString();
+    }
+
+    /// <summary>
+    /// Splits a rule line into its segments at the unescaped separator "::". An escaped
+    /// "\::" does not split — the value stays in one piece and is unescaped afterwards.
+    /// </summary>
+    internal static List<string> SplitSegments(string line)
+    {
+        var segments = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var escaped = false;
+
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+
+            if (escaped)
+            {
+                current.Append(c);
+                escaped = false;
+                continue;
+            }
+
+            if (c == '\\')
+            {
+                // Keep the escape character — the value is unescaped after the split.
+                current.Append(c);
+                escaped = true;
+                continue;
+            }
+
+            if (c == ':' && i + 1 < line.Length && line[i + 1] == ':')
+            {
+                segments.Add(current.ToString().Trim());
+                current.Clear();
+                i++;
+                continue;
+            }
+
+            current.Append(c);
+        }
+
+        segments.Add(current.ToString().Trim());
+        return segments;
+    }
+
+    /// <summary>
+    /// Parses the "erwartete Läufe" rules from the one-per-line text format
+    /// (<c>key=value</c> pairs separated by "::").
+    /// </summary>
+    private static List<ExpectedRunRule> ParseExpectedRuns(string? raw)
+    {
+        var result = new List<ExpectedRunRule>();
+        foreach (var line in FileMonitoringChecksViewModel.SplitLines(raw))
+        {
+            var rule = new ExpectedRunRule();
+            foreach (var segment in SplitSegments(line))
+            {
+                var separator = segment.IndexOf('=');
+                if (separator <= 0)
+                {
+                    continue;
+                }
+
+                var key = segment[..separator].Trim().ToLowerInvariant();
+                var rawValue = segment[(separator + 1)..].Trim();
+                var value = UnescapeValue(rawValue);
+                switch (key)
+                {
+                    case "name":
+                        rule.Name = value;
+                        break;
+                    case "match":
+                        rule.MatchRegex = value;
+                        break;
+                    case "schedule":
+                        rule.Schedule = value;
+                        break;
+                    case "time":
+                        rule.ExpectedTime = value;
+                        break;
+                    case "grace":
+                        if (int.TryParse(value, out var grace) && grace > 0)
+                            rule.GraceMinutes = grace;
+                        break;
+                    case "severity":
+                        if (!string.IsNullOrWhiteSpace(value))
+                            rule.Severity = NormalizeSeverity(value);
+                        break;
+                    case "holidays":
+                        rule.Holidays = value
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            .ToList();
+                        break;
+                    case "wiki":
+                        rule.WikiUrl = string.IsNullOrWhiteSpace(value) ? null : value;
+                        break;
+                    case "steps":
+                        // The list separator "|" is only unescaped per step — the raw value is
+                        // needed to tell a separator from an escaped "|" inside a step.
+                        rule.RemediationSteps = ParseSteps(rawValue);
+                        break;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(rule.MatchRegex))
+            {
+                result.Add(rule);
+            }
+        }
+
+        return result;
+    }
 
     private static List<LogPatternConfig> ParsePatterns(string? raw)
     {
@@ -417,6 +1047,134 @@ public class LogScanRowViewModel
         }
         return result;
     }
+
+    /// <summary>
+    /// Parses the "offene Läufe" rules from the one-per-line text format.
+    /// The current format is a list of <c>key=value</c> pairs separated by "::" (order
+    /// independent). The older positional format (<c>Anzeigename :: StartRegex :: EndRegex ::
+    /// MaxMinutes :: Severity :: …</c>) is still accepted so that hand-edited configs keep
+    /// working; it simply cannot express every field.
+    /// </summary>
+    private static List<LogPendingRule> ParsePendingRules(string? raw)
+    {
+        var result = new List<LogPendingRule>();
+        foreach (var line in FileMonitoringChecksViewModel.SplitLines(raw))
+        {
+            var rule = ParsePendingRule(line);
+            if (rule is not null && !string.IsNullOrWhiteSpace(rule.StartRegex))
+                result.Add(rule);
+        }
+
+        return result;
+    }
+
+    private static LogPendingRule? ParsePendingRule(string line)
+    {
+        // Keyed format: every segment carries "key=value". A segment without "=" means the line
+        // uses the older positional format.
+        var segments = SplitSegments(line);
+        if (segments.Any(s => !s.Contains('=')))
+            return ParsePendingRulePositional(segments.ToArray());
+
+        var rule = new LogPendingRule();
+        foreach (var segment in segments)
+        {
+            var separator = segment.IndexOf('=');
+            if (separator <= 0)
+                continue;
+
+            var key = segment[..separator].Trim();
+            var rawValue = segment[(separator + 1)..].Trim();
+            var value = UnescapeValue(rawValue);
+            switch (key.ToLowerInvariant())
+            {
+                case "name":
+                    rule.Name = value;
+                    break;
+                case "start":
+                    rule.StartRegex = value;
+                    break;
+                case "end":
+                    rule.EndRegex = value;
+                    break;
+                case "max":
+                    if (int.TryParse(value, out var maxMinutes) && maxMinutes > 0)
+                        rule.MaxMinutes = maxMinutes;
+                    break;
+                case "severity":
+                    if (!string.IsNullOrWhiteSpace(value))
+                        rule.Severity = NormalizeSeverity(value);
+                    break;
+                case "abort":
+                    rule.AbortRegex = string.IsNullOrWhiteSpace(value) ? null : value;
+                    break;
+                case "tsregex":
+                    rule.TimestampRegex = string.IsNullOrWhiteSpace(value) ? null : value;
+                    break;
+                case "tsformat":
+                    if (!string.IsNullOrWhiteSpace(value))
+                        rule.TimestampFormat = value;
+                    break;
+                case "reportabandoned":
+                    rule.ReportAbandoned = IsTrue(value);
+                    break;
+                case "wiki":
+                    rule.WikiUrl = string.IsNullOrWhiteSpace(value) ? null : value;
+                    break;
+                case "steps":
+                    // The list separator "|" is only unescaped per step — the raw value is needed
+                    // to tell a separator from an escaped "|" inside a step.
+                    rule.RemediationSteps = ParseSteps(rawValue);
+                    break;
+            }
+        }
+
+        return rule;
+    }
+
+    /// <summary>
+    /// Reads the older positional format. The field order is
+    /// <c>Name :: StartRegex :: EndRegex :: MaxMinutes :: Severity :: AbortRegex :: TimestampRegex ::
+    /// TimestampFormat</c>. Fields that are not written are not shifted — a missing optional field
+    /// simply ends the line.
+    /// </summary>
+    private static LogPendingRule? ParsePendingRulePositional(string[] parts)
+    {
+        if (parts.Length < 3)
+            return null;
+
+        var rule = new LogPendingRule
+        {
+            Name = parts[0],
+            StartRegex = parts[1],
+            EndRegex = parts[2],
+            MaxMinutes = 30,
+            Severity = "Critical"
+        };
+
+        if (parts.Length > 3 && int.TryParse(parts[3], out var maxMinutes) && maxMinutes > 0)
+            rule.MaxMinutes = maxMinutes;
+
+        if (parts.Length > 4 && !string.IsNullOrWhiteSpace(parts[4]))
+            rule.Severity = NormalizeSeverity(parts[4]);
+
+        if (parts.Length > 5 && !string.IsNullOrWhiteSpace(parts[5]))
+            rule.AbortRegex = parts[5];
+
+        if (parts.Length > 6 && !string.IsNullOrWhiteSpace(parts[6]))
+            rule.TimestampRegex = parts[6];
+
+        if (parts.Length > 7 && !string.IsNullOrWhiteSpace(parts[7]))
+            rule.TimestampFormat = parts[7];
+
+        return rule;
+    }
+
+    private static bool IsTrue(string value) =>
+        value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("1", StringComparison.Ordinal) ||
+        value.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("ja", StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizeSeverity(string value)
         => string.Equals(value, "Warning", StringComparison.OrdinalIgnoreCase) ? "Warning" : "Critical";

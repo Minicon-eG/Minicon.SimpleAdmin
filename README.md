@@ -374,6 +374,11 @@ service types, feature toggles and the PRTG/NetScaler endpoints. Supported featu
   error signatures in logs) — with a **setup assistant** in the admin UI that tests
   paths and regex signatures against the real files before saving, offers templates
   and suggests common error signatures with their hit counts
+- **Run-level log monitoring**: beyond regex signatures a log scan can declare
+  *open runs* (a run that starts but never finishes — e.g. a log ending in
+  `waiting for Result…` without a result line) and *expected runs* (a run that
+  should happen on certain weekdays at a fixed time but is missing from the log
+  entirely) — see the operator guide below
 - **Central e-mail notifier**: designated servers aggregate all statuses over HTTP
   and send summary mails with acknowledge deep-links (HTML + plaintext, reminders,
   all-clear notices, HA via two coordinated instances) — testable end-to-end via
@@ -533,3 +538,126 @@ can still be recorded. There is no integrity cache: validation cost grows with r
 archive history. Diagnose/restore damaged evidence from a trusted backup before retrying.
 All BizTalk display timestamps use the WebUI host's local timezone and the shared
 German format with seconds and explicit UTC offset; raw API timestamps retain their offsets.
+
+## Run-level log monitoring — operator guide
+
+Regex signatures count lines. They cannot see a run that **started but never finished**
+and they cannot see a run that **never happened at all**. A log scan can therefore declare
+open-run rules (`pendingRules[]`) and expected-run rules (`expectedRuns[]`).
+
+The motivating case — a Kassen/JUKOS interface log (~21 000 lines, CRLF, UTF-8):
+
+```
+2026-11-20 22:05:15.756 --- Starte Schnittstelle execute/schnittstelle/einlesen/KASSEN/JUKOS ---
+2026-11-20 22:05:15.756 open: http://localhost:8080/...
+2026-11-20 22:05:15.756 waiting for Result...
+2026-11-20 22:15:09.456 Schnittstelle Kassen/Jukos für Nutzer rshw verarbeitet. Verarbeitungsergebnis: OK
+2026-11-20 22:15:09.457
+Laufzeit: 00:09:53.699
+
+2026-11-25 13:40:41.040 --- Starte Schnittstelle ... ---
+2026-11-25 13:40:41.041 open: ...
+2026-11-25 13:40:41.041 waiting for Result...
+
+2026-11-25 14:14:06.933 --- Starte Schnittstelle ... ---      <-- erneuter Start, der vorige endet nie
+2026-11-25 14:44:05.679 waiting for Result...                 <-- Dateiende: Lauf offen
+```
+
+### Findings and file selection
+
+| Finding | Config key | Problem ID |
+|---|---|---|
+| Open run | `pendingRules[]` | `log_<scan>_<rule>_pending` |
+| Abandoned run | `pendingRules[]` | `log_<scan>_<rule>_abandoned` |
+| Expected run | `expectedRuns[]` | `log_<scan>_<rule>_missing` |
+
+**Every pending or expected-run rule evaluates exactly one file: the newest matching file by
+`LastWriteTime`.** There is no cross-file continuation: an end line in another file never closes
+an open run, and an older file is not used as additional expected-run evidence. Configure one scan
+per authority when several independent logs match a glob.
+
+Existing signature scans keep their previous behavior: every file admitted by `maxFileAgeMinutes`
+is scanned separately with exactly `maxLines` from its tail (`0` means the whole file). When a file
+is used by signatures and run rules, it is read only once; the signature evaluation takes its own
+`maxLines` subset from the shared snapshot. Run rules use a separate bounded tail derived from
+`maxLines` (at most 200 000 lines). The preview uses the same newest file for pending rules while
+still reading the other admitted files for signature suggestions.
+
+`FileSystemAccess` reads forward with a `StreamReader` into a bounded ring buffer. BOM detection,
+UTF-8/UTF-16, empty lines and CR, LF or CRLF line endings match
+`File.ReadAllLines(path).TakeLast(maxLines)`; memory usage does not grow with the file size.
+
+### Open runs
+
+A rule names the **start** and **end** of a run. A start without an end until the end of the file is
+**hanging** once it is older than `maxMinutes` (default 30) — otherwise it is only shown as
+„läuft seit X min“ (still running, no problem). A start followed by a newer start without an end in
+between is an **abandoned run**, aggregated per rule with count and last occurrence, but only for
+the last 24 h (`reportAbandoned: false` switches it off).
+
+In the admin UI one rule per line, lossless named format (order-independent), fields separated by
+`::`:
+
+```
+name=Lauf muss abgeschlossen sein :: start=waiting for Result :: end=Verarbeitungsergebnis: :: max=30 :: severity=Critical
+```
+
+`start` and `end` are mandatory. Optional: `abort` (ends the run), `tsRegex`/`tsFormat` (timestamp),
+`reportAbandoned`, `wiki`, `steps`. Remediation steps are separated by an unescaped `|`. Backslash,
+`::` and `|` inside values are escaped with a backslash, so regular expressions and steps containing
+these characters survive the round trip. The positional format
+`Anzeigename :: StartRegex :: EndRegex :: MaxMinuten :: Severity :: AbbruchRegex :: ZeitstempelRegex :: ZeitstempelFormat`
+is still read for hand-maintained configs.
+
+Timestamps default to the line start `yyyy-MM-dd HH:mm:ss.fff` (local time of the server writing the
+log). `timestampRegex` takes the first capture group instead; if a line has no timestamp, the
+selected file's `LastWriteTime` is used. CRLF, empty lines and continuation lines such as
+`Laufzeit: 00:09:53.699` do not disturb the evaluation.
+
+### Expected runs
+
+`expectedRuns[]` expects a run on certain days at a fixed time and reports it when the selected log
+contains no matching line. The due date is the **last** scheduled day whose
+`expectedTime + graceMinutes` is ≤ now; every candidate is checked against this condition, including
+with a grace period longer than one day. On Monday 08:00 the due day is Friday, on Saturday it is
+also Friday. The finding is only raised after the grace period has elapsed (default 120 min).
+`holidays` is a plain list of ISO dates — there is **no** automatic holiday calculation; a holiday
+falls back to the previous scheduled working day.
+
+```
+name=Abendlauf Kassen/JUKOS :: match=Verarbeitungsergebnis: :: schedule=Mon-Fri :: time=22:00 :: grace=120 :: severity=Critical :: holidays=2026-12-24,2026-12-31
+```
+
+`schedule` uses the known day syntax (`Mon-Fri`, `Mon,Wed,Fri`, `Sat`, empty = every day), `time` is
+`HH:mm`, `grace` the tolerance in minutes (default 120). Further fields: `severity`, `holidays`
+(comma-separated exceptions), `wiki`, `steps`.
+
+A matching line proves the due run only within **expectedTime − 12 h through expectedTime + grace**
+(inclusive). At 22:00 with 120 minutes grace, 10:30 counts, 23:30 also counts, and a line after
+midnight no longer counts. The informational `LastRun` is determined independently up to the
+current time, so a late run is still shown even when it missed the grace window. A regex timeout
+produces a visible `EvaluationError` and **no** missing-run finding; there is no multi-file evidence
+limit because only the newest file is evaluated.
+
+> **Wichtig: „Erwarteter Lauf“ wertet nur die neueste passende Datei aus.** Legt ein Job am Wochenende
+> eine neue Datei an, kann am Montag ein Fehlalarm entstehen, weil ein gültiger Beleg in der
+> Freitagsdatei nicht mehr gelesen wird. Für fortlaufend geschriebene Logs (eine Datei) ist dies unkritisch.
+
+### Many identical log scans (one per authority)
+
+When many authorities share the same log layout, the Servers/Edit card
+**Datei-/Protokollüberwachung** offers **„Für weitere Behörde kopieren“** (log scans) and
+**„Kopieren“** (watched directories). The button clones the selected row including all rules,
+thresholds, wiki link and remediation steps, appends „ (Kopie)“ to the name and re-indexes the form
+fields — only the name and the path need adjusting. Unknown future config fields are retained on
+duplicates, reordered rules and pure renames; ambiguous matches never inherit another item's fields.
+
+### Where the findings appear
+
+- **Status → Details**, section *Datei-/Protokollüberwachung*: tables „Offene Läufe“ and
+  „Erwartete Läufe“, plus access and evaluation errors.
+- **Problems page** and the notifier mail: one entry per finding, with severity, wiki link and
+  remediation steps.
+- **Static HTML** detail page (`📁 Dateiüberwachung`) — the same run tables and errors, available
+  even when the WebUI is down.
+- **File-monitoring badge** on the server card counts findings, access errors and evaluation errors.

@@ -32,6 +32,20 @@ internal static class Display
     public static string LocalShort(DateTime value) => AsUtc(value).ToLocalTime().ToString("dd.MM. HH:mm", German);
 
     /// <summary>
+    /// Display time of a <em>log wall time</em> — a timestamp that was read from a log file and is
+    /// therefore the local time of the server that wrote the log (usually not the WebUI host).
+    /// <para>
+    /// Such a value must not be re-interpreted as UTC (the status timestamps are UTC, the log
+    /// timestamps are not): a log line of "08:00" must be shown as "08:00" and not shifted by the
+    /// offset between the log server and the WebUI host. The value is therefore printed as it is.
+    /// </para>
+    /// </summary>
+    public static string LogWallTime(DateTime value) => value.ToString("dd.MM.yyyy HH:mm", German);
+
+    /// <summary>Display time of a log wall time with seconds.</summary>
+    public static string LogWallTimeSeconds(DateTime value) => value.ToString("dd.MM.yyyy HH:mm:ss", German);
+
+    /// <summary>
     /// Link target from config data (wiki/runbook URLs): only absolute http(s), <c>mailto:</c> and relative paths
     /// pass; everything else (<c>javascript:</c>, <c>data:</c>, <c>file:</c>, UNC, protocol-relative <c>//host</c>, …)
     /// yields null — the views then show the value as plain text instead of a link.

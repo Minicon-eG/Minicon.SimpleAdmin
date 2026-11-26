@@ -1028,17 +1028,40 @@ else
             {
                 <p class="text-muted mb-3">
                     Verzeichnisse geprüft: @fm.DirectoriesChecked · Logdateien gescannt: @fm.LogFilesScanned ·
-                    Hängende Dateien: <strong>@fm.StuckFiles.Count</strong> · Log-Treffer: <strong>@fm.LogMatches.Count</strong>
+                    Hängende Dateien: <strong>@fm.StuckFiles.Count</strong> · Log-Treffer: <strong>@fm.LogMatches.Count</strong> ·
+                    Offene Läufe: <strong>@fm.PendingRuns.Count</strong> ·
+                    Erwartete Läufe fehlend: <strong>@fm.MissingRuns.Count</strong>
                 </p>
                 @if (fm.AnyError && !string.IsNullOrEmpty(fm.Error))
                 {
                     <div class="alert alert-danger">Zugriffsfehler: @fm.Error</div>
                 }
+                @if (fm.EvaluationErrors.Count > 0)
+                {
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Auswertungsfehler — die betroffenen Regeln konnten nicht bewertet werden (es wird <em>kein</em> fehlender Lauf gemeldet):
+                        <ul class="mb-0 mt-1">
+                            @foreach (var evaluationError in fm.EvaluationErrors)
+                            {
+                                <li class="text-wrap-anywhere">@evaluationError</li>
+                            }
+                        </ul>
+                    </div>
+                }
                 @if (fm.StuckFiles.Count > 0)
                 {
                     <h6>Hängengebliebene Dateien</h6>
-                    <table class="table table-sm table-hover mb-3">
-                        <thead><tr><th>Verzeichnis</th><th>Datei</th><th>Alter</th><th>Grund</th><th>Schweregrad</th><th>Lösung</th></tr></thead>
+                    <table class="table table-sm table-hover mb-3 fm-table">
+                        <colgroup>
+                            <col class="col-log" />
+                            <col />
+                            <col class="col-when" />
+                            <col class="col-count" />
+                            <col class="col-severity" />
+                            <col class="col-solution" />
+                        </colgroup>
+                        <thead><tr><th>Verzeichnis</th><th>Datei</th><th>Alter</th><th>Grund</th><th class="cell-severity">Schweregrad</th><th>Lösung</th></tr></thead>
                         <tbody>
                             @foreach (var s in fm.StuckFiles)
                             {
@@ -1048,7 +1071,7 @@ else
                                     <td class="text-wrap-anywhere" title="@s.FilePath">@System.IO.Path.GetFileName(s.FilePath)</td>
                                     <td>@ageLabel</td>
                                     <td>@(string.Equals(s.Reason, "cutoff", StringComparison.OrdinalIgnoreCase) ? "Nach Cutoff" : "Zu alt")</td>
-                                    <td><span class="badge @(s.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(s.IsCritical ? "Kritisch" : "Warnung")</span></td>
+                                    <td class="cell-severity"><span class="badge @(s.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(s.IsCritical ? "Kritisch" : "Warnung")</span></td>
                                     <td>
                                         @if (Display.SafeHref(s.WikiUrl) != null)
                                         {
@@ -1068,7 +1091,14 @@ else
                 @if (fm.LogMatches.Count > 0)
                 {
                     <h6>Log-Fehler</h6>
-                    <table class="table table-sm table-hover mb-3">
+                    <table class="table table-sm table-hover mb-3 fm-table">
+                        <colgroup>
+                            <col class="col-log" />
+                            <col class="col-rule" />
+                            <col class="col-count" />
+                            <col />
+                            <col class="col-solution" />
+                        </colgroup>
                         <thead><tr><th>Log</th><th>Signatur</th><th>Treffer</th><th>Beispiel</th><th>Lösung</th></tr></thead>
                         <tbody>
                             @foreach (var m in fm.LogMatches)
@@ -1094,7 +1124,153 @@ else
                         </tbody>
                     </table>
                 }
-                @if (fm.StuckFiles.Count == 0 && fm.LogMatches.Count == 0 && !fm.AnyError)
+                @if (fm.PendingRuns.Count > 0 || fm.AbandonedRuns.Count > 0 || fm.RunningLogRuns.Count > 0)
+                {
+                    <h6>Offene Läufe</h6>
+                    @if (fm.PendingRuns.Count > 0)
+                    {
+                        <table class="table table-sm table-hover mb-3 fm-table">
+                            <colgroup>
+                                <col class="col-log" />
+                                <col class="col-rule" />
+                                <col class="col-when" />
+                                <col class="col-when" />
+                                <col class="col-severity" />
+                                <col class="col-solution" />
+                            </colgroup>
+                            <thead><tr><th>Log</th><th>Regel</th><th>Start</th><th>Läuft seit</th><th class="cell-severity">Schweregrad</th><th>Lösung</th></tr></thead>
+                            <tbody>
+                                @foreach (var p in fm.PendingRuns)
+                                {
+                                    var ageLabel = p.AgeMinutes >= 120 ? $"{p.AgeMinutes / 60.0:N1} h" : $"{p.AgeMinutes:N0} min";
+                                    <tr>
+                                        <td class="text-wrap-anywhere" title="@p.LogPath">@p.LogScan</td>
+                                        <td>@p.Rule</td>
+                                        <td>@(p.StartedAt.HasValue ? Display.LogWallTime(p.StartedAt.Value) : "—")</td>
+                                        <td>@ageLabel</td>
+                                        <td class="cell-severity"><span class="badge @(p.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(p.IsCritical ? "Kritisch" : "Warnung")</span></td>
+                                        <td>
+                                            @if (Display.SafeHref(p.WikiUrl) != null)
+                                            {
+                                                <a href="@Display.SafeHref(p.WikiUrl)" target="_blank" rel="noopener">Anleitung <i class="bi bi-box-arrow-up-right"></i></a>
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(p.WikiUrl))
+                                            {
+                                                <span class="text-body-secondary text-wrap-anywhere" title="Kein Web-Link – bitte manuell öffnen">Anleitung: <code>@p.WikiUrl</code></span>
+                                            }
+                                            else { <span class="text-muted">—</span> }
+                                        </td>
+                                    </tr>
+                                    @if (!string.IsNullOrWhiteSpace(p.SampleLine))
+                                    {
+                                        <tr>
+                                            <td colspan="6" class="text-wrap-anywhere">
+                                                <code class="small">@p.SampleLine</code>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    @if (fm.AbandonedRuns.Count > 0)
+                    {
+                        <table class="table table-sm table-hover mb-3 fm-table">
+                            <colgroup>
+                                <col class="col-log" />
+                                <col class="col-rule" />
+                                <col class="col-count" />
+                                <col class="col-when" />
+                                <col class="col-severity" />
+                                <col class="col-solution" />
+                            </colgroup>
+                            <thead><tr><th>Log</th><th>Regel</th><th>Anzahl</th><th>Zuletzt</th><th class="cell-severity">Schweregrad</th><th>Lösung</th></tr></thead>
+                            <tbody>
+                                @foreach (var a in fm.AbandonedRuns)
+                                {
+                                    <tr>
+                                        <td class="text-wrap-anywhere" title="@a.LogPath">@a.LogScan</td>
+                                        <td>@a.Rule</td>
+                                        <td>@a.Count</td>
+                                        <td>@(a.LastSeenAt.HasValue ? Display.LogWallTime(a.LastSeenAt.Value) : "—")</td>
+                                        <td class="cell-severity"><span class="badge @(a.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(a.IsCritical ? "Kritisch" : "Warnung")</span></td>
+                                        <td>
+                                            @if (Display.SafeHref(a.WikiUrl) != null)
+                                            {
+                                                <a href="@Display.SafeHref(a.WikiUrl)" target="_blank" rel="noopener">Anleitung <i class="bi bi-box-arrow-up-right"></i></a>
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(a.WikiUrl))
+                                            {
+                                                <span class="text-body-secondary text-wrap-anywhere" title="Kein Web-Link – bitte manuell öffnen">Anleitung: <code>@a.WikiUrl</code></span>
+                                            }
+                                            else { <span class="text-muted">—</span> }
+                                        </td>
+                                    </tr>
+                                    @if (!string.IsNullOrWhiteSpace(a.SampleLine))
+                                    {
+                                        <tr>
+                                            <td colspan="6" class="text-wrap-anywhere">
+                                                <code class="small">@a.SampleLine</code>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    @if (fm.RunningLogRuns.Count > 0)
+                    {
+                        <p class="text-muted small mb-3">
+                            <i class="bi bi-hourglass-split me-1"></i>
+                            @fm.RunningLogRuns.Count laufende(r) Lauf/Läufe innerhalb der Zeitgrenze:
+                            @foreach (var r in fm.RunningLogRuns)
+                            {
+                                <span class="me-2">@r.Rule (@r.AgeMinutes.ToString("N0") min, seit @(r.StartedAt.HasValue ? Display.LogWallTime(r.StartedAt.Value) : "?"))</span>
+                            }
+                        </p>
+                    }
+                }
+                @if (fm.MissingRuns.Count > 0)
+                {
+                    <h6>Erwartete Läufe</h6>
+                    <table class="table table-sm table-hover mb-3 fm-table">
+                        <colgroup>
+                            <col class="col-log" />
+                            <col class="col-rule" />
+                            <col class="col-when" />
+                            <col class="col-when" />
+                            <col class="col-severity" />
+                            <col class="col-solution" />
+                        </colgroup>
+                        <thead><tr><th>Log</th><th>Regel</th><th>Erwartet am</th><th>Letzter Lauf</th><th class="cell-severity">Schweregrad</th><th>Lösung</th></tr></thead>
+                        <tbody>
+                            @foreach (var m in fm.MissingRuns)
+                            {
+                                <tr>
+                                    <td class="text-wrap-anywhere" title="@m.LogPath">@m.LogScan</td>
+                                    <td>@m.Rule</td>
+                                    <td>@Display.LogWallTime(m.ExpectedAt)</td>
+                                    <td>@(m.LastRunAt.HasValue ? Display.LogWallTime(m.LastRunAt.Value) : "—")</td>
+                                    <td class="cell-severity"><span class="badge @(m.IsCritical ? "bg-danger" : "bg-warning text-dark")">@(m.IsCritical ? "Kritisch" : "Warnung")</span></td>
+                                    <td>
+                                        @if (Display.SafeHref(m.WikiUrl) != null)
+                                        {
+                                            <a href="@Display.SafeHref(m.WikiUrl)" target="_blank" rel="noopener">Anleitung <i class="bi bi-box-arrow-up-right"></i></a>
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(m.WikiUrl))
+                                        {
+                                            <span class="text-body-secondary text-wrap-anywhere" title="Kein Web-Link – bitte manuell öffnen">Anleitung: <code>@m.WikiUrl</code></span>
+                                        }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                @if (fm.StuckFiles.Count == 0 && fm.LogMatches.Count == 0 && fm.PendingRuns.Count == 0
+                     && fm.AbandonedRuns.Count == 0 && fm.MissingRuns.Count == 0
+                     && !fm.AnyError && fm.EvaluationErrors.Count == 0)
                 {
                     <p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i>Keine hängenden Dateien oder Log-Fehler.</p>
                 }

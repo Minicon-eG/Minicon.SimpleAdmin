@@ -575,3 +575,83 @@ a:hover {
 .service-row { display: flex; align-items: center; gap: .75rem; padding: .7rem 0; }
 .service-row + .service-row { border-top: 1px solid var(--sa-line); }
 .detail-section-title { display: flex; align-items: center; gap: .55rem; margin: 0; }
+
+/* ---------- File / log monitoring tables (Status/Details) ----------
+   Same approach as .problem-table: fixed column widths so the table never gets
+   wider than the page (no horizontal scrolling for long paths and log lines).
+   Below 768px every row becomes a card. */
+.fm-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.fm-table td,
+.fm-table th {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.fm-table thead th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--bs-secondary-color);
+}
+
+.fm-table .col-log { width: 9rem; }
+.fm-table .col-rule { width: 8rem; }
+.fm-table .col-when { width: 7rem; }
+.fm-table .col-count { width: 4.5rem; }
+.fm-table .col-severity { width: 6rem; }
+.fm-table .col-solution { width: 7rem; }
+
+@media (max-width: 767.98px) {
+    .fm-table,
+    .fm-table tbody {
+        display: block;
+    }
+
+    .fm-table colgroup {
+        display: none;
+    }
+
+    .fm-table thead {
+        display: none;
+    }
+
+    .fm-table tbody > tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.15rem 0.5rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+
+    .fm-table tbody > tr > td {
+        display: block;
+        border-bottom: 0;
+        padding: 0.1rem 0.25rem;
+    }
+
+    /* First cell (Log) spans the full width, the severity badge stays right. */
+    .fm-table tbody > tr > td:first-child {
+        grid-column: 1;
+        font-weight: 600;
+    }
+
+    .fm-table tbody > tr > td:nth-child(2) {
+        grid-column: 1;
+    }
+
+    .fm-table tbody > tr > .cell-severity {
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: end;
+    }
+
+    /* The sample line (colspan row) spans both columns. */
+    .fm-table tbody > tr > td[colspan] {
+        grid-column: 1 / -1;
+    }
+}

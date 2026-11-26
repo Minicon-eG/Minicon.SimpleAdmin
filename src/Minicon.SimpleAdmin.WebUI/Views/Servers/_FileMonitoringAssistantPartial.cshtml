@@ -142,6 +142,23 @@
                                       placeholder="Hängende Nachricht :: Critical :: Nachricht.*(haengt|stuck)&#10;Verbindungsfehler :: Warning :: connection (refused|timed out)"></textarea>
                         </div>
                         <div class="col-md-12">
+                            <label class="form-label small mb-0" for="fmaLogPendingRules">
+                                Offene Läufe – eine Regel pro Zeile ( Feld=Wert , getrennt durch <code>::</code> ):
+                                <code>name=… :: start=… :: end=… :: max=… :: severity=…</code>
+                            </label>
+                            <textarea id="fmaLogPendingRules" class="form-control form-control-sm font-monospace" rows="2"
+                                      placeholder="name=Lauf muss abgeschlossen sein :: start=waiting for Result :: end=Verarbeitungsergebnis: :: max=30 :: severity=Critical"></textarea>
+                            <div class="form-text">
+                                Meldet einen Lauf, der gestartet, aber nicht beendet wurde. Pflicht sind
+                                <code>start</code> und <code>end</code>; <code>max</code> (Standard 30) ist die Grenze, ab der
+                                der Lauf als hängend gilt. Weitere Felder: <code>abort</code>, <code>tsRegex</code>,
+                                <code>tsFormat</code>, <code>reportAbandoned</code>, <code>wiki</code>, <code>steps</code>.
+                                <button type="button" class="btn btn-sm btn-outline-primary ms-1" onclick="fmaSuggestPendingRule()">
+                                    <i class="bi bi-magic me-1"></i>Start/Ende aus dem Beispieltext erkennen
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
                             <a class="small" data-bs-toggle="collapse" href="#fmaLogSampleBox" role="button" aria-expanded="false">
                                 <i class="bi bi-clipboard me-1"></i>Kein Zugriff vom WebUI-Server? Beispielzeilen einfügen und damit testen
                             </a>
@@ -215,7 +232,7 @@
         window.fmaOpen = function (startKind) {
             modal = modal || new bootstrap.Modal(el('fmAssistant'));
             ['fmaDirName', 'fmaDirPath', 'fmaDirInclude', 'fmaDirExclude', 'fmaDirWarn', 'fmaDirCrit', 'fmaDirCutoff',
-             'fmaLogName', 'fmaLogPath', 'fmaLogMaxAge', 'fmaLogPatterns', 'fmaLogSample', 'fmaWiki', 'fmaSteps']
+             'fmaLogName', 'fmaLogPath', 'fmaLogMaxAge', 'fmaLogPatterns', 'fmaLogPendingRules', 'fmaLogSample', 'fmaWiki', 'fmaSteps']
                 .forEach(function (id) { el(id).value = ''; });
             el('fmaDirTemplate').value = '';
             el('fmaDirRecursive').checked = false;
@@ -280,6 +297,7 @@
                 maxFileAgeMinutes: intOrNull('fmaLogMaxAge'),
                 maxLines: intOrNull('fmaLogMaxLines') ?? 5000,
                 patterns: el('fmaLogPatterns').value,
+                pendingRules: el('fmaLogPendingRules').value,
                 wikiUrl: el('fmaWiki').value.trim(),
                 remediationSteps: el('fmaSteps').value
             };
@@ -376,6 +394,8 @@
                 html += '<div class="small mb-2">' + (r.fromSample
                     ? r.linesRead + ' Beispielzeile(n) getestet.'
                     : r.filesScanned + ' Datei(en) gelesen, ' + r.linesRead + ' Zeile(n) ausgewertet.') + '</div>';
+                html += '<div class="alert alert-info py-2 small"><i class="bi bi-info-circle me-1"></i>' +
+                    'Erwartete Läufe werden im Trockenlauf nicht geprüft.</div>';
 
                 if (r.files.length > 0) {
                     html += '<details class="small mb-2"><summary>Gefundene Dateien (' + r.files.length + ')</summary><ul class="mb-0">';
@@ -394,6 +414,8 @@
                 html += '<h6 class="small mt-2">Vorschläge' + (hits.length === 0 ? ' – keine Standardsignatur trifft in den gelesenen Zeilen' : '') + '</h6>' +
                     patternTable(r.suggestions, true);
 
+                html += pendingRunSection(r);
+
                 if (r.tail.length > 0) {
                     html += '<details class="small"><summary>Letzte Zeilen der neuesten Datei</summary>' +
                         '<pre class="bg-body-tertiary border rounded p-2 mb-0" style="max-height:220px;overflow:auto;font-size:.75rem;">' +
@@ -402,6 +424,46 @@
                 target.innerHTML = html;
             });
         };
+
+        // Renders the "offene Läufe" part of the dry run result.
+        function pendingRunSection(r) {
+            var html = '';
+            if (r.pendingRuleErrors && r.pendingRuleErrors.length > 0) {
+                html += '<div class="alert alert-danger py-2 small"><i class="bi bi-x-circle me-1"></i>Regel-Fehler: ' +
+                    r.pendingRuleErrors.map(function (e) { return esc(e); }).join('; ') + '</div>';
+            }
+            if (!r.pendingRuns && !r.runningLogRuns && !r.abandonedRuns) return html;
+            if ((r.pendingRuns.length + r.runningLogRuns.length + r.abandonedRuns.length) === 0) return html;
+
+            html += '<h6 class="small mt-2">Offene Läufe</h6>';
+
+            if (r.pendingRuns.length > 0) {
+                html += '<div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle me-1"></i>' +
+                    '<strong>' + r.pendingRuns.length + ' Lauf/Läufe würde(n) jetzt gemeldet</strong> (zu lange offen).</div>';
+                html += '<table class="table table-sm small mb-2"><thead><tr><th>Regel</th><th>Start</th><th>Alter</th><th>Zeile</th></tr></thead><tbody>';
+                r.pendingRuns.forEach(function (p) {
+                    html += '<tr><td>' + esc(p.rule) + '</td><td>' + esc(p.startedAt || '') + '</td><td>' +
+                        ageText(p.ageMinutes) + '</td><td class="text-break font-monospace" style="font-size:.7rem;">' +
+                        esc(p.sampleLine) + '</td></tr>';
+                });
+                html += '</tbody></table>';
+            }
+
+            if (r.runningLogRuns.length > 0) {
+                html += '<div class="alert alert-info py-2 small"><i class="bi bi-hourglass-split me-1"></i>' +
+                    r.runningLogRuns.length + ' Lauf/Läufe läuft/laufen noch (innerhalb der Grenze) – keine Meldung.</div>';
+            }
+
+            if (r.abandonedRuns.length > 0) {
+                html += '<div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-circle me-1"></i>' +
+                    'Abgebrochene Läufe (neuer Start ohne Ergebnis): ' +
+                    r.abandonedRuns.map(function (a) {
+                        return esc(a.rule) + ' × ' + a.count + ' (zuletzt ' + esc(a.lastSeenAt || '') + ')';
+                    }).join('; ') + '</div>';
+            }
+
+            return html;
+        }
 
         function patternTable(list, offerAdd) {
             var html = '<table class="table table-sm small mb-2"><thead><tr><th>Signatur</th><th>Schwere</th><th class="text-end">Treffer</th><th>Beispiel</th>' +
@@ -428,6 +490,51 @@
             btn.textContent = 'Übernommen';
         };
 
+        // Suggest a "offener Lauf" rule from the pasted sample text: the last "waiting" style line
+        // is the start, a following result line is the end.
+        window.fmaSuggestPendingRule = function () {
+            var sample = el('fmaLogSample').value;
+            if (!sample.trim()) {
+                el('fmaLogResult').innerHTML = '<div class="text-warning small">Bitte zuerst Beispielzeilen einfügen (unten „Kein Zugriff vom WebUI-Server?“).</div>';
+                return;
+            }
+
+            var lines = sample.replace(/\r\n/g, '\n').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+            var start = null, end = null;
+            for (var i = 0; i < lines.length; i++) {
+                if (/\bwaiting\b/i.test(lines[i]) || /warte auf/i.test(lines[i]) || /\bawaiting\b/i.test(lines[i])) {
+                    start = lines[i];
+                }
+                if (start && !end && /(ergebnis|result|verarbeitet|abgeschlossen|completed|done)/i.test(lines[i])
+                    && !/\bwaiting\b/i.test(lines[i])) {
+                    end = lines[i];
+                }
+            }
+
+            if (!start) {
+                el('fmaLogResult').innerHTML = '<div class="text-warning small">Im Beispieltext wurde keine Startzeile gefunden (z. B. „waiting for Result…“). Bitte die Zeile eintragen.</div>';
+                return;
+            }
+
+            var startText = start.replace(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[.,]?\d*\s*/, '').trim();
+            var endText = end
+                ? (end.replace(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[.,]?\d*\s*/, '').trim())
+                : '';
+            // Keep the distinctive part of the line (not the whole timestamp line).
+            var startRegex = startText.length > 120 ? startText.slice(0, 120) : startText;
+            var endRegex = endText.length > 120 ? endText.slice(0, 120) : endText;
+
+            var rule = 'name=Lauf muss abgeschlossen sein :: start=' + startRegex + ' :: end=' + endRegex +
+                ' :: max=30 :: severity=Critical :: reportAbandoned=true';
+            var box = el('fmaLogPendingRules');
+            box.value = box.value.trim() ? box.value.replace(/\s+$/, '') + '\n' + rule : rule;
+
+            el('fmaLogResult').innerHTML = '<div class="alert alert-success py-2 small mb-0">' +
+                '<i class="bi bi-check-circle me-1"></i>Regel übernommen. <strong>Start:</strong> <code>' + esc(startRegex) + '</code>' +
+                (endRegex ? ' &middot; <strong>Ende:</strong> <code>' + esc(endRegex) + '</code>' : ' &middot; <em>kein Ende erkannt – bitte ergänzen</em>') +
+                '</div>';
+        };
+
         // Default display name: last path segment, or the folder for a glob like ...\log\*.log
         function nameFromPath(path) {
             var parts = path.split(/[\\/]/).filter(Boolean);
@@ -449,8 +556,8 @@
                     '<div class="text-warning small">Bitte zuerst einen Pfad eingeben.</div>';
                 return;
             }
-            if (kind === 'log' && !row.patterns.trim()) {
-                el('fmaLogResult').innerHTML = '<div class="text-warning small">Bitte mindestens eine Signatur eintragen oder einen Vorschlag übernehmen – ohne Signatur prüft der Log-Scan nichts.</div>';
+            if (kind === 'log' && !row.patterns.trim() && !row.pendingRules.trim()) {
+                el('fmaLogResult').innerHTML = '<div class="text-warning small">Bitte mindestens eine Signatur oder eine Regel für offene Läufe eintragen (oder einen Vorschlag übernehmen) – ohne Regeln prüft der Log-Scan nichts.</div>';
                 return;
             }
 
@@ -480,6 +587,7 @@
                 setField(item, 'MaxFileAgeMinutes', row.maxFileAgeMinutes);
                 setField(item, 'MaxLines', row.maxLines);
                 setField(item, 'Patterns', row.patterns);
+                setField(item, 'PendingRules', row.pendingRules);
             }
             setField(item, 'WikiUrl', row.wikiUrl);
             setField(item, 'RemediationSteps', row.remediationSteps);

@@ -64,14 +64,67 @@ public sealed class FileSystemAccess : IFileSystemAccess
             : Array.Empty<FileEntry>();
     }
 
+    /// <summary>
+    /// Reads up to <paramref name="maxLines"/> lines from the tail of a file (0 = whole file).
+    /// The file is read forward into a bounded ring buffer so that a huge log is not loaded
+    /// completely into memory.
+    /// </summary>
     public IReadOnlyList<string> ReadLines(string path, int maxLines)
     {
-        var all = File.ReadAllLines(path);
-        if (maxLines <= 0 || all.Length <= maxLines)
+        if (maxLines <= 0)
         {
-            return all;
+            return File.ReadAllLines(path);
         }
 
-        return all[^maxLines..];
+        return ReadTail(path, maxLines);
+    }
+
+    /// <summary>
+    /// Reads the last <paramref name="maxLines"/> lines of a file. The file is read forward with a
+    /// <see cref="StreamReader"/> (BOM detection, "\r", "\n" and "\r\n" as line endings) and only
+    /// the requested tail is kept in memory — a bounded ring buffer instead of the whole file.
+    /// <para>
+    /// The result is identical to <c>File.ReadAllLines(path).TakeLast(maxLines)</c> (the reference
+    /// of the previous implementation): empty lines at the beginning and at the end are kept, a
+    /// UTF-8/UTF-16 BOM is not part of the first line and a file without a trailing newline does
+    /// not gain one.
+    /// </para>
+    /// </summary>
+    private static string[] ReadTail(string path, int maxLines)
+    {
+        using var stream = new FileStream(
+            path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 64 * 1024, options: FileOptions.SequentialScan);
+
+        using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
+
+        // A ring buffer of the last maxLines lines — the memory does not depend on the file size.
+        var buffer = new string[maxLines];
+        var count = 0;
+        var next = 0;
+
+        while (reader.ReadLine() is { } line)
+        {
+            buffer[next] = line;
+            next = (next + 1) % maxLines;
+            if (count < maxLines)
+            {
+                count++;
+            }
+        }
+
+        if (count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var result = new string[count];
+        var start = count < maxLines ? 0 : next;
+        for (var i = 0; i < count; i++)
+        {
+            result[i] = buffer[(start + i) % maxLines];
+        }
+
+        return result;
     }
 }

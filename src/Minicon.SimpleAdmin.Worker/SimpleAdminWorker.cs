@@ -333,9 +333,10 @@ public class SimpleAdminWorker
         {
             fileMonitoringState = await fileMonitoringTask;
             if (fileMonitoringState != null)
-                _logger.LogInformation("    FileMonitoring: {Dirs} dir(s), {Logs} log(s), {Stuck} stuck file(s), {Matches} log match(es)",
+                _logger.LogInformation("    FileMonitoring: {Dirs} dir(s), {Logs} log(s), {Stuck} stuck file(s), {Matches} log match(es), {Pending} open run(s), {Abandoned} abandoned run(s)",
                     fileMonitoringState.DirectoriesChecked, fileMonitoringState.LogFilesScanned,
-                    fileMonitoringState.StuckFiles.Count, fileMonitoringState.LogMatches.Count);
+                    fileMonitoringState.StuckFiles.Count, fileMonitoringState.LogMatches.Count,
+                    fileMonitoringState.PendingRuns.Count, fileMonitoringState.AbandonedRuns.Count);
         }
         catch (Exception ex) { _logger.LogError(ex, "Error checking file monitoring"); }
 

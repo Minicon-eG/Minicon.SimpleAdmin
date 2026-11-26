@@ -233,6 +233,28 @@ public static class ProblemDerivationService
                     match.LogScan, match.LogPath, match.Pattern, match.Count, match.SampleLine, match.IsCritical,
                     match.WikiUrl, match.RemediationSteps));
             }
+
+            foreach (var run in fileMonitoring.PendingRuns)
+            {
+                problems.Add(ActiveProblem.LogRunPending(
+                    run.LogScan, run.LogPath, run.Rule, run.AgeMinutes, run.StartedAt, run.SampleLine, run.IsCritical,
+                    run.WikiUrl, run.RemediationSteps));
+            }
+
+            foreach (var abandoned in fileMonitoring.AbandonedRuns)
+            {
+                problems.Add(ActiveProblem.LogRunAbandoned(
+                    abandoned.LogScan, abandoned.LogPath, abandoned.Rule, abandoned.Count, abandoned.LastSeenAt,
+                    abandoned.SampleLine, abandoned.IsCritical, abandoned.WikiUrl, abandoned.RemediationSteps));
+            }
+
+            foreach (var missing in fileMonitoring.MissingRuns)
+            {
+                problems.Add(ActiveProblem.LogRunMissing(
+                    missing.LogScan, missing.LogPath, missing.Rule, missing.ExpectedAt, missing.LastRunAt,
+                    missing.IsCritical, missing.WikiUrl, missing.RemediationSteps));
+            }
+
         }
 
         // Derive problems from scheduled tasks (per server; the cross-server single-active check is

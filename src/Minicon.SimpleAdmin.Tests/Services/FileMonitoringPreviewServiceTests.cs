@@ -113,6 +113,28 @@ public class FileMonitoringPreviewServiceTests
     }
 
     [Fact]
+    public async Task PreviewLogScanAsync_ListsNewestFilesAndMarksOnlyTooOldFilesAsSkipped()
+    {
+        var now = DateTime.Now;
+        var files = Enumerable.Range(0, 30)
+            .Select(i => new FileEntry($"/log/{i:00}.log", $"{i:00}.log", now.AddDays(-i)))
+            .ToArray();
+        var fs = new Mock<IFileSystemAccess>();
+        fs.Setup(f => f.ResolveLogFiles("/log/*.log")).Returns(files);
+        fs.Setup(f => f.ReadLines(It.IsAny<string>(), It.IsAny<int>())).Returns(Array.Empty<string>());
+        var scan = new LogScanConfig { Path = "/log/*.log", MaxFileAgeMinutes = 15 * 24 * 60 };
+
+        var result = await new FileMonitoringPreviewService(fs.Object).PreviewLogScanAsync(scan, null);
+
+        result.Files.Select(f => f.Path).Should().Equal(
+            Enumerable.Range(0, FileMonitoringPreviewService.MaxListedFiles).Select(i => $"/log/{i:00}.log"));
+        for (var i = 0; i < result.Files.Count; i++)
+        {
+            result.Files[i].Included.Should().Be(i < 15);
+        }
+    }
+
+    [Fact]
     public async Task PreviewLogScanAsync_SampleText_DoesNotTouchFileSystem()
     {
         var fs = new Mock<IFileSystemAccess>(MockBehavior.Strict);

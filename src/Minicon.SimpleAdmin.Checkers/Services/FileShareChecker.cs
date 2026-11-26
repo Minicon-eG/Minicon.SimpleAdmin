@@ -62,7 +62,7 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
         foreach (var scan in config.LogScans)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(scan.Path) || scan.Patterns.Count == 0)
+            if (string.IsNullOrWhiteSpace(scan.Path) || (scan.Patterns.Count == 0 && scan.PendingRules.Count == 0 && scan.ExpectedRuns.Count == 0))
             {
                 continue;
             }
@@ -70,21 +70,29 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
             try
             {
                 var resolved = fileSystem.ResolveLogFiles(scan.Path);
-                if (scan.MaxFileAgeMinutes is int maxAge and > 0)
-                {
-                    resolved = resolved.Where(f => (now - f.LastWriteTime).TotalMinutes <= maxAge).ToList();
-                }
+
+                var signatureFiles = scan.Patterns.Count > 0
+                    ? ApplyAgeFilter(resolved, scan, now)
+                    : Array.Empty<FileEntry>();
+                var runFile = scan.PendingRules.Count > 0 || scan.ExpectedRuns.Count > 0
+                    ? NewestFile(resolved)
+                    : null;
+                var tails = ReadFileTails(scan, signatureFiles, runFile);
 
                 var lines = new List<string>();
-                foreach (var file in resolved)
+                foreach (var file in signatureFiles)
                 {
                     state.LogFilesScanned++;
-                    lines.AddRange(fileSystem.ReadLines(file.FullPath, scan.MaxLines));
+                    var tail = TailOf(tails, file.FullPath);
+                    lines.AddRange(scan.MaxLines > 0 ? tail.TakeLast(scan.MaxLines) : tail);
                 }
 
-                var sampleLogPath = resolved.Count > 0 ? resolved[0].FullPath : scan.Path;
+                var sampleLogPath = signatureFiles.Count > 0 ? signatureFiles[0].FullPath : scan.Path;
                 state.LogMatches.AddRange(EvaluateLogContent(
                     scan.Name, sampleLogPath, lines, scan.Patterns, scan.WikiUrl, scan.RemediationSteps, logger));
+
+                EvaluatePendingRules(scan, resolved, tails, now, state, logger);
+                EvaluateExpectedRuns(scan, resolved, tails, now, state, logger);
             }
             catch (Exception ex)
             {
@@ -112,7 +120,169 @@ public sealed class FileShareChecker(IFileSystemAccess fileSystem, ILogger<FileS
                 .Take(defaults.MaxReportedItems).ToList();
         }
 
+        if (state.PendingRuns.Count > defaults.MaxReportedItems)
+        {
+            state.PendingRuns = state.PendingRuns
+                .OrderByDescending(p => p.IsCritical).ThenByDescending(p => p.AgeMinutes)
+                .Take(defaults.MaxReportedItems).ToList();
+        }
+
+        if (state.RunningLogRuns.Count > defaults.MaxReportedItems)
+        {
+            state.RunningLogRuns = state.RunningLogRuns
+                .OrderByDescending(r => r.IsCritical).ThenByDescending(r => r.AgeMinutes)
+                .Take(defaults.MaxReportedItems).ToList();
+        }
+
+        if (state.AbandonedRuns.Count > defaults.MaxReportedItems)
+        {
+            state.AbandonedRuns = state.AbandonedRuns
+                .OrderByDescending(a => a.IsCritical).ThenByDescending(a => a.Count)
+                .Take(defaults.MaxReportedItems).ToList();
+        }
+
+        if (state.MissingRuns.Count > defaults.MaxReportedItems)
+        {
+            state.MissingRuns = state.MissingRuns
+                .OrderByDescending(m => m.IsCritical).ThenByDescending(m => m.ExpectedAt)
+                .Take(defaults.MaxReportedItems).ToList();
+        }
+
         return state;
+    }
+
+    /// <summary>Evaluates every open-run rule against only the newest matching file.</summary>
+    private void EvaluatePendingRules(
+        LogScanConfig scan,
+        IReadOnlyList<FileEntry> resolved,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> tails,
+        DateTime now,
+        FileMonitoringState state,
+        ILogger logger)
+    {
+        if (scan.PendingRules.Count == 0)
+        {
+            return;
+        }
+
+        var newest = NewestFile(resolved);
+        var lines = newest == null ? Array.Empty<string>() : TailOf(tails, newest.FullPath);
+        foreach (var rule in scan.PendingRules)
+        {
+            ApplyResult(state, LogPendingRunEvaluator.Evaluate(
+                scan.Name, newest?.FullPath ?? scan.Path, lines, rule, now, newest?.LastWriteTime ?? now,
+                scan.WikiUrl, scan.RemediationSteps, LogPendingRunEvaluator.DefaultAbandonedWindowHours, logger));
+        }
+    }
+
+    /// <summary>Reads each file required by signature or run rules exactly once.</summary>
+    private Dictionary<string, IReadOnlyList<string>> ReadFileTails(
+        LogScanConfig scan,
+        IReadOnlyList<FileEntry> signatureFiles,
+        FileEntry? runFile)
+    {
+        var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        var filesToRead = signatureFiles.ToList();
+        if (runFile != null && filesToRead.All(f => f.FullPath != runFile.FullPath))
+        {
+            filesToRead.Add(runFile);
+        }
+
+        foreach (var file in filesToRead)
+        {
+            var isRunFile = runFile != null && file.FullPath == runFile.FullPath;
+            var isSignatureFile = signatureFiles.Any(f => f.FullPath == file.FullPath);
+            var maxLines = scan.MaxLines <= 0 && isSignatureFile
+                ? 0
+                : isRunFile ? PendingRuleLineBudget(scan) : scan.MaxLines;
+            result[file.FullPath] = fileSystem.ReadLines(file.FullPath, maxLines);
+        }
+
+        return result;
+    }
+
+    /// <summary>Returns the tail of a file (empty when the file was not read).</summary>
+    private static IReadOnlyList<string> TailOf(IReadOnlyDictionary<string, IReadOnlyList<string>> tails, string path)
+        => tails.TryGetValue(path, out var lines) ? lines : Array.Empty<string>();
+
+    internal static FileEntry? NewestFile(IEnumerable<FileEntry> files) => files
+        .OrderByDescending(f => f.LastWriteTime)
+        .ThenByDescending(f => f.FullPath, StringComparer.OrdinalIgnoreCase)
+        .FirstOrDefault();
+
+    /// <summary>Evaluates every expected-run rule against only the newest matching file.</summary>
+    private void EvaluateExpectedRuns(
+        LogScanConfig scan,
+        IReadOnlyList<FileEntry> resolved,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> tails,
+        DateTime now,
+        FileMonitoringState state,
+        ILogger logger)
+    {
+        if (scan.ExpectedRuns.Count == 0)
+        {
+            return;
+        }
+
+        var newest = NewestFile(resolved);
+        var lines = newest == null ? Array.Empty<string>() : TailOf(tails, newest.FullPath);
+        foreach (var rule in scan.ExpectedRuns)
+        {
+            var result = ExpectedRunEvaluator.Evaluate(
+                scan.Name, newest?.FullPath ?? scan.Path, lines, rule, now,
+                scan.WikiUrl, scan.RemediationSteps, logger);
+
+            if (result.EvaluationError != null)
+            {
+                logger.LogWarning(
+                    "FileMonitoring: Log-Scan '{Scan}' – erwartete Läufe konnten nicht bewertet werden: {Error}",
+                    scan.Name, result.EvaluationError);
+                state.EvaluationErrors.Add($"{scan.Name}: {result.EvaluationError}");
+            }
+
+            foreach (var missing in result.Missing)
+            {
+                missing.LastRunAt = result.LastRun;
+                state.MissingRuns.Add(missing);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies the generic age filter of the scan (only files that are not too old are scanned for
+    /// error signatures).
+    /// </summary>
+    internal static IReadOnlyList<FileEntry> ApplyAgeFilter(
+        IReadOnlyList<FileEntry> resolved,
+        LogScanConfig scan,
+        DateTime now)
+    {
+        var maxAge = scan.MaxFileAgeMinutes;
+        if (maxAge is not > 0)
+        {
+            return resolved;
+        }
+
+        return resolved.Where(f => (now - f.LastWriteTime).TotalMinutes <= maxAge).ToList();
+    }
+
+    /// <summary>
+    /// Line budget for the pending rules: at least the configured tail, capped so that a huge log
+    /// cannot be read completely into memory.
+    /// </summary>
+    internal static int PendingRuleLineBudget(LogScanConfig scan)
+    {
+        const int min = 5000;
+        const int max = 200_000;
+        var configured = scan.MaxLines > 0 ? scan.MaxLines : min;
+        return Math.Clamp(configured * 4, min, max);
+    }
+
+    private static void ApplyResult(FileMonitoringState state, PendingRunResult result)
+    {
+        state.PendingRuns.AddRange(result.Pending);
+        state.RunningLogRuns.AddRange(result.Running);
+        state.AbandonedRuns.AddRange(result.Abandoned);
     }
 
     // --- pure evaluation (testable) ---

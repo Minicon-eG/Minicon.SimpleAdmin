@@ -2117,11 +2117,20 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
 
         if (fm != null)
         {
-            var fmFindings = fm.StuckFiles.Count + fm.LogMatches.Count;
-            var fmCrit = fm.StuckFiles.Count(s => s.IsCritical) + fm.LogMatches.Count(m => m.IsCritical) + (fm.AnyError ? 1 : 0);
+            // The same counter as the WebUI badge uses: a missing expected run must never be
+            // shown as "OK" in the static page.
+            var fmFindings = Minicon.SimpleAdmin.Services.FileMonitoringFindingCounter.CountFindings(fm);
+            var fmCrit = Minicon.SimpleAdmin.Services.FileMonitoringFindingCounter.CountCritical(fm);
+            var fmErrors = Minicon.SimpleAdmin.Services.FileMonitoringFindingCounter.CountErrors(fm);
             var cls = fmCrit > 0 ? "badge-critical" : fmFindings > 0 ? "badge-warning" : "badge-ok";
             var label = fmFindings == 0 ? "OK" : $"{fmFindings} Fund(e)";
-            sb.AppendLine($"{innerIndent}<span class=\"monitoring-badge {cls}\" title=\"Dateiüberwachung: {fm.DirectoriesChecked} Verzeichnis(se), {fm.LogFilesScanned} Log(s), {fm.StuckFiles.Count} hängend, {fm.LogMatches.Count} Log-Treffer\">📁 {label} Dateien</span>");
+            if (fmErrors > 0)
+            {
+                // An error (unreachable path, evaluation error) is never an "OK" badge.
+                label = $"{fmFindings} Fund(e), {fmErrors} Fehler";
+            }
+
+            sb.AppendLine($"{innerIndent}<span class=\"monitoring-badge {cls}\" title=\"Dateiüberwachung: {fm.DirectoriesChecked} Verzeichnis(se), {fm.LogFilesScanned} Log(s), {Minicon.SimpleAdmin.Services.FileMonitoringFindingCounter.Describe(fm)}\">📁 {label} Dateien</span>");
         }
 
         if (st != null)
@@ -2216,11 +2225,23 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
             return sb.ToString();
         }
 
-        sb.AppendLine($"                <p style=\"color:#555;\">Verzeichnisse geprüft: {fm.DirectoriesChecked} · Logdateien gescannt: {fm.LogFilesScanned} · Hängende Dateien: {fm.StuckFiles.Count} · Log-Treffer: {fm.LogMatches.Count}</p>");
+        sb.AppendLine($"                <p style=\"color:#555;\">Verzeichnisse geprüft: {fm.DirectoriesChecked} · Logdateien gescannt: {fm.LogFilesScanned} · Hängende Dateien: {fm.StuckFiles.Count} · Log-Treffer: {fm.LogMatches.Count} · Offene Läufe: {fm.PendingRuns.Count} · Erwartete Läufe fehlend: {fm.MissingRuns.Count}</p>");
 
         if (fm.AnyError && !string.IsNullOrEmpty(fm.Error))
         {
             sb.AppendLine($"                <p style=\"color:#b00;\">Zugriffsfehler: {System.Net.WebUtility.HtmlEncode(fm.Error)}</p>");
+        }
+
+        if (fm.EvaluationErrors.Count > 0)
+        {
+            sb.AppendLine("                <p style=\"color:#b80;\">Auswertungsfehler — die betroffenen Regeln konnten nicht bewertet werden (es wird kein fehlender Lauf gemeldet):</p>");
+            sb.AppendLine("                <ul>");
+            foreach (var evaluationError in fm.EvaluationErrors)
+            {
+                sb.AppendLine($"                    <li>{System.Net.WebUtility.HtmlEncode(evaluationError)}</li>");
+            }
+
+            sb.AppendLine("                </ul>");
         }
 
         if (fm.StuckFiles.Count > 0)
@@ -2274,6 +2295,109 @@ public class StaticHtmlGenerator : IStaticHtmlGenerator
                 sb.AppendLine($"                            <td style=\"padding:6px 10px;\"><span class=\"monitoring-badge {cls}\">{System.Net.WebUtility.HtmlEncode(m.Pattern)}</span></td>");
                 sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{m.Count}</td>");
                 sb.AppendLine($"                            <td style=\"padding:6px 10px; font-family:monospace; font-size:12px;\">{System.Net.WebUtility.HtmlEncode(m.SampleLine)}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{RenderWikiLink(m.WikiUrl)}</td>");
+                sb.AppendLine("                        </tr>");
+            }
+            sb.AppendLine("                    </tbody>");
+            sb.AppendLine("                </table>");
+        }
+
+        if (fm.PendingRuns.Count > 0 || fm.AbandonedRuns.Count > 0 || fm.RunningLogRuns.Count > 0)
+        {
+            sb.AppendLine("                <h4 style=\"margin-top:16px;\">Offene Läufe</h4>");
+
+            if (fm.PendingRuns.Count > 0)
+            {
+                sb.AppendLine("                <table style=\"width:100%; border-collapse:collapse;\">");
+                sb.AppendLine("                    <thead><tr style=\"background:#f8f9fa; text-align:left;\">");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Log</th>");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Regel</th>");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Start</th>");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Läuft seit</th>");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Schweregrad</th>");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Lösung</th>");
+                sb.AppendLine("                    </tr></thead>");
+                sb.AppendLine("                    <tbody>");
+                foreach (var p in fm.PendingRuns)
+                {
+                    var cls = p.IsCritical ? "badge-critical" : "badge-warning";
+                    var ageLabel = p.AgeMinutes >= 120 ? $"{p.AgeMinutes / 60.0:N1} h" : $"{p.AgeMinutes:N0} min";
+                    sb.AppendLine("                        <tr>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\" title=\"{System.Net.WebUtility.HtmlEncode(p.LogPath)}\">{System.Net.WebUtility.HtmlEncode(p.LogScan)}</td>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{System.Net.WebUtility.HtmlEncode(p.Rule)}</td>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{System.Net.WebUtility.HtmlEncode(p.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")}</td>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{ageLabel}</td>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\"><span class=\"monitoring-badge {cls}\">{(p.IsCritical ? "Critical" : "Warning")}</span></td>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{RenderWikiLink(p.WikiUrl)}</td>");
+                    sb.AppendLine("                        </tr>");
+                    if (!string.IsNullOrWhiteSpace(p.SampleLine))
+                    {
+                        sb.AppendLine("                        <tr>");
+                        sb.AppendLine($"                            <td colspan=\"6\" style=\"padding:6px 10px; font-family:monospace; font-size:12px;\">{System.Net.WebUtility.HtmlEncode(p.SampleLine)}</td>");
+                        sb.AppendLine("                        </tr>");
+                    }
+                }
+                sb.AppendLine("                    </tbody>");
+                sb.AppendLine("                </table>");
+            }
+
+            if (fm.AbandonedRuns.Count > 0)
+            {
+                sb.AppendLine("                <table style=\"width:100%; border-collapse:collapse;\">");
+                sb.AppendLine("                    <thead><tr style=\"background:#f8f9fa; text-align:left;\">");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Log</th>");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Regel</th>");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Anzahl</th>");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Zuletzt</th>");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Schweregrad</th>");
+                sb.AppendLine("                        <th style=\"padding:6px 10px;\">Lösung</th>");
+                sb.AppendLine("                    </tr></thead>");
+                sb.AppendLine("                    <tbody>");
+                foreach (var a in fm.AbandonedRuns)
+                {
+                    var cls = a.IsCritical ? "badge-critical" : "badge-warning";
+                    sb.AppendLine("                        <tr>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\" title=\"{System.Net.WebUtility.HtmlEncode(a.LogPath)}\">{System.Net.WebUtility.HtmlEncode(a.LogScan)}</td>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{System.Net.WebUtility.HtmlEncode(a.Rule)}</td>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{a.Count}</td>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{System.Net.WebUtility.HtmlEncode(a.LastSeenAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")}</td>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\"><span class=\"monitoring-badge {cls}\">{(a.IsCritical ? "Critical" : "Warning")}</span></td>");
+                    sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{RenderWikiLink(a.WikiUrl)}</td>");
+                    sb.AppendLine("                        </tr>");
+                }
+                sb.AppendLine("                    </tbody>");
+                sb.AppendLine("                </table>");
+            }
+
+            if (fm.RunningLogRuns.Count > 0)
+            {
+                sb.AppendLine($"                <p style=\"color:#555;\">Laufende Läufe (innerhalb der Zeitgrenze): {string.Join(", ", fm.RunningLogRuns.Select(r => $"{System.Net.WebUtility.HtmlEncode(r.Rule)} ({r.AgeMinutes:N0} min)"))}</p>");
+            }
+        }
+
+        if (fm.MissingRuns.Count > 0)
+        {
+            sb.AppendLine("                <h4 style=\"margin-top:16px;\">Erwartete Läufe</h4>");
+            sb.AppendLine("                <table style=\"width:100%; border-collapse:collapse;\">");
+            sb.AppendLine("                    <thead><tr style=\"background:#f8f9fa; text-align:left;\">");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Log</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Regel</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Erwartet am</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Letzter Lauf</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Schweregrad</th>");
+            sb.AppendLine("                        <th style=\"padding:6px 10px;\">Lösung</th>");
+            sb.AppendLine("                    </tr></thead>");
+            sb.AppendLine("                    <tbody>");
+            foreach (var m in fm.MissingRuns)
+            {
+                var cls = m.IsCritical ? "badge-critical" : "badge-warning";
+                var lastRun = m.LastRunAt.HasValue ? m.LastRunAt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "—";
+                sb.AppendLine("                        <tr>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\" title=\"{System.Net.WebUtility.HtmlEncode(m.LogPath)}\">{System.Net.WebUtility.HtmlEncode(m.LogScan)}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{System.Net.WebUtility.HtmlEncode(m.Rule)}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{System.Net.WebUtility.HtmlEncode(m.ExpectedAt.ToString("yyyy-MM-dd HH:mm:ss"))}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{System.Net.WebUtility.HtmlEncode(lastRun)}</td>");
+                sb.AppendLine($"                            <td style=\"padding:6px 10px;\"><span class=\"monitoring-badge {cls}\">{(m.IsCritical ? "Critical" : "Warning")}</span></td>");
                 sb.AppendLine($"                            <td style=\"padding:6px 10px;\">{RenderWikiLink(m.WikiUrl)}</td>");
                 sb.AppendLine("                        </tr>");
             }
